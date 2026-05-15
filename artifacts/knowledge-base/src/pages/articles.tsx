@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useListArticles, getListArticlesQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
@@ -18,8 +18,7 @@ export default function Articles() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Simple debounce
-  useState(() => {
+  useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
     }, 300);

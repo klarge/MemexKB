@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createRequire } from "node:module";
 import { db } from "@workspace/db";
 import {
   articlesTable,
@@ -12,6 +13,9 @@ import { eq, ilike, inArray, asc, desc, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import TurndownService from "turndown";
+
+const _require = createRequire(import.meta.url);
+const PDFDocument = _require("pdfkit") as typeof import("pdfkit");
 
 const router = Router();
 
@@ -187,7 +191,7 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
 });
 
 router.get("/articles/:slug", requireAuth, async (req, res) => {
-  const slug = req.params.slug;
+  const slug = String(req.params.slug);
   const [article] = await db
     .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, content: articlesTable.content, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
     .from(articlesTable)
@@ -228,7 +232,7 @@ router.get("/articles/:slug", requireAuth, async (req, res) => {
 });
 
 router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
-  const slug = req.params.slug;
+  const slug = String(req.params.slug);
   const { title, content, groupIds } = req.body;
   const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!existing) {
@@ -260,17 +264,18 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
 });
 
 router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
-  const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, req.params.slug)).limit(1);
+  const slug = String(req.params.slug);
+  const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  await db.delete(articlesTable).where(eq(articlesTable.slug, req.params.slug));
+  await db.delete(articlesTable).where(eq(articlesTable.slug, slug));
   res.json({ message: "Article deleted" });
 });
 
 router.get("/articles/:slug/backlinks", requireAuth, async (req, res) => {
-  const slug = req.params.slug;
+  const slug = String(req.params.slug);
   const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
@@ -295,7 +300,8 @@ router.get("/articles/:slug/backlinks", requireAuth, async (req, res) => {
 
 router.put("/articles/:slug/groups", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const { groupIds } = req.body;
-  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.slug, req.params.slug)).limit(1);
+  const slug = String(req.params.slug);
+  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -309,7 +315,7 @@ router.put("/articles/:slug/groups", requireAuth, requireRole("admin", "editor")
 });
 
 router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
-  const slug = req.params.slug;
+  const slug = String(req.params.slug);
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
@@ -330,7 +336,7 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
 });
 
 router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
-  const slug = req.params.slug;
+  const slug = String(req.params.slug);
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
@@ -344,31 +350,32 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Access denied" });
     return;
   }
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>${article.title}</title>
-<style>
-  body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.7; color: #1a1a1a; }
-  h1 { font-size: 2em; border-bottom: 2px solid #333; padding-bottom: 0.3em; }
-  h2, h3 { margin-top: 1.5em; }
-  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
-  pre { background: #f4f4f4; padding: 1em; border-radius: 5px; overflow-x: auto; }
-  img { max-width: 100%; }
-  blockquote { border-left: 4px solid #ccc; margin: 0; padding-left: 1em; color: #666; }
-  @media print { body { margin: 0; } }
-</style>
-</head>
-<body>
-<h1>${article.title}</h1>
-${article.content}
-<hr style="margin-top:3em">
-<p style="font-size:0.8em;color:#888">Exported from Knowledge Base — ${new Date().toLocaleDateString()}</p>
-</body>
-</html>`;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
+
+  const doc = new PDFDocument({ margin: 60, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${slug}.pdf"`);
+  doc.pipe(res);
+
+  // Title
+  doc.fontSize(24).font("Helvetica-Bold").fillColor("#1a1a1a").text(article.title, { align: "left" });
+  doc.moveDown(0.5);
+  doc.moveTo(60, doc.y).lineTo(535, doc.y).strokeColor("#cccccc").stroke();
+  doc.moveDown(1);
+
+  // Body — convert HTML to plain text via Markdown
+  const markdown = turndown.turndown(article.content || "");
+  doc.fontSize(11).font("Helvetica").fillColor("#333333").text(markdown, {
+    align: "left",
+    lineGap: 4,
+  });
+
+  doc.moveDown(3);
+  doc
+    .fontSize(9)
+    .fillColor("#888888")
+    .text(`Exported from Knowledge Base — ${new Date().toLocaleDateString()}`, { align: "right" });
+
+  doc.end();
 });
 
 export default router;

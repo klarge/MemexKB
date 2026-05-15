@@ -44,7 +44,7 @@ export default function Settings() {
       onError: (error) => {
         toast({
           title: "Update failed",
-          description: error.error || "Please check your current password and try again.",
+          description: error.message || "Please check your current password and try again.",
           variant: "destructive",
         });
       }

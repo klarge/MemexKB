@@ -4,7 +4,6 @@ import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import swaggerUi from "swagger-ui-express";
-import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import YAML from "yamljs";
@@ -31,16 +30,23 @@ app.use(
   }),
 );
 
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigin = process.env.CORS_ORIGIN ?? true;
+app.use(cors({ origin: allowedOrigin, credentials: true }));
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
-const sessionSecret = process.env.SESSION_SECRET ?? "kb-dev-secret-change-in-production";
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret && process.env.NODE_ENV === "production") {
+  throw new Error("SESSION_SECRET environment variable must be set in production");
+}
+if (!sessionSecret) {
+  logger.warn("SESSION_SECRET is not set — using insecure default. Set SESSION_SECRET in production.");
+}
 
 app.use(
   session({
     store: new PgSession({ pool: pool as any, tableName: "user_sessions", createTableIfMissing: true }),
-    secret: sessionSecret,
+    secret: sessionSecret ?? "kb-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {

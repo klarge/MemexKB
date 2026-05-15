@@ -60,7 +60,7 @@ function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => v
         setSelectedUserId("");
         toast({ title: "Member added" });
       },
-      onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
     });
   };
 
@@ -71,7 +71,7 @@ function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => v
         queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
         toast({ title: "Member removed" });
       },
-      onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
     });
   };
 
@@ -201,7 +201,7 @@ export default function AdminGroups() {
           toast({ title: "Group updated" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
       });
     } else {
       createMutation.mutate({ data: formData }, {
@@ -210,7 +210,7 @@ export default function AdminGroups() {
           toast({ title: "Group created" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
       });
     }
   };
@@ -221,7 +221,7 @@ export default function AdminGroups() {
         queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
         toast({ title: "Group deleted" });
       },
-      onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
     });
   };
 

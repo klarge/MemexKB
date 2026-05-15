@@ -53,7 +53,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
         setLocation("/articles");
       },
       onError: (err) => {
-        toast({ title: "Error deleting article", description: err.error || "Unknown error", variant: "destructive" });
+        toast({ title: "Error deleting article", description: err.message || "Unknown error", variant: "destructive" });
       }
     });
   };

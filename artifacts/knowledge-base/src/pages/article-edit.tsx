@@ -115,7 +115,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           setLocation(`/wiki/${data.slug}`);
         },
         onError: (err) => {
-          toast({ title: "Failed to create", description: err.error, variant: "destructive" });
+          toast({ title: "Failed to create", description: err.message, variant: "destructive" });
         }
       });
     } else if (slug) {
@@ -129,7 +129,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           setLocation(`/wiki/${data.slug}`);
         },
         onError: (err) => {
-          toast({ title: "Failed to update", description: err.error, variant: "destructive" });
+          toast({ title: "Failed to update", description: err.message, variant: "destructive" });
         }
       });
     }

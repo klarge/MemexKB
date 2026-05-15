@@ -92,7 +92,7 @@ export default function AdminUsers() {
           toast({ title: "User updated" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
       });
     } else {
       createMutation.mutate({ data: formData }, {
@@ -101,7 +101,7 @@ export default function AdminUsers() {
           toast({ title: "User created" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
       });
     }
   };
@@ -112,7 +112,7 @@ export default function AdminUsers() {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         toast({ title: "User deleted" });
       },
-      onError: (err) => toast({ title: "Error", description: err.error, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
     });
   };
 

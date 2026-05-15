@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { groupsTable, groupMembersTable, usersTable } from "@workspace/db";
-import { eq, count, inArray } from "drizzle-orm";
+import { eq, count, inArray, and } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 
 const router = Router();
@@ -38,7 +38,7 @@ router.post("/groups", requireAuth, requireRole("admin"), async (req, res) => {
 });
 
 router.get("/groups/:id", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   const [group] = await db.select().from(groupsTable).where(eq(groupsTable.id, id)).limit(1);
   if (!group) {
     res.status(404).json({ error: "Group not found" });
@@ -61,7 +61,7 @@ router.get("/groups/:id", requireAuth, async (req, res) => {
 });
 
 router.patch("/groups/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   const { name, description } = req.body;
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
@@ -75,7 +75,7 @@ router.patch("/groups/:id", requireAuth, requireRole("admin"), async (req, res) 
 });
 
 router.delete("/groups/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const deleted = await db.delete(groupsTable).where(eq(groupsTable.id, parseInt(req.params.id))).returning();
+  const deleted = await db.delete(groupsTable).where(eq(groupsTable.id, parseInt(String(req.params.id)))).returning();
   if (deleted.length === 0) {
     res.status(404).json({ error: "Group not found" });
     return;
@@ -84,7 +84,7 @@ router.delete("/groups/:id", requireAuth, requireRole("admin"), async (req, res)
 });
 
 router.post("/groups/:id/members", requireAuth, requireRole("admin"), async (req, res) => {
-  const groupId = parseInt(req.params.id);
+  const groupId = parseInt(String(req.params.id));
   const { userId } = req.body;
   if (!userId) {
     res.status(400).json({ error: "userId required" });
@@ -98,8 +98,8 @@ router.post("/groups/:id/members", requireAuth, requireRole("admin"), async (req
 });
 
 router.delete("/groups/:id/members/:userId", requireAuth, requireRole("admin"), async (req, res) => {
-  const groupId = parseInt(req.params.id);
-  const userId = parseInt(req.params.userId);
+  const groupId = parseInt(String(req.params.id));
+  const userId = parseInt(String(req.params.userId));
   await db
     .delete(groupMembersTable)
     .where(

@@ -102,6 +102,7 @@ async function buildAll() {
       "electron",
       "archiver",
       "unzipper",
+      "pdfkit",
     ],
     sourcemap: "linked",
     plugins: [
