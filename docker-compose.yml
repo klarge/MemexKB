@@ -39,7 +39,9 @@ services:
         pnpm --filter @workspace/db run push
       "
     environment:
-      DATABASE_URL: postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon
+      # Accept DATABASE_URL directly from the host environment when set;
+      # fall back to the compose-managed Postgres service.
+      DATABASE_URL: ${DATABASE_URL:-postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon}
     depends_on:
       db:
         condition: service_healthy
@@ -55,7 +57,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      DATABASE_URL: postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon
+      # Accept DATABASE_URL directly from the host environment when set;
+      # fall back to the compose-managed Postgres service.
+      DATABASE_URL: ${DATABASE_URL:-postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon}
       SESSION_SECRET: ${SESSION_SECRET}
       STATIC_DIR: /app/public
       # Optional — comma-separated list of allowed CORS origins
