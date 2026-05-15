@@ -100,6 +100,8 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "archiver",
+      "unzipper",
     ],
     sourcemap: "linked",
     plugins: [
