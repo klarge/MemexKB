@@ -76,7 +76,11 @@ router.get("/articles", optionalAuth, async (req, res) => {
   const groupDetails = await db.select().from(groupsTable);
   const groupMap = new Map(groupDetails.map((g) => [g.id, g]));
 
-  const total = await db.select({ count: count() }).from(articlesTable);
+  let totalQuery = db.select({ count: count() }).from(articlesTable).$dynamic();
+  if (search && typeof search === "string") {
+    totalQuery = totalQuery.where(ilike(articlesTable.title, `%${search}%`));
+  }
+  const total = await totalQuery;
 
   const result = articles.map((a) => {
     const articleGroupIds = allGroups.filter((ag) => ag.articleId === a.id).map((ag) => ag.groupId);

@@ -15,6 +15,60 @@ import { articleLinksTable } from "@workspace/db";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+type ImportResult = "imported" | "skipped";
+
+async function importMarkdownBuffer(
+  rawMd: string,
+  fileName: string,
+  overwrite: boolean,
+): Promise<ImportResult> {
+  const slug = fileName
+    .replace(/\.md$/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const h1 = extractH1(rawMd);
+  const title = h1 ?? titleFromSlug(slug);
+  const bodyMd = rawMd.replace(/^# .+\n\n?/, "");
+  const wikilinksFromMd = extractWikilinks(bodyMd);
+  const parsedHtml = await marked.parse(bodyMd);
+  const articleContent = sanitizeArticleHtml(parsedHtml);
+
+  const [existing] = await db
+    .select({ id: articlesTable.id })
+    .from(articlesTable)
+    .where(eq(articlesTable.slug, slug))
+    .limit(1);
+
+  if (existing) {
+    if (!overwrite) return "skipped";
+    await db
+      .update(articlesTable)
+      .set({ title, content: articleContent, updatedAt: new Date() })
+      .where(eq(articlesTable.slug, slug));
+    await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, existing.id));
+    if (wikilinksFromMd.length > 0) {
+      await db
+        .insert(articleLinksTable)
+        .values(wikilinksFromMd.map((s) => ({ fromArticleId: existing.id, toSlug: slugify(s) })))
+        .onConflictDoNothing();
+    }
+    return "imported";
+  }
+
+  const [article] = await db
+    .insert(articlesTable)
+    .values({ slug, title, content: articleContent })
+    .returning();
+  if (wikilinksFromMd.length > 0) {
+    await db
+      .insert(articleLinksTable)
+      .values(wikilinksFromMd.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
+      .onConflictDoNothing();
+  }
+  return "imported";
+}
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
 router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res) => {
@@ -62,77 +116,49 @@ function extractH1(md: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("file"), async (req, res) => {
-  if (!req.file) {
+router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), async (req, res) => {
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  if (files.length === 0) {
     res.status(400).json({ error: "No file uploaded", imported: 0, skipped: 0, errors: [] });
     return;
   }
   const overwrite = req.body.overwrite === "true";
-
   let imported = 0;
   let skipped = 0;
   const errors: string[] = [];
 
-  // --- Standalone .md file upload ---
-  const isMarkdownFile =
-    req.file.originalname.toLowerCase().endsWith(".md") ||
-    req.file.mimetype === "text/markdown" ||
-    (req.file.mimetype === "text/plain" && req.file.originalname.toLowerCase().endsWith(".md"));
+  const isMd = (f: Express.Multer.File) => f.originalname.toLowerCase().endsWith(".md");
+  const isZip = (f: Express.Multer.File) =>
+    f.originalname.toLowerCase().endsWith(".zip") ||
+    f.mimetype === "application/zip" ||
+    f.mimetype === "application/x-zip-compressed";
 
-  if (isMarkdownFile) {
-    try {
-      const rawMd = req.file.buffer.toString("utf-8");
-      const slug = req.file.originalname
-        .replace(/\.md$/i, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-      const h1 = extractH1(rawMd);
-      const title = h1 ?? titleFromSlug(slug);
-      const bodyMd = rawMd.replace(/^# .+\n\n?/, "");
-      const wikilinksFromMd = extractWikilinks(bodyMd);
-      const parsedHtml = await marked.parse(bodyMd);
-      const articleContent = sanitizeArticleHtml(parsedHtml);
+  const zipFile = files.find(isZip);
+  const mdFiles = files.filter(isMd);
 
-      const [existing] = await db
-        .select({ id: articlesTable.id })
-        .from(articlesTable)
-        .where(eq(articlesTable.slug, slug))
-        .limit(1);
-
-      if (existing) {
-        if (!overwrite) {
-          skipped++;
-        } else {
-          await db
-            .update(articlesTable)
-            .set({ title, content: articleContent, updatedAt: new Date() })
-            .where(eq(articlesTable.slug, slug));
-          imported++;
-        }
-      } else {
-        const [article] = await db
-          .insert(articlesTable)
-          .values({ slug, title, content: articleContent })
-          .returning();
-        if (wikilinksFromMd.length > 0) {
-          await db
-            .insert(articleLinksTable)
-            .values(wikilinksFromMd.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
-            .onConflictDoNothing();
-        }
-        imported++;
+  // --- Multi-file .md folder import ---
+  if (!zipFile && mdFiles.length > 0) {
+    for (const f of mdFiles) {
+      try {
+        const result = await importMarkdownBuffer(f.buffer.toString("utf-8"), f.originalname, overwrite);
+        if (result === "imported") imported++;
+        else skipped++;
+      } catch (err) {
+        errors.push(`Failed to import ${f.originalname}: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err) {
-      errors.push(`Failed to import ${req.file.originalname}: ${err instanceof Error ? err.message : String(err)}`);
     }
     res.json({ imported, skipped, errors });
     return;
   }
 
+  if (!zipFile) {
+    res.status(400).json({ error: "No ZIP or .md file found in upload", imported: 0, skipped: 0, errors: [] });
+    return;
+  }
+
   // --- ZIP archive import ---
   const unzipper = await import("unzipper");
-  const directory = await unzipper.Open.buffer(req.file.buffer);
+  const directory = await unzipper.Open.buffer(zipFile.buffer);
 
   // Pre-load all group names for metadata group restore
   const allGroups = await db.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable);
@@ -188,6 +214,14 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
           .set({ title, content: articleContent, updatedAt: new Date() })
           .where(eq(articlesTable.slug, slug));
         articleId = existing.id;
+        // Refresh backlinks for overwritten article
+        await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, articleId));
+        if (wikilinksPass1.length > 0) {
+          await db
+            .insert(articleLinksTable)
+            .values(wikilinksPass1.map((s) => ({ fromArticleId: articleId, toSlug: slugify(s) })))
+            .onConflictDoNothing();
+        }
       } else {
         const [article] = await db
           .insert(articlesTable)
@@ -257,6 +291,14 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
           .update(articlesTable)
           .set({ title, content: articleContent, updatedAt: new Date() })
           .where(eq(articlesTable.slug, slug));
+        // Refresh backlinks for overwritten article
+        await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, existing.id));
+        if (wikilinksPass2.length > 0) {
+          await db
+            .insert(articleLinksTable)
+            .values(wikilinksPass2.map((s) => ({ fromArticleId: existing.id, toSlug: slugify(s) })))
+            .onConflictDoNothing();
+        }
       } else {
         const [article] = await db
           .insert(articlesTable)
