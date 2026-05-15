@@ -8,12 +8,25 @@ import { requireAuth, optionalAuth } from "../lib/auth";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
 router.post("/articles/images", requireAuth, upload.single("file"), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });
     return;
   }
   const { originalname, mimetype, buffer } = req.file;
+
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(mimetype)) {
+    res.status(400).json({ error: "Only JPEG, PNG, GIF, and WebP images are allowed" });
+    return;
+  }
+
   const data = buffer.toString("base64");
   const [image] = await db
     .insert(articleImagesTable)
@@ -79,8 +92,10 @@ router.get("/articles/images/:id", optionalAuth, async (req, res) => {
     }
   }
 
+  const safeType = ALLOWED_IMAGE_MIME_TYPES.has(image.mimeType) ? image.mimeType : "application/octet-stream";
   const buf = Buffer.from(image.data, "base64");
-  res.setHeader("Content-Type", image.mimeType);
+  res.setHeader("Content-Type", safeType);
+  res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "public, max-age=31536000");
   res.send(buf);
 });

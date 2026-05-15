@@ -9,6 +9,7 @@ const archiver = require("archiver") as typeof import("archiver");
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
+import { marked } from "marked";
 import TurndownService from "turndown";
 import { articleLinksTable } from "@workspace/db";
 
@@ -88,7 +89,10 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
         .replace(/^-+|-+$/g, "");
       const h1 = extractH1(rawMd);
       const title = h1 ?? titleFromSlug(slug);
-      const articleContent = sanitizeArticleHtml(rawMd.replace(/^# .+\n\n?/, ""));
+      const bodyMd = rawMd.replace(/^# .+\n\n?/, "");
+      const wikilinksFromMd = extractWikilinks(bodyMd);
+      const parsedHtml = await marked.parse(bodyMd);
+      const articleContent = sanitizeArticleHtml(parsedHtml);
 
       const [existing] = await db
         .select({ id: articlesTable.id })
@@ -111,11 +115,10 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
           .insert(articlesTable)
           .values({ slug, title, content: articleContent })
           .returning();
-        const wikilinks = extractWikilinks(articleContent);
-        if (wikilinks.length > 0) {
+        if (wikilinksFromMd.length > 0) {
           await db
             .insert(articleLinksTable)
-            .values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
+            .values(wikilinksFromMd.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
             .onConflictDoNothing();
         }
         imported++;
@@ -158,9 +161,12 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
       const mdPath = file.path.replace(".json", ".md");
       const mdFile = directory.files.find((f) => f.path === mdPath);
       let articleContent = "";
+      let wikilinksPass1: string[] = [];
       if (mdFile) {
         const rawMd = (await mdFile.buffer()).toString("utf-8");
-        articleContent = sanitizeArticleHtml(rawMd.replace(/^# .+\n\n/, ""));
+        const bodyMd = rawMd.replace(/^# .+\n\n/, "");
+        wikilinksPass1 = extractWikilinks(bodyMd);
+        articleContent = sanitizeArticleHtml(await marked.parse(bodyMd));
       }
 
       const [existing] = await db
@@ -188,11 +194,10 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
           .values({ slug, title, content: articleContent })
           .returning();
         articleId = article.id;
-        const wikilinks = extractWikilinks(articleContent);
-        if (wikilinks.length > 0) {
+        if (wikilinksPass1.length > 0) {
           await db
             .insert(articleLinksTable)
-            .values(wikilinks.map((s) => ({ fromArticleId: articleId, toSlug: slugify(s) })))
+            .values(wikilinksPass1.map((s) => ({ fromArticleId: articleId, toSlug: slugify(s) })))
             .onConflictDoNothing();
         }
       }
@@ -233,7 +238,9 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
       const slug = file.path.replace(/^articles\//, "").replace(/\.md$/, "");
       const h1 = extractH1(rawMd);
       const title = h1 ?? titleFromSlug(slug);
-      const articleContent = sanitizeArticleHtml(rawMd.replace(/^# .+\n\n?/, ""));
+      const bodyMd = rawMd.replace(/^# .+\n\n?/, "");
+      const wikilinksPass2 = extractWikilinks(bodyMd);
+      const articleContent = sanitizeArticleHtml(await marked.parse(bodyMd));
 
       const [existing] = await db
         .select({ id: articlesTable.id })
@@ -255,11 +262,10 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
           .insert(articlesTable)
           .values({ slug, title, content: articleContent })
           .returning();
-        const wikilinks = extractWikilinks(articleContent);
-        if (wikilinks.length > 0) {
+        if (wikilinksPass2.length > 0) {
           await db
             .insert(articleLinksTable)
-            .values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
+            .values(wikilinksPass2.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
             .onConflictDoNothing();
         }
       }

@@ -137,7 +137,7 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/articles/maintenance", requireAuth, async (req, res) => {
+router.get("/articles/maintenance", requireAuth, requireRole("admin"), async (req, res) => {
   const { limit = 100, offset = 0 } = req.query;
   const articles = await db
     .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
