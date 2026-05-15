@@ -58,6 +58,7 @@ router.post("/users", requireAuth, requireRole("admin"), async (req, res) => {
 
 router.get("/users/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const id = parseInt(String(req.params.id));
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
   if (!user) {
     res.status(404).json({ error: "User not found" });
@@ -77,6 +78,7 @@ router.get("/users/:id", requireAuth, requireRole("admin"), async (req, res) => 
 
 router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const id = parseInt(String(req.params.id));
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
   const { email, name, role, password } = req.body;
   const updates: Record<string, unknown> = {};
   if (email) updates.email = email.toLowerCase();
@@ -94,6 +96,7 @@ router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res) =
 
 router.delete("/users/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const id = parseInt(String(req.params.id));
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
   const deleted = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
   if (deleted.length === 0) {
     res.status(404).json({ error: "User not found" });
@@ -104,6 +107,7 @@ router.delete("/users/:id", requireAuth, requireRole("admin"), async (req, res) 
 
 router.get("/users/:id/groups", requireAuth, async (req, res) => {
   const id = parseInt(String(req.params.id));
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
   // Only admins or the user themselves may read group memberships
   if (req.session.userRole !== "admin" && req.session.userId !== id) {
     res.status(403).json({ error: "Forbidden" });

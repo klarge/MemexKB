@@ -1022,11 +1022,12 @@ components:
 
     ImageUploadInput:
       type: object
-      required: [filename]
+      required: [file]
       properties:
-        filename:
+        file:
           type: string
-          description: Uploaded file name (multipart/form-data handled by server middleware)
+          format: binary
+          description: Image file to upload (field name "file" in multipart/form-data)
 
     ImageUploadResponse:
       type: object
@@ -1165,14 +1166,21 @@ components:
     # ─── Admin ─────────────────────────────────────────────────────────────────
     AdminImportInput:
       type: object
-      required: [filename]
       properties:
-        filename:
+        file:
           type: string
-          description: Uploaded zip file name (multipart/form-data handled by server middleware)
+          format: binary
+          description: A ZIP archive or single .md file (field name "file" in multipart/form-data)
+        files:
+          type: array
+          items:
+            type: string
+            format: binary
+          description: Multiple .md files for folder import (field name "files" in multipart/form-data)
         overwrite:
           type: boolean
           default: false
+          description: When true, overwrite existing articles with the same slug
 
     AdminImportResponse:
       type: object

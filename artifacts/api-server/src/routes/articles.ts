@@ -10,7 +10,7 @@ import {
   groupsTable,
   usersTable,
 } from "@workspace/db";
-import { eq, ilike, inArray, asc, desc, count, sql, and } from "drizzle-orm";
+import { eq, ilike, inArray, asc, desc, count, sql, and, or } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
@@ -63,7 +63,12 @@ router.get("/articles", optionalAuth, async (req, res) => {
     .$dynamic();
 
   if (search && typeof search === "string") {
-    query = query.where(ilike(articlesTable.title, `%${search}%`));
+    query = query.where(
+      or(
+        ilike(articlesTable.title, `%${search}%`),
+        ilike(articlesTable.content, `%${search}%`),
+      )
+    );
   }
 
   const sortCol = sort === "updated_at" ? articlesTable.updatedAt : sort === "created_at" ? articlesTable.createdAt : articlesTable.title;
@@ -78,7 +83,12 @@ router.get("/articles", optionalAuth, async (req, res) => {
 
   let totalQuery = db.select({ count: count() }).from(articlesTable).$dynamic();
   if (search && typeof search === "string") {
-    totalQuery = totalQuery.where(ilike(articlesTable.title, `%${search}%`));
+    totalQuery = totalQuery.where(
+      or(
+        ilike(articlesTable.title, `%${search}%`),
+        ilike(articlesTable.content, `%${search}%`),
+      )
+    );
   }
   const total = await totalQuery;
 
