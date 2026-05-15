@@ -24,9 +24,15 @@ app.listen(port, async (err) => {
 
   logger.info({ port }, "Server listening");
 
-  try {
-    await runSeed();
-  } catch (seedErr) {
-    logger.error({ err: seedErr }, "Seed failed — server will continue");
+  // Seeding is opt-in: only runs when RUN_SEED=true is explicitly set.
+  // In production, SEED_ADMIN_EMAIL and a strong SEED_ADMIN_PASSWORD must
+  // also be provided or the process exits to prevent insecure defaults.
+  if (process.env.RUN_SEED === "true") {
+    try {
+      await runSeed();
+    } catch (seedErr) {
+      logger.error({ err: seedErr }, "Seed failed — exiting");
+      process.exit(1);
+    }
   }
 });
