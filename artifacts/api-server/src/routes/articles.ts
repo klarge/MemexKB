@@ -219,7 +219,8 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   const groups = await getArticleGroups(article.id);
   const articleGroupIds = groups.map((g) => g.id);
   const isRestricted = articleGroupIds.length > 0;
-  const canAccess = canAccessArticle(articleGroupIds, userGroupIds, userRole);
+  // Unauthenticated users cannot read article content regardless of group restrictions
+  const canAccess = userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false;
 
   if (!canAccess) {
     res.json({ id: article.id, slug: article.slug, title: article.title, content: "", updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: false, groups, backlinks: [] });

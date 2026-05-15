@@ -5,22 +5,26 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 
 export async function runSeed(): Promise<void> {
+  // Admin credentials can be overridden via environment variables for self-hosted deployments
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@example.com";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123456";
+
   // Create default admin user if it does not exist
   const [existing] = await db
     .select({ id: usersTable.id })
     .from(usersTable)
-    .where(eq(usersTable.email, "admin@example.com"))
+    .where(eq(usersTable.email, adminEmail))
     .limit(1);
 
   if (!existing) {
-    const passwordHash = await bcrypt.hash("admin123456", 12);
+    const passwordHash = await bcrypt.hash(adminPassword, 12);
     await db.insert(usersTable).values({
       name: "Admin User",
-      email: "admin@example.com",
+      email: adminEmail,
       passwordHash,
       role: "admin",
     });
-    logger.info("Seed: created default admin user (admin@example.com)");
+    logger.info({ email: adminEmail }, "Seed: created default admin user");
   }
 
   // Create sample articles if none exist
@@ -28,8 +32,8 @@ export async function runSeed(): Promise<void> {
   if (!anyArticle) {
     await db.insert(articlesTable).values([
       {
-        slug: "welcome-to-lexikon",
-        title: "Welcome to Lexikon",
+        slug: "home",
+        title: "Home",
         content: "<h2>Welcome to Lexikon</h2><p>Lexikon is a self-hostable wiki-style knowledge base. Create, organize, and share articles with your team.</p><p>Use the editor to write articles with rich formatting, images, and <strong>wikilinks</strong> to connect related content.</p>",
       },
       {

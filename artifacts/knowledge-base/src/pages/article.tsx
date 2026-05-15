@@ -178,10 +178,24 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           <Card className="border-dashed bg-muted/30">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <Lock className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-              <h3 className="font-semibold text-lg mb-2">Members Only</h3>
-              <p className="text-muted-foreground max-w-sm">
-                This article is restricted. You do not have the required group access to view its contents.
-              </p>
+              {!user ? (
+                <>
+                  <h3 className="font-semibold text-lg mb-2">Login Required</h3>
+                  <p className="text-muted-foreground max-w-sm mb-4">
+                    Please log in to read this article.
+                  </p>
+                  <Button asChild variant="default">
+                    <a href="/login">Log in</a>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <h3 className="font-semibold text-lg mb-2">Members Only</h3>
+                  <p className="text-muted-foreground max-w-sm">
+                    This article is restricted. You do not have the required group access to view its contents.
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         ) : (
