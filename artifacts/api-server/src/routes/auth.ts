@@ -2,10 +2,49 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
+
+// Returns whether initial setup (first admin account) is still needed.
+// Safe to call unauthenticated — only reveals a boolean count check.
+router.get("/auth/setup-status", async (_req, res) => {
+  const [result] = await db.select({ c: count() }).from(usersTable);
+  res.json({ needsSetup: Number(result?.c ?? 0) === 0 });
+});
+
+// Creates the very first admin account.  Fails with 409 if any user already exists.
+router.post("/auth/setup", async (req, res) => {
+  const [result] = await db.select({ c: count() }).from(usersTable);
+  if (Number(result?.c ?? 0) > 0) {
+    res.status(409).json({ error: "Setup has already been completed." });
+    return;
+  }
+
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    res.status(400).json({ error: "Name, email, and password are required." });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters." });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const [user] = await db
+    .insert(usersTable)
+    .values({ name: name.trim(), email: email.trim().toLowerCase(), passwordHash, role: "admin" })
+    .returning();
+
+  req.session.userId = user.id;
+  req.session.userRole = user.role;
+  req.session.userEmail = user.email;
+  req.session.userName = user.name;
+
+  res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+});
 
 router.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;

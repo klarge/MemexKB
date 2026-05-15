@@ -1,6 +1,6 @@
-import type { ComponentType, ReactNode } from "react";
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import Setup from "@/pages/setup";
 import Settings from "@/pages/settings";
 import Articles from "@/pages/articles";
 import Maintenance from "@/pages/maintenance";
@@ -22,6 +23,29 @@ import AdminTokens from "@/pages/admin-tokens";
 import ArticleHistory from "@/pages/article-history";
 
 const queryClient = new QueryClient();
+
+// Fetches whether the initial admin setup still needs to be completed.
+// Redirects to /setup for all routes until setup is done;
+// redirects away from /setup once an admin account exists.
+function SetupGuard({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+  const { data, isLoading } = useQuery<{ needsSetup: boolean }>({
+    queryKey: ["setup-status"],
+    queryFn: () => fetch("/api/auth/setup-status").then((r) => r.json()),
+    staleTime: Infinity,
+    retry: false,
+  });
+
+  if (isLoading) return null;
+
+  const needsSetup = data?.needsSetup ?? false;
+  const onSetup = location === "/setup";
+
+  if (needsSetup && !onSetup) return <Redirect to="/setup" />;
+  if (!needsSetup && onSetup) return <Redirect to="/login" />;
+
+  return <>{children}</>;
+}
 
 function AuthRoute({
   children,
@@ -54,7 +78,9 @@ function PublicLayout({ children }: { children: ReactNode }) {
 
 function Router() {
   return (
+    <SetupGuard>
     <Switch>
+      <Route path="/setup" component={Setup} />
       <Route path="/login" component={Login} />
 
       <Route path="/">
@@ -149,6 +175,7 @@ function Router() {
 
       <Route component={NotFound} />
     </Switch>
+    </SetupGuard>
   );
 }
 
