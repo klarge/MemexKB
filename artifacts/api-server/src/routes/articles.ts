@@ -6,6 +6,7 @@ import {
   articleGroupsTable,
   articleLinksTable,
   articleImagesTable,
+  articleVersionsTable,
   groupMembersTable,
   groupsTable,
   usersTable,
@@ -209,6 +210,15 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     await db.update(articleImagesTable).set({ articleId: article.id }).where(inArray(articleImagesTable.id, imgIds));
   }
 
+  // Snapshot initial version
+  await db.insert(articleVersionsTable).values({
+    articleId: article.id,
+    versionNumber: 1,
+    title: article.title,
+    content: article.content,
+    createdById: req.session.userId ?? null,
+  });
+
   const groups = await getArticleGroups(article.id);
   res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, backlinks: [] });
 });
@@ -294,6 +304,20 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
       await db.update(articleImagesTable).set({ articleId: article.id }).where(inArray(articleImagesTable.id, imgIds));
     }
   }
+
+  // Snapshot new version
+  const [versionCount] = await db
+    .select({ c: count() })
+    .from(articleVersionsTable)
+    .where(eq(articleVersionsTable.articleId, article.id));
+  const nextVersionNumber = Number(versionCount?.c ?? 0) + 1;
+  await db.insert(articleVersionsTable).values({
+    articleId: article.id,
+    versionNumber: nextVersionNumber,
+    title: article.title,
+    content: article.content,
+    createdById: req.session.userId ?? null,
+  });
 
   const groups = await getArticleGroups(article.id);
   res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, backlinks: [] });
@@ -424,6 +448,137 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
     .text(`Exported from Knowledge Base — ${new Date().toLocaleDateString()}`, { align: "right" });
 
   doc.end();
+});
+
+// ─── Version history ─────────────────────────────────────────────────────────
+
+router.get("/articles/:slug/versions", requireAuth, async (req, res) => {
+  const slug = String(req.params.slug);
+  const [article] = await db
+    .select({ id: articlesTable.id })
+    .from(articlesTable)
+    .where(eq(articlesTable.slug, slug))
+    .limit(1);
+  if (!article) { res.status(404).json({ error: "Article not found" }); return; }
+
+  // Access check
+  const userId = req.session.userId;
+  const userRole = req.session.userRole;
+  const userGroupIds = await getUserGroupIds(userId);
+  const groups = await getArticleGroups(article.id);
+  if (!canAccessArticle(groups.map((g) => g.id), userGroupIds, userRole)) {
+    res.status(403).json({ error: "Access denied" }); return;
+  }
+
+  const versions = await db
+    .select({
+      id: articleVersionsTable.id,
+      versionNumber: articleVersionsTable.versionNumber,
+      title: articleVersionsTable.title,
+      createdAt: articleVersionsTable.createdAt,
+      createdByName: usersTable.name,
+    })
+    .from(articleVersionsTable)
+    .leftJoin(usersTable, eq(articleVersionsTable.createdById, usersTable.id))
+    .where(eq(articleVersionsTable.articleId, article.id))
+    .orderBy(desc(articleVersionsTable.versionNumber));
+
+  res.json(versions);
+});
+
+router.get("/articles/:slug/versions/:versionId", requireAuth, async (req, res) => {
+  const slug = String(req.params.slug);
+  const versionId = parseInt(String(req.params.versionId), 10);
+  if (isNaN(versionId)) { res.status(400).json({ error: "Invalid version id" }); return; }
+
+  const [article] = await db
+    .select({ id: articlesTable.id })
+    .from(articlesTable)
+    .where(eq(articlesTable.slug, slug))
+    .limit(1);
+  if (!article) { res.status(404).json({ error: "Article not found" }); return; }
+
+  const userId = req.session.userId;
+  const userRole = req.session.userRole;
+  const userGroupIds = await getUserGroupIds(userId);
+  const groups = await getArticleGroups(article.id);
+  if (!canAccessArticle(groups.map((g) => g.id), userGroupIds, userRole)) {
+    res.status(403).json({ error: "Access denied" }); return;
+  }
+
+  const [version] = await db
+    .select({
+      id: articleVersionsTable.id,
+      versionNumber: articleVersionsTable.versionNumber,
+      title: articleVersionsTable.title,
+      content: articleVersionsTable.content,
+      createdAt: articleVersionsTable.createdAt,
+      createdByName: usersTable.name,
+    })
+    .from(articleVersionsTable)
+    .leftJoin(usersTable, eq(articleVersionsTable.createdById, usersTable.id))
+    .where(and(
+      eq(articleVersionsTable.id, versionId),
+      eq(articleVersionsTable.articleId, article.id),
+    ))
+    .limit(1);
+
+  if (!version) { res.status(404).json({ error: "Version not found" }); return; }
+  res.json(version);
+});
+
+router.post("/articles/:slug/versions/:versionId/restore", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+  const slug = String(req.params.slug);
+  const versionId = parseInt(String(req.params.versionId), 10);
+  if (isNaN(versionId)) { res.status(400).json({ error: "Invalid version id" }); return; }
+
+  const [article] = await db
+    .select()
+    .from(articlesTable)
+    .where(eq(articlesTable.slug, slug))
+    .limit(1);
+  if (!article) { res.status(404).json({ error: "Article not found" }); return; }
+
+  const [version] = await db
+    .select()
+    .from(articleVersionsTable)
+    .where(and(
+      eq(articleVersionsTable.id, versionId),
+      eq(articleVersionsTable.articleId, article.id),
+    ))
+    .limit(1);
+  if (!version) { res.status(404).json({ error: "Version not found" }); return; }
+
+  // Apply the old content as an update
+  const [updated] = await db
+    .update(articlesTable)
+    .set({ title: version.title, content: version.content, updatedAt: new Date(), updatedById: req.session.userId ?? null })
+    .where(eq(articlesTable.id, article.id))
+    .returning();
+
+  // Refresh wikilinks
+  await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, article.id));
+  const wikilinks = extractWikilinks(version.content);
+  if (wikilinks.length > 0) {
+    await db.insert(articleLinksTable)
+      .values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
+      .onConflictDoNothing();
+  }
+
+  // Snapshot the restore as a new version
+  const [versionCount] = await db
+    .select({ c: count() })
+    .from(articleVersionsTable)
+    .where(eq(articleVersionsTable.articleId, article.id));
+  await db.insert(articleVersionsTable).values({
+    articleId: article.id,
+    versionNumber: Number(versionCount?.c ?? 0) + 1,
+    title: updated.title,
+    content: updated.content,
+    createdById: req.session.userId ?? null,
+  });
+
+  res.json({ message: "Restored", slug: updated.slug });
 });
 
 export default router;

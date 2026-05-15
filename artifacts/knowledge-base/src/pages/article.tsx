@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus,
+  Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -218,6 +218,13 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
                 data-testid="button-edit-article"
               >
                 <Edit className="mr-2 h-4 w-4" /> Edit Article
+              </Button>
+              <Button
+                className="w-full justify-start"
+                variant="outline"
+                onClick={() => setLocation(`/wiki/${actualSlug}/history`)}
+              >
+                <Clock className="mr-2 h-4 w-4" /> Version History
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>

@@ -19,6 +19,7 @@ import AdminUsers from "@/pages/admin-users";
 import AdminGroups from "@/pages/admin-groups";
 import AdminImport from "@/pages/admin-import";
 import AdminTokens from "@/pages/admin-tokens";
+import ArticleHistory from "@/pages/article-history";
 
 const queryClient = new QueryClient();
 
@@ -136,6 +137,14 @@ function Router() {
         <AuthRoute adminOnly>
           <AdminTokens />
         </AuthRoute>
+      </Route>
+
+      <Route path="/wiki/:slug/history">
+        {(params: Record<string, string>) => (
+          <AuthRoute editorOnly>
+            <ArticleHistory params={params} />
+          </AuthRoute>
+        )}
       </Route>
 
       <Route component={NotFound} />

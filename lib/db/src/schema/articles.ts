@@ -49,6 +49,22 @@ export const articleImagesTable = pgTable("article_images", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const articleVersionsTable = pgTable("article_versions", {
+  id: serial("id").primaryKey(),
+  articleId: integer("article_id")
+    .notNull()
+    .references(() => articlesTable.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  createdById: integer("created_by_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ArticleVersion = typeof articleVersionsTable.$inferSelect;
+
 export const insertArticleSchema = createInsertSchema(articlesTable).omit({
   id: true,
   createdAt: true,
