@@ -27,7 +27,14 @@ services:
     command: >
       sh -c "
         echo 'Waiting for Postgres...' &&
-        until pg_isready -h db -U lexikon -d lexikon; do sleep 2; done &&
+        node -e \"
+          const net = require('net');
+          (function wait() {
+            const s = new net.Socket();
+            s.connect(5432, 'db', () => { console.log('Postgres is ready'); s.destroy(); process.exit(0); });
+            s.on('error', () => { s.destroy(); setTimeout(wait, 2000); });
+          })();
+        \" &&
         echo 'Running schema push...' &&
         pnpm --filter @workspace/db run push
       "
