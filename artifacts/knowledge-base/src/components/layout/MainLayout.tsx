@@ -92,6 +92,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {user?.role === 'admin' && (
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={location === "/maintenance"}>
                       <Link href="/maintenance">
@@ -100,6 +101,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

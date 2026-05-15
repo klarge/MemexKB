@@ -38,7 +38,7 @@ async function getUserGroupIds(userId: number | undefined): Promise<number[]> {
 
 function canAccessArticle(articleGroupIds: number[], userGroupIds: number[], userRole: string | undefined): boolean {
   if (articleGroupIds.length === 0) return true;
-  if (userRole === "admin" || userRole === "editor") return true;
+  if (userRole === "admin") return true;
   return articleGroupIds.some((gid) => userGroupIds.includes(gid));
 }
 

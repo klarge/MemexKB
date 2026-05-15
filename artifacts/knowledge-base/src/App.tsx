@@ -68,7 +68,7 @@ function Router() {
       </Route>
 
       <Route path="/maintenance">
-        <AuthRoute>
+        <AuthRoute adminOnly>
           <Maintenance />
         </AuthRoute>
       </Route>

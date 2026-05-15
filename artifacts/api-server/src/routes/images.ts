@@ -71,7 +71,7 @@ router.get("/articles/images/:id", optionalAuth, async (req, res) => {
       const articleGroupIds = articleGroups.map((ag) => ag.groupId);
       const userId = req.session.userId;
       const userRole = req.session.userRole;
-      const isPrivileged = userRole === "admin" || userRole === "editor";
+      const isPrivileged = userRole === "admin";
 
       if (!isPrivileged) {
         const userGroupIds = userId
