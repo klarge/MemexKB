@@ -81,4 +81,14 @@ app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDoc, { customSiteTi
 
 app.use("/api", router);
 
+// Serve the pre-built frontend SPA when STATIC_DIR is set (Docker / production).
+// All non-/api requests fall through to index.html so client-side routing works.
+const staticDir = process.env.STATIC_DIR;
+if (staticDir) {
+  app.use(express.static(staticDir));
+  app.get("*", (_req, res) => {
+    res.sendFile(resolve(staticDir, "index.html"));
+  });
+}
+
 export default app;

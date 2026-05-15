@@ -1,0 +1,65 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lexikon
+      POSTGRES_USER: lexikon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lexikon -d lexikon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── DB schema migration ──────────────────────────────────────────────────────
+  # Uses the builder stage (which has drizzle-kit and the full toolchain) to push
+  # the Drizzle schema to the database.  Runs once per `docker compose up` and
+  # exits when finished.  The app service will not start until this completes.
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: >
+      sh -c "
+        echo 'Waiting for Postgres...' &&
+        until pg_isready -h db -U lexikon -d lexikon; do sleep 2; done &&
+        echo 'Running schema push...' &&
+        pnpm --filter @workspace/db run push
+      "
+    environment:
+      DATABASE_URL: postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Application ──────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon
+      SESSION_SECRET: ${SESSION_SECRET}
+      STATIC_DIR: /app/public
+      # Optional — comma-separated list of allowed CORS origins
+      # CORS_ORIGIN: https://yourdomain.com
+      # Optional — seed an initial admin account on first boot
+      # RUN_SEED: "true"
+      # SEED_ADMIN_EMAIL: admin@example.com
+      # SEED_ADMIN_PASSWORD: changeme123
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

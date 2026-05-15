@@ -1,0 +1,31 @@
+# Version control
+.git
+.gitignore
+
+# Node modules — installed fresh inside the builder stage
+node_modules
+**/node_modules
+
+# Build output — produced inside the builder stage
+**/dist
+artifacts/knowledge-base/dist
+
+# Replit / editor artefacts
+.replit
+replit.nix
+.local
+attached_assets
+.upm
+
+# Environment files — never bake secrets into an image
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS artefacts
+.DS_Store
+Thumbs.db
