@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { randomBytes, createHash } from "node:crypto";
 import { db } from "@workspace/db";
-import { apiTokensTable } from "@workspace/db";
+import { apiTokensTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 
 const router = Router();
 
@@ -67,6 +67,40 @@ router.delete("/auth/tokens/:id", requireAuth, async (req, res) => {
     .delete(apiTokensTable)
     .where(and(eq(apiTokensTable.id, id), eq(apiTokensTable.userId, userId)));
 
+  res.json({ message: "Token revoked" });
+});
+
+// ─── Admin: view and revoke all tokens ───────────────────────────────────────
+
+router.get("/admin/tokens", requireAuth, requireRole("admin"), async (_req, res) => {
+  const rows = await db
+    .select({
+      id: apiTokensTable.id,
+      name: apiTokensTable.name,
+      lastUsedAt: apiTokensTable.lastUsedAt,
+      expiresAt: apiTokensTable.expiresAt,
+      createdAt: apiTokensTable.createdAt,
+      userId: apiTokensTable.userId,
+      userName: usersTable.name,
+      userEmail: usersTable.email,
+    })
+    .from(apiTokensTable)
+    .leftJoin(usersTable, eq(apiTokensTable.userId, usersTable.id))
+    .orderBy(apiTokensTable.createdAt);
+  res.json(rows);
+});
+
+router.delete("/admin/tokens/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid token ID" });
+    return;
+  }
+  const deleted = await db.delete(apiTokensTable).where(eq(apiTokensTable.id, id)).returning();
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "Token not found" });
+    return;
+  }
   res.json({ message: "Token revoked" });
 });
 

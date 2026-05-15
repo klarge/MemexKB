@@ -18,6 +18,7 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import AdminUsers from "@/pages/admin-users";
 import AdminGroups from "@/pages/admin-groups";
 import AdminImport from "@/pages/admin-import";
+import AdminTokens from "@/pages/admin-tokens";
 
 const queryClient = new QueryClient();
 
@@ -128,6 +129,12 @@ function Router() {
       <Route path="/admin/import-export">
         <AuthRoute adminOnly>
           <AdminImport />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/admin/tokens">
+        <AuthRoute adminOnly>
+          <AdminTokens />
         </AuthRoute>
       </Route>
 
