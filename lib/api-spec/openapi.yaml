@@ -328,17 +328,16 @@ paths:
             type: string
       responses:
         "200":
-          description: Article with content
+          description: >
+            Article object. When the caller lacks group membership for a restricted article,
+            the response still returns HTTP 200 with `canAccess: false` and an empty `content`
+            string — the title and metadata are always visible to authenticated users.
+            Unauthenticated callers likewise receive the title with `canAccess: false` and
+            empty content for any group-restricted article.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Article"
-        "403":
-          description: Access restricted — user is not a member of the required group
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
           content:

@@ -190,7 +190,7 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
   res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, backlinks: [] });
 });
 
-router.get("/articles/:slug", requireAuth, async (req, res) => {
+router.get("/articles/:slug", optionalAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const [article] = await db
     .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, content: articlesTable.content, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
@@ -274,7 +274,7 @@ router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), as
   res.json({ message: "Article deleted" });
 });
 
-router.get("/articles/:slug/backlinks", requireAuth, async (req, res) => {
+router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {

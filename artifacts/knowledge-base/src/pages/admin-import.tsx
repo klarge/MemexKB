@@ -55,10 +55,10 @@ export default function AdminImport() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-    } catch (err: any) {
+    } catch (err) {
       toast({
         title: "Import Error",
-        description: err.message,
+        description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     } finally {

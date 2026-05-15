@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -20,68 +21,110 @@ import AdminImport from "@/pages/admin-import";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ component: Component, adminOnly = false, editorOnly = false }: { component: any, adminOnly?: boolean, editorOnly?: boolean }) {
+function AuthRoute({
+  children,
+  adminOnly = false,
+  editorOnly = false,
+}: {
+  children: ReactNode;
+  adminOnly?: boolean;
+  editorOnly?: boolean;
+}) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) return null;
   if (!user) return <Redirect to="/login" />;
 
-  if (adminOnly && user.role !== 'admin') {
+  if (adminOnly && user.role !== "admin") {
     return <Redirect to="/" />;
   }
 
-  if (editorOnly && user.role !== 'admin' && user.role !== 'editor') {
+  if (editorOnly && user.role !== "admin" && user.role !== "editor") {
     return <Redirect to="/" />;
   }
 
-  return (
-    <MainLayout>
-      <Component />
-    </MainLayout>
-  );
+  return <MainLayout>{children}</MainLayout>;
+}
+
+function PublicLayout({ children }: { children: ReactNode }) {
+  return <MainLayout>{children}</MainLayout>;
 }
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      
+
       <Route path="/">
-        <ProtectedRoute component={Home} />
+        <AuthRoute>
+          <Home />
+        </AuthRoute>
       </Route>
+
       <Route path="/articles">
-        <ProtectedRoute component={Articles} />
+        <PublicLayout>
+          <Articles />
+        </PublicLayout>
       </Route>
+
       <Route path="/maintenance">
-        <ProtectedRoute component={Maintenance} />
+        <AuthRoute>
+          <Maintenance />
+        </AuthRoute>
       </Route>
+
       <Route path="/settings">
-        <ProtectedRoute component={Settings} />
+        <AuthRoute>
+          <Settings />
+        </AuthRoute>
       </Route>
-      
+
       <Route path="/wiki/new">
-        <ProtectedRoute component={ArticleEdit} editorOnly />
+        <AuthRoute editorOnly>
+          <ArticleEdit />
+        </AuthRoute>
       </Route>
+
       <Route path="/wiki/:slug/edit">
-        <ProtectedRoute component={ArticleEdit} editorOnly />
+        {(params: Record<string, string>) => (
+          <AuthRoute editorOnly>
+            <ArticleEdit params={params} />
+          </AuthRoute>
+        )}
       </Route>
+
       <Route path="/wiki/:slug">
-        <ProtectedRoute component={ArticleView} />
+        {(params: Record<string, string>) => (
+          <PublicLayout>
+            <ArticleView params={params} />
+          </PublicLayout>
+        )}
       </Route>
 
       <Route path="/admin">
-        <ProtectedRoute component={AdminDashboard} adminOnly />
+        <AuthRoute adminOnly>
+          <AdminDashboard />
+        </AuthRoute>
       </Route>
+
       <Route path="/admin/users">
-        <ProtectedRoute component={AdminUsers} adminOnly />
+        <AuthRoute adminOnly>
+          <AdminUsers />
+        </AuthRoute>
       </Route>
+
       <Route path="/admin/groups">
-        <ProtectedRoute component={AdminGroups} adminOnly />
+        <AuthRoute adminOnly>
+          <AdminGroups />
+        </AuthRoute>
       </Route>
+
       <Route path="/admin/import-export">
-        <ProtectedRoute component={AdminImport} adminOnly />
+        <AuthRoute adminOnly>
+          <AdminImport />
+        </AuthRoute>
       </Route>
-      
+
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,6 +1,5 @@
-import { createContext, useContext, ReactNode, useEffect } from "react";
+import { createContext, useContext, ReactNode } from "react";
 import { useGetMe, getGetMeQueryKey, AuthUser } from "@workspace/api-client-react";
-import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 
 interface AuthContextType {
@@ -12,8 +11,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [location, setLocation] = useLocation();
-  const { data: user, isLoading, isError } = useGetMe({
+  const { data: user, isLoading } = useGetMe({
     query: {
       queryKey: getGetMeQueryKey(),
       retry: false,
@@ -21,13 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  useEffect(() => {
-    if (isError && location !== "/login") {
-      setLocation("/login");
-    }
-  }, [isError, location, setLocation]);
-
-  if (isLoading && location !== "/login") {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -38,10 +30,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user: user || null,
+        user: user ?? null,
         isLoading,
         logout: () => {
-          // handled elsewhere
+          // handled in MainLayout via useLogout
         },
       }}
     >

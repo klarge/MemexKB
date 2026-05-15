@@ -31,8 +31,13 @@ app.use(
   }),
 );
 
-const allowedOrigin = process.env.CORS_ORIGIN ?? true;
-app.use(cors({ origin: allowedOrigin, credentials: true }));
+// Restrict cross-origin requests to explicitly configured origins.
+// Defaults to same-origin only (no cross-origin) when CORS_ORIGIN is unset.
+// Set CORS_ORIGIN to a comma-separated list of allowed origins (e.g. "https://app.example.com").
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+  : false;
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 

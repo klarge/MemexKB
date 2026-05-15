@@ -63,7 +63,7 @@ export default function Articles() {
           />
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Select value={sort} onValueChange={(v: any) => setSort(v)}>
+          <Select value={sort} onValueChange={(v: "title" | "updated_at" | "created_at") => setSort(v)}>
             <SelectTrigger className="w-[140px]" data-testid="select-sort">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -73,7 +73,7 @@ export default function Articles() {
               <SelectItem value="created_at">Date Created</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={order} onValueChange={(v: any) => setOrder(v)}>
+          <Select value={order} onValueChange={(v: "asc" | "desc") => setOrder(v)}>
             <SelectTrigger className="w-[110px]" data-testid="select-order">
               <SelectValue placeholder="Order" />
             </SelectTrigger>
