@@ -7,6 +7,7 @@ import multer from "multer";
 const require = createRequire(import.meta.url);
 const archiver = require("archiver") as typeof import("archiver");
 import { requireAuth, requireRole } from "../lib/auth";
+import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import TurndownService from "turndown";
 import { articleLinksTable } from "@workspace/db";
@@ -67,16 +68,72 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
   }
   const overwrite = req.body.overwrite === "true";
 
+  let imported = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  // --- Standalone .md file upload ---
+  const isMarkdownFile =
+    req.file.originalname.toLowerCase().endsWith(".md") ||
+    req.file.mimetype === "text/markdown" ||
+    (req.file.mimetype === "text/plain" && req.file.originalname.toLowerCase().endsWith(".md"));
+
+  if (isMarkdownFile) {
+    try {
+      const rawMd = req.file.buffer.toString("utf-8");
+      const slug = req.file.originalname
+        .replace(/\.md$/i, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const h1 = extractH1(rawMd);
+      const title = h1 ?? titleFromSlug(slug);
+      const articleContent = sanitizeArticleHtml(rawMd.replace(/^# .+\n\n?/, ""));
+
+      const [existing] = await db
+        .select({ id: articlesTable.id })
+        .from(articlesTable)
+        .where(eq(articlesTable.slug, slug))
+        .limit(1);
+
+      if (existing) {
+        if (!overwrite) {
+          skipped++;
+        } else {
+          await db
+            .update(articlesTable)
+            .set({ title, content: articleContent, updatedAt: new Date() })
+            .where(eq(articlesTable.slug, slug));
+          imported++;
+        }
+      } else {
+        const [article] = await db
+          .insert(articlesTable)
+          .values({ slug, title, content: articleContent })
+          .returning();
+        const wikilinks = extractWikilinks(articleContent);
+        if (wikilinks.length > 0) {
+          await db
+            .insert(articleLinksTable)
+            .values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
+            .onConflictDoNothing();
+        }
+        imported++;
+      }
+    } catch (err) {
+      errors.push(`Failed to import ${req.file.originalname}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    res.json({ imported, skipped, errors });
+    return;
+  }
+
+  // --- ZIP archive import ---
   const unzipper = await import("unzipper");
   const directory = await unzipper.Open.buffer(req.file.buffer);
 
   // Pre-load all group names for metadata group restore
   const allGroups = await db.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable);
   const groupsByName = new Map(allGroups.map((g) => [g.name.toLowerCase(), g.id]));
-
-  let imported = 0;
-  let skipped = 0;
-  const errors: string[] = [];
 
   // --- Pass 1: process JSON+MD pairs (full metadata, including group assignments) ---
   const metaFiles = directory.files.filter(
@@ -103,7 +160,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
       let articleContent = "";
       if (mdFile) {
         const rawMd = (await mdFile.buffer()).toString("utf-8");
-        articleContent = rawMd.replace(/^# .+\n\n/, "");
+        articleContent = sanitizeArticleHtml(rawMd.replace(/^# .+\n\n/, ""));
       }
 
       const [existing] = await db
@@ -165,9 +222,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
   // --- Pass 2: process markdown-only files that have no companion JSON ---
   const mdOnlyFiles = directory.files.filter((f) => {
     if (!f.path.endsWith(".md")) return false;
-    // Only articles/ directory; exclude root-level files
     if (!f.path.includes("articles/")) return false;
-    // Skip if a JSON pair was already processed for this slug
     const slug = f.path.replace(/^articles\//, "").replace(/\.md$/, "");
     return !processedSlugs.has(slug);
   });
@@ -178,7 +233,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
       const slug = file.path.replace(/^articles\//, "").replace(/\.md$/, "");
       const h1 = extractH1(rawMd);
       const title = h1 ?? titleFromSlug(slug);
-      const articleContent = rawMd.replace(/^# .+\n\n?/, "");
+      const articleContent = sanitizeArticleHtml(rawMd.replace(/^# .+\n\n?/, ""));
 
       const [existing] = await db
         .select({ id: articlesTable.id })

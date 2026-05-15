@@ -103,7 +103,7 @@ export default function AdminImport() {
               Import Articles
             </CardTitle>
             <CardDescription>
-              Upload a ZIP archive containing Markdown files to import them into the knowledge base.
+              Upload a ZIP archive of Markdown files, or a single .md file, to import articles.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -115,14 +115,14 @@ export default function AdminImport() {
                 type="file" 
                 ref={fileInputRef} 
                 className="hidden" 
-                accept=".zip,application/zip" 
+                accept=".zip,application/zip,.md,text/markdown,text/plain" 
                 onChange={handleFileChange}
               />
               <UploadCloud className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
               {file ? (
                 <div className="font-medium text-primary">{file.name}</div>
               ) : (
-                <div className="text-muted-foreground">Click to select a ZIP file or drag and drop</div>
+                <div className="text-muted-foreground">Click to select a ZIP archive or a single .md file</div>
               )}
             </div>
 

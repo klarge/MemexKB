@@ -41,6 +41,12 @@ router.get("/articles/images/:id", optionalAuth, async (req, res) => {
     return;
   }
 
+  // Unattached images (no articleId) require authentication to prevent enumeration
+  if (!image.articleId && !req.session?.userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   // Enforce group-level access when image is linked to an article
   if (image.articleId) {
     const articleGroups = await db

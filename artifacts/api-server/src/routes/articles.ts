@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { eq, ilike, inArray, asc, desc, count, sql, and } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
+import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import TurndownService from "turndown";
 
@@ -173,9 +174,10 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     slug = `${slug}-${Date.now()}`;
   }
 
+  const sanitizedContent = sanitizeArticleHtml(content ?? "");
   const [article] = await db
     .insert(articlesTable)
-    .values({ slug, title, content: content ?? "", updatedById: req.session.userId ?? null })
+    .values({ slug, title, content: sanitizedContent, updatedById: req.session.userId ?? null })
     .returning();
 
   if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
@@ -254,7 +256,7 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
   }
   const updates: Record<string, unknown> = { updatedAt: new Date(), updatedById: req.session.userId ?? null };
   if (title !== undefined) updates.title = title;
-  if (content !== undefined) updates.content = content;
+  if (content !== undefined) updates.content = sanitizeArticleHtml(content);
   const [article] = await db.update(articlesTable).set(updates).where(eq(articlesTable.slug, slug)).returning();
 
   if (groupIds !== undefined && Array.isArray(groupIds)) {

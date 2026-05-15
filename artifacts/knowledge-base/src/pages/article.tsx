@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -74,10 +75,11 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
   };
 
   const processContent = (html: string) => {
-    return html.replace(/\[\[([^\]]+)\]\]/g, (_match, title: string) => {
+    const withLinks = html.replace(/\[\[([^\]]+)\]\]/g, (_match, title: string) => {
       const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       return `<a href="/wiki/${linkSlug}" class="text-primary hover:underline font-medium" data-wikilink="true">${title}</a>`;
     });
+    return DOMPurify.sanitize(withLinks, { USE_PROFILES: { html: true } });
   };
 
   useEffect(() => {
