@@ -49,6 +49,17 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
   await archive.finalize();
 });
 
+/** Derive a human-readable title from a markdown filename (slug). */
+function titleFromSlug(slug: string): string {
+  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Extract the first H1 heading from raw markdown, if present. */
+function extractH1(md: string): string | null {
+  const match = /^# (.+)$/m.exec(md);
+  return match ? match[1].trim() : null;
+}
+
 router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("file"), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded", imported: 0, skipped: 0, errors: [] });
@@ -67,7 +78,11 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
   let skipped = 0;
   const errors: string[] = [];
 
-  const metaFiles = directory.files.filter((f) => f.path.endsWith(".json") && f.path.includes("articles/") && f.path !== "manifest.json");
+  // --- Pass 1: process JSON+MD pairs (full metadata, including group assignments) ---
+  const metaFiles = directory.files.filter(
+    (f) => f.path.endsWith(".json") && f.path.includes("articles/") && f.path !== "manifest.json"
+  );
+  const processedSlugs = new Set<string>();
 
   for (const file of metaFiles) {
     try {
@@ -79,7 +94,9 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
       };
       const slug = meta.slug;
       const title = meta.title;
-      const metaGroupNames: string[] = Array.isArray(meta.groups) ? meta.groups.filter((g) => typeof g === "string") : [];
+      const metaGroupNames: string[] = Array.isArray(meta.groups)
+        ? meta.groups.filter((g) => typeof g === "string")
+        : [];
 
       const mdPath = file.path.replace(".json", ".md");
       const mdFile = directory.files.find((f) => f.path === mdPath);
@@ -89,23 +106,37 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
         articleContent = rawMd.replace(/^# .+\n\n/, "");
       }
 
-      const [existing] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+      const [existing] = await db
+        .select({ id: articlesTable.id })
+        .from(articlesTable)
+        .where(eq(articlesTable.slug, slug))
+        .limit(1);
 
       let articleId: number;
 
       if (existing) {
         if (!overwrite) {
           skipped++;
+          processedSlugs.add(slug);
           continue;
         }
-        await db.update(articlesTable).set({ title, content: articleContent, updatedAt: new Date() }).where(eq(articlesTable.slug, slug));
+        await db
+          .update(articlesTable)
+          .set({ title, content: articleContent, updatedAt: new Date() })
+          .where(eq(articlesTable.slug, slug));
         articleId = existing.id;
       } else {
-        const [article] = await db.insert(articlesTable).values({ slug, title, content: articleContent }).returning();
+        const [article] = await db
+          .insert(articlesTable)
+          .values({ slug, title, content: articleContent })
+          .returning();
         articleId = article.id;
         const wikilinks = extractWikilinks(articleContent);
         if (wikilinks.length > 0) {
-          await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: articleId, toSlug: slugify(s) }))).onConflictDoNothing();
+          await db
+            .insert(articleLinksTable)
+            .values(wikilinks.map((s) => ({ fromArticleId: articleId, toSlug: slugify(s) })))
+            .onConflictDoNothing();
         }
       }
 
@@ -120,6 +151,60 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
           await db
             .insert(articleGroupsTable)
             .values(resolvedGroupIds.map((groupId) => ({ articleId, groupId })))
+            .onConflictDoNothing();
+        }
+      }
+
+      processedSlugs.add(slug);
+      imported++;
+    } catch (err) {
+      errors.push(`Failed to import ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // --- Pass 2: process markdown-only files that have no companion JSON ---
+  const mdOnlyFiles = directory.files.filter((f) => {
+    if (!f.path.endsWith(".md")) return false;
+    // Only articles/ directory; exclude root-level files
+    if (!f.path.includes("articles/")) return false;
+    // Skip if a JSON pair was already processed for this slug
+    const slug = f.path.replace(/^articles\//, "").replace(/\.md$/, "");
+    return !processedSlugs.has(slug);
+  });
+
+  for (const file of mdOnlyFiles) {
+    try {
+      const rawMd = (await file.buffer()).toString("utf-8");
+      const slug = file.path.replace(/^articles\//, "").replace(/\.md$/, "");
+      const h1 = extractH1(rawMd);
+      const title = h1 ?? titleFromSlug(slug);
+      const articleContent = rawMd.replace(/^# .+\n\n?/, "");
+
+      const [existing] = await db
+        .select({ id: articlesTable.id })
+        .from(articlesTable)
+        .where(eq(articlesTable.slug, slug))
+        .limit(1);
+
+      if (existing) {
+        if (!overwrite) {
+          skipped++;
+          continue;
+        }
+        await db
+          .update(articlesTable)
+          .set({ title, content: articleContent, updatedAt: new Date() })
+          .where(eq(articlesTable.slug, slug));
+      } else {
+        const [article] = await db
+          .insert(articlesTable)
+          .values({ slug, title, content: articleContent })
+          .returning();
+        const wikilinks = extractWikilinks(articleContent);
+        if (wikilinks.length > 0) {
+          await db
+            .insert(articleLinksTable)
+            .values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
             .onConflictDoNothing();
         }
       }

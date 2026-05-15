@@ -23,9 +23,5 @@ export default function Home() {
     return <Redirect to="/articles" />;
   }
 
-  // We can just use the ArticleView component but provide it the home slug or let it read from route if we pass params
-  // To keep it simple, we just render the content here or reuse the component.
-  // We'll reuse the logic from ArticleView by using wouter's route but since we are at /, 
-  // maybe it's better to just render the article directly.
   return <ArticleView params={{ slug: "home" }} />;
 }

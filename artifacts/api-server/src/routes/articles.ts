@@ -232,7 +232,13 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   if (backlinkRows.length > 0) {
     const fromIds = [...new Set(backlinkRows.map((b) => b.fromArticleId))];
     const fromArticles = await db.select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name }).from(articlesTable).leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id)).where(inArray(articlesTable.id, fromIds));
-    backlinks = fromArticles.map((a) => ({ id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: false, canAccess: true, groups: [] }));
+    backlinks = await Promise.all(fromArticles.map(async (a) => {
+      const bGroups = await getArticleGroups(a.id);
+      const bGroupIds = bGroups.map((g) => g.id);
+      const bIsRestricted = bGroupIds.length > 0;
+      const bCanAccess = canAccessArticle(bGroupIds, userGroupIds, userRole);
+      return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bCanAccess ? bGroups : [] };
+    }));
   }
 
   res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: true, groups, backlinks });
@@ -308,7 +314,19 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(inArray(articlesTable.id, fromIds));
-  res.json(fromArticles.map((a) => ({ id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: false, canAccess: true, groups: [] })));
+
+  const userId = req.session.userId;
+  const userRole = req.session.userRole;
+  const userGroupIds = await getUserGroupIds(userId);
+
+  const backlinkResult = await Promise.all(fromArticles.map(async (a) => {
+    const bGroups = await getArticleGroups(a.id);
+    const bGroupIds = bGroups.map((g) => g.id);
+    const bIsRestricted = bGroupIds.length > 0;
+    const bCanAccess = canAccessArticle(bGroupIds, userGroupIds, userRole);
+    return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bCanAccess ? bGroups : [] };
+  }));
+  res.json(backlinkResult);
 });
 
 router.put("/articles/:slug/groups", requireAuth, requireRole("admin", "editor"), async (req, res) => {

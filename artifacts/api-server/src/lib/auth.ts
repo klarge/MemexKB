@@ -4,6 +4,36 @@ import { db } from "@workspace/db";
 import { apiTokensTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
+// ---------------------------------------------------------------------------
+// SSO foundation — no-op stubs. Replace the body of each hook with a real
+// provider implementation (e.g., SAML, OIDC) when SSO is enabled.
+// ---------------------------------------------------------------------------
+
+/** Called when an SSO callback is received. Returns the provider user data
+ *  (id, email, name) if authentication succeeds, or null to reject.
+ *  Stub: always returns null (SSO not configured). */
+export async function resolveSsoAuth(
+  _provider: string,
+  _callbackParams: Record<string, string>
+): Promise<{ externalId: string; email: string; name: string } | null> {
+  return null;
+}
+
+/** Middleware hook that can intercept a request and authenticate via SSO
+ *  session/cookie before falling through to local session/token auth.
+ *  Stub: calls next() with no modifications. */
+export async function ssoAuthMiddleware(
+  _req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// Token auth (Bearer <sha256-hashed token stored in api_tokens table>)
+// ---------------------------------------------------------------------------
+
 async function resolveTokenAuth(req: Request): Promise<boolean> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return false;
@@ -44,6 +74,10 @@ async function resolveTokenAuth(req: Request): Promise<boolean> {
 
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Auth middleware
+// ---------------------------------------------------------------------------
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (req.session?.userId) {
