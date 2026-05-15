@@ -5,6 +5,7 @@ import {
   articlesTable,
   articleGroupsTable,
   articleLinksTable,
+  articleImagesTable,
   groupMembersTable,
   groupsTable,
   usersTable,
@@ -186,6 +187,12 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) }))).onConflictDoNothing();
   }
 
+  // Associate any images embedded in this article's content with the article record
+  const imgIds = [...(content ?? "").matchAll(/\/api\/articles\/images\/(\d+)/g)].map((m) => parseInt(m[1])).filter((n) => !isNaN(n));
+  if (imgIds.length > 0) {
+    await db.update(articleImagesTable).set({ articleId: article.id }).where(inArray(articleImagesTable.id, imgIds));
+  }
+
   const groups = await getArticleGroups(article.id);
   res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, backlinks: [] });
 });
@@ -256,6 +263,12 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
     const wikilinks = extractWikilinks(content);
     if (wikilinks.length > 0) {
       await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) }))).onConflictDoNothing();
+    }
+
+    // Re-associate any images embedded in the updated content with this article
+    const imgIds = [...content.matchAll(/\/api\/articles\/images\/(\d+)/g)].map((m) => parseInt(m[1])).filter((n) => !isNaN(n));
+    if (imgIds.length > 0) {
+      await db.update(articleImagesTable).set({ articleId: article.id }).where(inArray(articleImagesTable.id, imgIds));
     }
   }
 

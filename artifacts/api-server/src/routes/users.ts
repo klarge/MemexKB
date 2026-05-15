@@ -104,6 +104,11 @@ router.delete("/users/:id", requireAuth, requireRole("admin"), async (req, res) 
 
 router.get("/users/:id/groups", requireAuth, async (req, res) => {
   const id = parseInt(String(req.params.id));
+  // Only admins or the user themselves may read group memberships
+  if (req.session.userRole !== "admin" && req.session.userId !== id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const members = await db.select().from(groupMembersTable).where(eq(groupMembersTable.userId, id));
   if (members.length === 0) {
     res.json([]);

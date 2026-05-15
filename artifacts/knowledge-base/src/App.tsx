@@ -85,6 +85,12 @@ function Router() {
         </AuthRoute>
       </Route>
 
+      <Route path="/wiki/new/edit">
+        <AuthRoute editorOnly>
+          <ArticleEdit />
+        </AuthRoute>
+      </Route>
+
       <Route path="/wiki/:slug/edit">
         {(params: Record<string, string>) => (
           <AuthRoute editorOnly>

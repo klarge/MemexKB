@@ -42,6 +42,7 @@ export const articleLinksTable = pgTable(
 
 export const articleImagesTable = pgTable("article_images", {
   id: serial("id").primaryKey(),
+  articleId: integer("article_id").references(() => articlesTable.id, { onDelete: "set null" }),
   filename: text("filename").notNull(),
   mimeType: text("mime_type").notNull(),
   data: text("data").notNull(),

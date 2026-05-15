@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { articlesTable, articleGroupsTable, groupsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createRequire } from "node:module";
 import multer from "multer";
 const require = createRequire(import.meta.url);
@@ -59,6 +59,10 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
   const unzipper = await import("unzipper");
   const directory = await unzipper.Open.buffer(req.file.buffer);
 
+  // Pre-load all group names for metadata group restore
+  const allGroups = await db.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable);
+  const groupsByName = new Map(allGroups.map((g) => [g.name.toLowerCase(), g.id]));
+
   let imported = 0;
   let skipped = 0;
   const errors: string[] = [];
@@ -68,9 +72,14 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
   for (const file of metaFiles) {
     try {
       const content = await file.buffer();
-      const meta = JSON.parse(content.toString("utf-8"));
-      const slug = meta.slug as string;
-      const title = meta.title as string;
+      const meta = JSON.parse(content.toString("utf-8")) as {
+        slug: string;
+        title: string;
+        groups?: string[];
+      };
+      const slug = meta.slug;
+      const title = meta.title;
+      const metaGroupNames: string[] = Array.isArray(meta.groups) ? meta.groups.filter((g) => typeof g === "string") : [];
 
       const mdPath = file.path.replace(".json", ".md");
       const mdFile = directory.files.find((f) => f.path === mdPath);
@@ -82,19 +91,39 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.single("f
 
       const [existing] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
 
+      let articleId: number;
+
       if (existing) {
         if (!overwrite) {
           skipped++;
           continue;
         }
         await db.update(articlesTable).set({ title, content: articleContent, updatedAt: new Date() }).where(eq(articlesTable.slug, slug));
+        articleId = existing.id;
       } else {
         const [article] = await db.insert(articlesTable).values({ slug, title, content: articleContent }).returning();
+        articleId = article.id;
         const wikilinks = extractWikilinks(articleContent);
         if (wikilinks.length > 0) {
-          await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) }))).onConflictDoNothing();
+          await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: articleId, toSlug: slugify(s) }))).onConflictDoNothing();
         }
       }
+
+      // Restore group assignments from metadata
+      if (metaGroupNames.length > 0) {
+        const resolvedGroupIds = metaGroupNames
+          .map((name) => groupsByName.get(name.toLowerCase()))
+          .filter((id): id is number => id !== undefined);
+
+        if (resolvedGroupIds.length > 0) {
+          await db.delete(articleGroupsTable).where(eq(articleGroupsTable.articleId, articleId));
+          await db
+            .insert(articleGroupsTable)
+            .values(resolvedGroupIds.map((groupId) => ({ articleId, groupId })))
+            .onConflictDoNothing();
+        }
+      }
+
       imported++;
     } catch (err) {
       errors.push(`Failed to import ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
