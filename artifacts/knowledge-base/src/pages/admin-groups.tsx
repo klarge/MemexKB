@@ -9,7 +9,8 @@ import {
   getGetGroupQueryKey,
   useAddGroupMember,
   useRemoveGroupMember,
-  useListUsers
+  useListUsers,
+  type Group,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,27 +41,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
-function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => void }) {
-  const { data: group, isLoading } = useGetGroup(groupId, { query: { enabled: !!groupId, queryKey: getGetGroupQueryKey(groupId) } });
+function GroupDetailView({ groupId, onBack }: { groupId: number; onBack: () => void }) {
+  const { data: group, isLoading } = useGetGroup(groupId, {
+    query: { enabled: !!groupId, queryKey: getGetGroupQueryKey(groupId) },
+  });
   const { data: allUsers } = useListUsers();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const addMemberMutation = useAddGroupMember();
   const removeMemberMutation = useRemoveGroupMember();
-  
+
   const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const handleAddMember = () => {
     if (!selectedUserId) return;
-    addMemberMutation.mutate({ id: groupId, data: { userId: parseInt(selectedUserId) } }, {
+    addMemberMutation.mutate({ id: groupId, data: { userId: parseInt(selectedUserId, 10) } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetGroupQueryKey(groupId) });
         queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
         setSelectedUserId("");
         toast({ title: "Member added" });
       },
-      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });
   };
 
@@ -71,7 +74,7 @@ function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => v
         queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
         toast({ title: "Member removed" });
       },
-      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });
   };
 
@@ -79,7 +82,7 @@ function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => v
     return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
-  const availableUsers = allUsers?.filter(u => !group.members.some(m => m.id === u.id)) || [];
+  const availableUsers = allUsers?.filter((u) => !group.members.some((m) => m.id === u.id)) || [];
 
   return (
     <div className="space-y-6">
@@ -108,7 +111,7 @@ function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => v
                 <SelectValue placeholder="Select user to add" />
               </SelectTrigger>
               <SelectContent>
-                {availableUsers.map(u => (
+                {availableUsers.map((u) => (
                   <SelectItem key={u.id} value={u.id.toString()}>{u.name} ({u.email})</SelectItem>
                 ))}
               </SelectContent>
@@ -130,13 +133,18 @@ function GroupDetailView({ groupId, onBack }: { groupId: number, onBack: () => v
                 </tr>
               </thead>
               <tbody>
-                {group.members.map(member => (
+                {group.members.map((member) => (
                   <tr key={member.id} className="border-t last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3 font-medium">{member.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{member.email}</td>
                     <td className="px-4 py-3 capitalize"><Badge variant="outline">{member.role}</Badge></td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => handleRemoveMember(member.id)} className="text-destructive hover:bg-destructive/10">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveMember(member.id)}
+                        className="text-destructive hover:bg-destructive/10"
+                      >
                         Remove
                       </Button>
                     </td>
@@ -162,33 +170,24 @@ export default function AdminGroups() {
   const { data: groups, isLoading } = useListGroups();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const createMutation = useCreateGroup();
   const updateMutation = useUpdateGroup();
   const deleteMutation = useDeleteGroup();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingGroup, setEditingGroup] = useState<any>(null);
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-  });
 
-  const handleOpenDialog = (group?: any) => {
+  const [formData, setFormData] = useState({ name: "", description: "" });
+
+  const handleOpenDialog = (group?: Group) => {
     if (group) {
       setEditingGroup(group);
-      setFormData({
-        name: group.name,
-        description: group.description || "",
-      });
+      setFormData({ name: group.name, description: group.description || "" });
     } else {
       setEditingGroup(null);
-      setFormData({
-        name: "",
-        description: "",
-      });
+      setFormData({ name: "", description: "" });
     }
     setIsDialogOpen(true);
   };
@@ -201,7 +200,7 @@ export default function AdminGroups() {
           toast({ title: "Group updated" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
       });
     } else {
       createMutation.mutate({ data: formData }, {
@@ -210,7 +209,7 @@ export default function AdminGroups() {
           toast({ title: "Group created" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
       });
     }
   };
@@ -221,7 +220,7 @@ export default function AdminGroups() {
         queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
         toast({ title: "Group deleted" });
       },
-      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });
   };
 
@@ -249,22 +248,22 @@ export default function AdminGroups() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingGroup ? 'Edit Group' : 'Create Group'}</DialogTitle>
+            <DialogTitle>{editingGroup ? "Edit Group" : "Create Group"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input 
-                value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Engineering"
               />
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
-              <Textarea 
-                value={formData.description} 
-                onChange={e => setFormData({...formData, description: e.target.value})} 
+              <Textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Optional description"
               />
             </div>
@@ -272,7 +271,9 @@ export default function AdminGroups() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
-              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {(createMutation.isPending || updateMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               Save
             </Button>
           </div>
@@ -327,12 +328,15 @@ export default function AdminGroups() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Group</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete {group.name}? This action cannot be undone. Articles restricted to this group will lose this restriction.
+                                Are you sure you want to delete {group.name}? Articles restricted to this group will lose this restriction.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(group.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              <AlertDialogAction
+                                onClick={() => handleDelete(group.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
                                 Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>

@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useGetArticle, useGetArticleBacklinks, getGetArticleQueryKey, getGetArticleBacklinksQueryKey, useDeleteArticle } from "@workspace/api-client-react";
+import {
+  useGetArticle,
+  useGetArticleBacklinks,
+  getGetArticleQueryKey,
+  getGetArticleBacklinksQueryKey,
+  useDeleteArticle,
+} from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText } from "lucide-react";
+import {
+  Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus,
+} from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -22,7 +30,7 @@ import {
 
 export default function ArticleView({ params }: { params?: { slug?: string } }) {
   const { slug } = params || {};
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -34,34 +42,40 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
       enabled: !!actualSlug,
       queryKey: getGetArticleQueryKey(actualSlug),
       retry: false,
-    }
+    },
   });
 
   const { data: backlinks } = useGetArticleBacklinks(actualSlug, {
     query: {
       enabled: !!actualSlug && !!article?.canAccess,
       queryKey: getGetArticleBacklinksQueryKey(actualSlug),
-    }
+    },
   });
 
   const deleteMutation = useDeleteArticle();
 
   const handleDelete = () => {
-    deleteMutation.mutate({ slug: actualSlug }, {
-      onSuccess: () => {
-        toast({ title: "Article deleted" });
-        setLocation("/articles");
+    deleteMutation.mutate(
+      { slug: actualSlug },
+      {
+        onSuccess: () => {
+          toast({ title: "Article deleted" });
+          setLocation("/articles");
+        },
+        onError: (err) => {
+          toast({
+            title: "Error deleting article",
+            description: err.message || "Unknown error",
+            variant: "destructive",
+          });
+        },
       },
-      onError: (err) => {
-        toast({ title: "Error deleting article", description: err.message || "Unknown error", variant: "destructive" });
-      }
-    });
+    );
   };
 
   const processContent = (html: string) => {
-    // Replace [[Wikilink]] with an a tag
-    return html.replace(/\[\[(.*?)\]\]/g, (match, title) => {
-      const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return html.replace(/\[\[([^\]]+)\]\]/g, (_match, title: string) => {
+      const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       return `<a href="/wiki/${linkSlug}" class="text-primary hover:underline font-medium" data-wikilink="true">${title}</a>`;
     });
   };
@@ -69,18 +83,18 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
   useEffect(() => {
     const handleWikilinkClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === 'A' && target.getAttribute('data-wikilink') === 'true') {
+      if (target.tagName === "A" && target.getAttribute("data-wikilink") === "true") {
         e.preventDefault();
-        const href = target.getAttribute('href');
+        const href = target.getAttribute("href");
         if (href) setLocation(href);
       }
     };
-    document.addEventListener('click', handleWikilinkClick);
-    return () => document.removeEventListener('click', handleWikilinkClick);
+    document.addEventListener("click", handleWikilinkClick);
+    return () => document.removeEventListener("click", handleWikilinkClick);
   }, [setLocation]);
 
   const exportPdf = () => {
-    window.open(`/api/articles/${actualSlug}/export/pdf`, '_blank');
+    window.open(`/api/articles/${actualSlug}/export/pdf`, "_blank");
   };
 
   const exportMd = () => {
@@ -100,19 +114,40 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
       setLocation("/articles");
       return null;
     }
+
+    const canEdit = user?.role === "admin" || user?.role === "editor";
+    const displayTitle = actualSlug
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
     return (
-      <div className="text-center py-20">
+      <div className="text-center py-20 space-y-4">
         <h2 className="text-2xl font-bold mb-2">Article not found</h2>
-        <p className="text-muted-foreground mb-6">The article you're looking for doesn't exist.</p>
-        <Button onClick={() => setLocation("/articles")}>
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          Back to articles
-        </Button>
+        <p className="text-muted-foreground">
+          The article <strong>"{displayTitle}"</strong> doesn't exist yet.
+        </p>
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <Button variant="outline" onClick={() => setLocation("/articles")}>
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back to articles
+          </Button>
+          {canEdit && (
+            <Button
+              onClick={() =>
+                setLocation(`/wiki/new/edit?title=${encodeURIComponent(displayTitle)}`)
+              }
+              data-testid="button-create-from-wikilink"
+            >
+              <FilePlus className="mr-2 h-4 w-4" />
+              Create this article
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
 
-  const canEdit = user?.role === 'admin' || user?.role === 'editor';
+  const canEdit = user?.role === "admin" || user?.role === "editor";
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 pb-20">
@@ -120,7 +155,9 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
         <div className="mb-6 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-4xl font-extrabold tracking-tight" data-testid="article-title">{article.title}</h1>
+              <h1 className="text-4xl font-extrabold tracking-tight" data-testid="article-title">
+                {article.title}
+              </h1>
               {article.isRestricted && (
                 <Badge variant="outline" className="border-primary/20 text-primary bg-primary/5">
                   <Lock className="w-3 h-3 mr-1" />
@@ -146,8 +183,8 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
             </CardContent>
           </Card>
         ) : (
-          <div 
-            className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8"
+          <div
+            className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-2 prose-th:bg-muted"
             dangerouslySetInnerHTML={{ __html: processContent(article.content) }}
             data-testid="article-content"
           />
@@ -158,13 +195,23 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
         {canEdit && (
           <Card>
             <CardContent className="p-4 space-y-3">
-              <Button className="w-full justify-start" variant="outline" onClick={() => setLocation(`/wiki/${actualSlug}/edit`)} data-testid="button-edit-article">
+              <Button
+                className="w-full justify-start"
+                variant="outline"
+                onClick={() => setLocation(`/wiki/${actualSlug}/edit`)}
+                data-testid="button-edit-article"
+              >
                 <Edit className="mr-2 h-4 w-4" /> Edit Article
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button className="w-full justify-start" variant="outline" data-testid="button-delete-article">
-                    <Trash2 className="mr-2 h-4 w-4 text-destructive" /> <span className="text-destructive">Delete</span>
+                  <Button
+                    className="w-full justify-start"
+                    variant="outline"
+                    data-testid="button-delete-article"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                    <span className="text-destructive">Delete</span>
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -176,7 +223,10 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
                       Delete
                     </AlertDialogAction>
                   </AlertDialogFooter>
@@ -209,9 +259,12 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
-                {backlinks.map(link => (
+                {backlinks.map((link) => (
                   <li key={link.id}>
-                    <Link href={`/wiki/${link.slug}`} className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                    <Link
+                      href={`/wiki/${link.slug}`}
+                      className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
+                    >
                       <FileText className="h-3 w-3" />
                       <span className="truncate">{link.title}</span>
                     </Link>
@@ -229,7 +282,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {article.groups.map(g => (
+                {article.groups.map((g) => (
                   <Badge key={g.id} variant="secondary">{g.name}</Badge>
                 ))}
               </div>

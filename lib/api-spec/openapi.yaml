@@ -117,6 +117,96 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/tokens:
+    get:
+      operationId: listApiTokens
+      tags: [auth]
+      summary: List API tokens for the current user
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of API tokens (token hashes are never returned)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiToken"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createApiToken
+      tags: [auth]
+      summary: Create a new API token
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiTokenInput"
+      responses:
+        "201":
+          description: Token created — the raw token value is returned only once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiTokenCreated"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/tokens/{id}:
+    delete:
+      operationId: revokeApiToken
+      tags: [auth]
+      summary: Revoke an API token
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Token revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid token ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ─── Articles ───────────────────────────────────────────────────────────────
   /articles:
     get:
@@ -1097,3 +1187,66 @@ components:
           type: array
           items:
             type: string
+
+    # ─── API Tokens ──────────────────────────────────────────────────────────────
+    ApiToken:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        lastUsedAt:
+          type: ["string", "null"]
+          format: date-time
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiTokenInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Human-readable label for this token
+        expiresAt:
+          type: string
+          format: date-time
+          description: Optional expiry date-time (ISO 8601)
+
+    ApiTokenCreated:
+      type: object
+      required: [id, name, token, message, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        token:
+          type: string
+          description: The raw token value — save it now, it will not be shown again
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+      description: Session cookie set after login
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: API token — pass as `Authorization: Bearer <token>`

@@ -4,9 +4,12 @@ import {
   getListUsersQueryKey, 
   useCreateUser, 
   useUpdateUser, 
-  useDeleteUser 
+  useDeleteUser,
+  type User,
+  type UserUpdate,
+  type UserUpdateRole,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Edit, Trash2, ShieldAlert } from "lucide-react";
@@ -18,7 +21,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -35,6 +37,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
+const ROLES = ["user", "editor", "admin"] as const;
+type RoleValue = typeof ROLES[number];
+
 export default function AdminUsers() {
   const { data: users, isLoading } = useListUsers();
   const queryClient = useQueryClient();
@@ -45,63 +50,57 @@ export default function AdminUsers() {
   const deleteMutation = useDeleteUser();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
-    role: "user" as "admin" | "editor" | "user"
+    role: "user" as RoleValue,
   });
 
-  const handleOpenDialog = (user?: any) => {
+  const handleOpenDialog = (user?: User) => {
     if (user) {
       setEditingUser(user);
       setFormData({
         name: user.name,
         email: user.email,
         password: "",
-        role: user.role,
+        role: user.role as RoleValue,
       });
     } else {
       setEditingUser(null);
-      setFormData({
-        name: "",
-        email: "",
-        password: "",
-        role: "user"
-      });
+      setFormData({ name: "", email: "", password: "", role: "user" });
     }
     setIsDialogOpen(true);
   };
 
   const handleSave = () => {
     if (editingUser) {
-      const updateData: any = {
+      const updateData: UserUpdate = {
         name: formData.name,
         email: formData.email,
-        role: formData.role,
+        role: formData.role as UserUpdateRole,
       };
       if (formData.password) {
         updateData.password = formData.password;
       }
-      
       updateMutation.mutate({ id: editingUser.id, data: updateData }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
           toast({ title: "User updated" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
       });
     } else {
-      createMutation.mutate({ data: formData }, {
+      createMutation.mutate({ data: { name: formData.name, email: formData.email, password: formData.password, role: formData.role } }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
           toast({ title: "User created" });
           setIsDialogOpen(false);
         },
-        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
       });
     }
   };
@@ -112,7 +111,7 @@ export default function AdminUsers() {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         toast({ title: "User deleted" });
       },
-      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });
   };
 
@@ -136,29 +135,32 @@ export default function AdminUsers() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingUser ? 'Edit User' : 'Create User'}</DialogTitle>
+            <DialogTitle>{editingUser ? "Edit User" : "Create User"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input 
-                value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Jane Doe"
               />
             </div>
             <div className="space-y-2">
               <Label>Email</Label>
-              <Input 
-                value={formData.email} 
-                onChange={e => setFormData({...formData, email: e.target.value})} 
+              <Input
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="jane@example.com"
                 type="email"
               />
             </div>
             <div className="space-y-2">
               <Label>Role</Label>
-              <Select value={formData.role} onValueChange={(v: any) => setFormData({...formData, role: v})}>
+              <Select
+                value={formData.role}
+                onValueChange={(v: RoleValue) => setFormData({ ...formData, role: v })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
@@ -170,10 +172,10 @@ export default function AdminUsers() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>{editingUser ? 'New Password (leave blank to keep current)' : 'Password'}</Label>
-              <Input 
-                value={formData.password} 
-                onChange={e => setFormData({...formData, password: e.target.value})} 
+              <Label>{editingUser ? "New Password (leave blank to keep current)" : "Password"}</Label>
+              <Input
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 type="password"
               />
             </div>
@@ -181,7 +183,9 @@ export default function AdminUsers() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
-              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {(createMutation.isPending || updateMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               Save
             </Button>
           </div>
@@ -208,8 +212,11 @@ export default function AdminUsers() {
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <Badge variant={user.role === 'admin' ? 'default' : user.role === 'editor' ? 'secondary' : 'outline'} className="capitalize">
-                        {user.role === 'admin' && <ShieldAlert className="w-3 h-3 mr-1" />}
+                      <Badge
+                        variant={user.role === "admin" ? "default" : user.role === "editor" ? "secondary" : "outline"}
+                        className="capitalize"
+                      >
+                        {user.role === "admin" && <ShieldAlert className="w-3 h-3 mr-1" />}
                         {user.role}
                       </Badge>
                     </td>
@@ -236,7 +243,10 @@ export default function AdminUsers() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(user.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              <AlertDialogAction
+                                onClick={() => handleDelete(user.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
                                 Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>

@@ -10,6 +10,7 @@ import YAML from "yamljs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
+import type { Pool as PgPool } from "pg";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PgSession = connectPgSimple(session);
@@ -45,7 +46,7 @@ if (!sessionSecret) {
 
 app.use(
   session({
-    store: new PgSession({ pool: pool as any, tableName: "user_sessions", createTableIfMissing: true }),
+    store: new PgSession({ pool: pool as unknown as PgPool, tableName: "user_sessions", createTableIfMissing: true }),
     secret: sessionSecret ?? "kb-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,

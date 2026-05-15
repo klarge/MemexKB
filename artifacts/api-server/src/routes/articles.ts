@@ -10,7 +10,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { eq, ilike, inArray, asc, desc, count, sql, and } from "drizzle-orm";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import TurndownService from "turndown";
 
@@ -40,7 +40,7 @@ function canAccessArticle(articleGroupIds: number[], userGroupIds: number[], use
   return articleGroupIds.some((gid) => userGroupIds.includes(gid));
 }
 
-router.get("/articles", requireAuth, async (req, res) => {
+router.get("/articles", optionalAuth, async (req, res) => {
   const { search, sort = "title", order = "asc", limit = 50, offset = 0 } = req.query;
   const userId = req.session.userId;
   const userRole = req.session.userRole;
