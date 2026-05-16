@@ -95,13 +95,26 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     return () => document.removeEventListener("click", handleWikilinkClick);
   }, [setLocation]);
 
-  const exportPdf = () => {
-    window.open(`/api/articles/${actualSlug}/export/pdf`, "_blank");
+  const triggerDownload = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.error("Export failed", err);
+    }
   };
 
-  const exportMd = () => {
-    window.location.href = `/api/articles/${actualSlug}/export/md`;
-  };
+  const exportPdf = () => triggerDownload(`/api/articles/${actualSlug}/export/pdf`, `${actualSlug}.pdf`);
+  const exportMd  = () => triggerDownload(`/api/articles/${actualSlug}/export/md`,  `${actualSlug}.md`);
 
   if (isLoading) {
     return (
