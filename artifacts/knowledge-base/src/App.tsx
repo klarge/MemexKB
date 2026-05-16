@@ -11,7 +11,6 @@ import Login from "@/pages/login";
 import Setup from "@/pages/setup";
 import Settings from "@/pages/settings";
 import Articles from "@/pages/articles";
-import Maintenance from "@/pages/maintenance";
 import Home from "@/pages/home";
 import ArticleView from "@/pages/article";
 import ArticleEdit from "@/pages/article-edit";
@@ -96,12 +95,6 @@ function Router() {
         <PublicLayout>
           <Articles />
         </PublicLayout>
-      </Route>
-
-      <Route path="/maintenance">
-        <AuthRoute adminOnly>
-          <Maintenance />
-        </AuthRoute>
       </Route>
 
       <Route path="/settings">

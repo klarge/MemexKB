@@ -21,7 +21,6 @@ import {
   Home, 
   List, 
   Settings, 
-  Wrench, 
   Users, 
   Shield, 
   Database,
@@ -101,16 +100,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       <Link href="/templates">
                         <LayoutTemplate className="mr-2 h-4 w-4" />
                         <span>Templates</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  )}
-                  {user?.role === 'admin' && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={location === "/maintenance"}>
-                      <Link href="/maintenance">
-                        <Wrench className="mr-2 h-4 w-4" />
-                        <span>Maintenance</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

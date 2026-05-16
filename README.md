@@ -15,7 +15,6 @@ A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + Pos
 ### Content management
 - **Version history** — every save is snapshotted; browse and restore any previous version
 - **Backlinks** — each article shows which other articles link to it
-- **Maintenance view** — lists articles sorted by oldest update; flags anything untouched for 6+ months as "Needs Review"
 - **Bulk import** — upload a single `.md` file, a folder, or a full ZIP archive (Markdown + images + metadata)
 - **Bulk export** — download the entire knowledge base as a ZIP (Markdown files + images + metadata JSON)
 - **Single-article export** — download any article as Markdown or PDF
@@ -58,9 +57,6 @@ A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + Pos
 
 **Version history** — browse every saved snapshot and restore any version
 ![Version history](docs/screenshots/version-history.jpg)
-
-**Maintenance view** — articles sorted by oldest update date
-![Maintenance](docs/screenshots/maintenance.jpg)
 
 **User management**
 ![Users](docs/screenshots/admin-users.jpg)

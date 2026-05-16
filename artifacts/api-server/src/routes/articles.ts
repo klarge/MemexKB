@@ -152,31 +152,6 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/articles/maintenance", requireAuth, requireRole("admin"), async (req, res) => {
-  const { limit = 100, offset = 0 } = req.query;
-  const articles = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
-    .from(articlesTable)
-    .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .orderBy(asc(articlesTable.updatedAt))
-    .limit(Number(limit))
-    .offset(Number(offset));
-
-  const [total] = await db.select({ count: count() }).from(articlesTable);
-
-  const allGroups = await db.select().from(articleGroupsTable);
-  const groupDetails = await db.select().from(groupsTable);
-  const groupMap = new Map(groupDetails.map((g) => [g.id, g]));
-
-  const result = articles.map((a) => {
-    const articleGroupIds = allGroups.filter((ag) => ag.articleId === a.id).map((ag) => ag.groupId);
-    const groups = articleGroupIds.map((gid) => groupMap.get(gid)).filter(Boolean).map((g) => ({ id: g!.id, name: g!.name, description: g!.description }));
-    return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: articleGroupIds.length > 0, canAccess: true, groups };
-  });
-
-  res.json({ articles: result, total: Number(total.count) });
-});
-
 router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const { title, content, groupIds } = req.body;
   if (!title) {
