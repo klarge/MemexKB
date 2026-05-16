@@ -19,7 +19,6 @@ import {
 import { 
   Book, 
   Home, 
-  List, 
   Settings, 
   Users, 
   Shield, 
@@ -83,14 +82,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       <Link href="/">
                         <Home className="mr-2 h-4 w-4" />
                         <span>Home</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={location === "/articles"}>
-                      <Link href="/articles">
-                        <List className="mr-2 h-4 w-4" />
-                        <span>All Articles</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -10,7 +10,6 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Setup from "@/pages/setup";
 import Settings from "@/pages/settings";
-import Articles from "@/pages/articles";
 import Home from "@/pages/home";
 import ArticleView from "@/pages/article";
 import ArticleEdit from "@/pages/article-edit";
@@ -89,12 +88,6 @@ function Router() {
         <AuthRoute>
           <Home />
         </AuthRoute>
-      </Route>
-
-      <Route path="/articles">
-        <PublicLayout>
-          <Articles />
-        </PublicLayout>
       </Route>
 
       <Route path="/settings">
