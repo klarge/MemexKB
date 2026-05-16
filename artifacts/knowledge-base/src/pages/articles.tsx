@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useListArticles, getListArticlesQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,10 @@ import { Lock, FileText, Search, Plus, Calendar, User as UserIcon } from "lucide
 import { format } from "date-fns";
 
 export default function Articles() {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const queryString = useSearch();
+  const initialSearch = new URLSearchParams(queryString).get("search") ?? "";
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const [sort, setSort] = useState<"title" | "updated_at" | "created_at">("updated_at");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const { user } = useAuth();

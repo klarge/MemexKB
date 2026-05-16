@@ -55,7 +55,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
 
   const onSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && e.currentTarget.value) {
-      setLocation(`/articles?search=${encodeURIComponent(e.currentTarget.value)}`);
+      setLocation(`/?search=${encodeURIComponent(e.currentTarget.value)}`);
     }
   };
 
