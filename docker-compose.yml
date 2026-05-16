@@ -36,7 +36,7 @@ services:
           })();
         \" &&
         echo 'Running schema push...' &&
-        pnpm --filter @workspace/db run push-force
+        yes | pnpm --filter @workspace/db run push-force
       "
     environment:
       # Accept DATABASE_URL directly from the host environment when set;
