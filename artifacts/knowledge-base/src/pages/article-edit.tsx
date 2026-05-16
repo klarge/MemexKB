@@ -112,7 +112,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ link: false }),
       Placeholder.configure({ placeholder: "Write your article content here…" }),
       ResizableImage.configure({ inline: true }),
       Link.configure({ openOnClick: false }),

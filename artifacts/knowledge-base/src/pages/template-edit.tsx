@@ -36,7 +36,7 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ link: false }),
       Image,
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Write your template content here…" }),
