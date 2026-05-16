@@ -17,13 +17,19 @@ services:
       retries: 10
 
   # ── DB schema migration ──────────────────────────────────────────────────────
-  # Uses the builder stage (which has drizzle-kit and the full toolchain) to push
-  # the Drizzle schema to the database.  Runs once per `docker compose up` and
-  # exits when finished.  The app service will not start until this completes.
+  # Runs once per `docker compose up` and exits.  The app service will not start
+  # until this completes successfully.
+  #
+  # NOTE: both `migrate` and `app` use `build: context: .` which requires the
+  # full source tree — including the Dockerfile — to be present on the Docker
+  # host.  In Portainer, use the *Repository* stack type (point it at your git
+  # repo) rather than the web editor, so Portainer can clone all the files.
   migrate:
     build:
       context: .
+      dockerfile: Dockerfile
       target: builder
+    restart: on-failure
     command: >
       sh -c "
         echo 'Waiting for Postgres...' &&
@@ -50,6 +56,7 @@ services:
   app:
     build:
       context: .
+      dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
     ports:
