@@ -409,12 +409,69 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   doc.moveTo(60, doc.y).lineTo(535, doc.y).strokeColor("#cccccc").stroke();
   doc.moveDown(1);
 
-  // Body — convert HTML to plain text via Markdown
-  const markdown = turndown.turndown(article.content || "");
-  doc.fontSize(11).font("Helvetica").fillColor("#333333").text(markdown, {
-    align: "left",
-    lineGap: 4,
-  });
+  // Split content into text segments and <img> tags so images can be embedded
+  type Segment = { type: "text"; html: string } | { type: "image"; src: string };
+  const segments: Segment[] = [];
+  const imgRegex = /<img[^>]+>/gi;
+  const html = article.content || "";
+  let lastIndex = 0;
+  let imgMatch: RegExpExecArray | null;
+  while ((imgMatch = imgRegex.exec(html)) !== null) {
+    if (imgMatch.index > lastIndex) {
+      segments.push({ type: "text", html: html.slice(lastIndex, imgMatch.index) });
+    }
+    const srcMatch = imgMatch[0].match(/src=["']([^"']+)["']/);
+    if (srcMatch) segments.push({ type: "image", src: srcMatch[1] });
+    lastIndex = imgMatch.index + imgMatch[0].length;
+  }
+  if (lastIndex < html.length) segments.push({ type: "text", html: html.slice(lastIndex) });
+
+  const USABLE_WIDTH = 475; // A4 (595.28pt) minus 60pt margins on each side
+
+  for (const seg of segments) {
+    if (seg.type === "text") {
+      const md = turndown.turndown(seg.html);
+      if (md.trim()) {
+        doc.fontSize(11).font("Helvetica").fillColor("#333333").text(md, { align: "left", lineGap: 4 });
+        doc.moveDown(0.5);
+      }
+    } else {
+      // Resolve image buffer from DB or data URL
+      let imgBuffer: Buffer | null = null;
+      let mimeType = "";
+
+      const localMatch = seg.src.match(/\/api\/articles\/images\/(\d+)/);
+      if (localMatch) {
+        const imageId = parseInt(localMatch[1]);
+        const [imgRow] = await db
+          .select({ data: articleImagesTable.data, mimeType: articleImagesTable.mimeType })
+          .from(articleImagesTable)
+          .where(eq(articleImagesTable.id, imageId))
+          .limit(1);
+        if (imgRow) {
+          imgBuffer = Buffer.from(imgRow.data, "base64");
+          mimeType = imgRow.mimeType;
+        }
+      } else if (seg.src.startsWith("data:")) {
+        const commaIdx = seg.src.indexOf(",");
+        if (commaIdx !== -1) {
+          const header = seg.src.slice(5, commaIdx); // e.g. "image/png;base64"
+          mimeType = header.split(";")[0];
+          imgBuffer = Buffer.from(seg.src.slice(commaIdx + 1), "base64");
+        }
+      }
+
+      // PDFKit natively supports JPEG and PNG; skip other formats gracefully
+      if (imgBuffer && (mimeType === "image/jpeg" || mimeType === "image/png")) {
+        try {
+          doc.image(imgBuffer, { fit: [USABLE_WIDTH, 400], align: "left" });
+          doc.moveDown(0.5);
+        } catch {
+          // Silently skip unembeddable images
+        }
+      }
+    }
+  }
 
   doc.moveDown(3);
   doc
