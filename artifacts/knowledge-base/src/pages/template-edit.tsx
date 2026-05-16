@@ -14,9 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2, ArrowLeft, Save,
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Code, Quote,
-  Table as TableIcon, Link as LinkIcon,
+  Table as TableIcon, Link as LinkIcon, PanelRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { InfoBoxExtension } from "@/lib/infobox-extension";
 
 export default function TemplateEdit({ params }: { params?: { id?: string } }) {
   const id = params?.id && params.id !== "new" ? parseInt(params.id, 10) : null;
@@ -43,6 +44,7 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
       TableRow,
       TableHeader,
       TableCell,
+      InfoBoxExtension,
     ],
     content: "",
   });
@@ -140,6 +142,27 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
               <div className="w-px h-6 bg-border mx-0.5" />
               <Button variant="ghost" size="sm" title="Insert table" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
                 <TableIcon className="h-4 w-4" />
+              </Button>
+              <div className="w-px h-6 bg-border mx-0.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Insert infobox"
+                onClick={() =>
+                  editor.chain().focus().insertContent({
+                    type: "infobox",
+                    attrs: {
+                      title: "",
+                      rows: JSON.stringify([
+                        { label: "", value: "" },
+                        { label: "", value: "" },
+                        { label: "", value: "" },
+                      ]),
+                    },
+                  }).run()
+                }
+              >
+                <PanelRight className="h-4 w-4" />
               </Button>
             </div>
           )}
