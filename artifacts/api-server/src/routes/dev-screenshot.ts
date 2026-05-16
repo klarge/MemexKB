@@ -7,7 +7,11 @@ const router = Router();
 
 if (process.env.NODE_ENV !== "production") {
   router.get("/dev/autologin", async (req, res) => {
-    const redirect = (req.query.redirect as string) || "/";
+    const rawRedirect = (req.query.redirect as string) || "/";
+    // Only allow same-origin relative paths to prevent open-redirect abuse
+    const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
+      ? rawRedirect
+      : "/";
     const [admin] = await db
       .select()
       .from(usersTable)

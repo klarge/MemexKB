@@ -38,7 +38,7 @@ async function provisionUser(email: string, name: string, ssoProvider: string, s
   }
 
   // Create new SSO user with an unguessable password hash (prevents local login)
-  const dummyPasswordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 1);
+  const dummyPasswordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
   const [created] = await db
     .insert(usersTable)
     .values({

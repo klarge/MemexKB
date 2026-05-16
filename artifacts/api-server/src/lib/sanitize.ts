@@ -12,6 +12,11 @@ const ALLOWED_TAGS = [
 export function sanitizeArticleHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: ALLOWED_TAGS,
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: {
+      img: ["http", "https", "data"],
+    },
+    allowedSchemesAppliedToAttributes: ["href", "src"],
     allowedAttributes: {
       "*": ["class", "data-type", "data-wikilink"],
       a: ["href", "target", "rel"],

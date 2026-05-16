@@ -58,7 +58,10 @@ router.post("/auth/login", async (req, res) => {
     .where(eq(usersTable.email, email.toLowerCase()))
     .limit(1);
 
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  // Always run bcrypt to prevent user-enumeration via timing differences.
+  const DUMMY_HASH = "$2a$12$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !passwordOk) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }

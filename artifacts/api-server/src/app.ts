@@ -1,9 +1,11 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import swaggerUi from "swagger-ui-express";
+import rateLimit from "express-rate-limit";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import YAML from "yamljs";
@@ -16,6 +18,27 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PgSession = connectPgSimple(session);
 
 const app: Express = express();
+
+// Security headers — set before any route handlers.
+// CSP is intentionally relaxed for the Swagger UI and the embedded editor;
+// tighten per-env in a real deployment.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 
 app.use(
   pinoHttp({
@@ -38,8 +61,11 @@ const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
   : false;
 app.use(cors({ origin: corsOrigins, credentials: true }));
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+
+// Reduced body limits — 20 MB was unnecessarily large and enabled easy DoS.
+// Images are stored via the dedicated /api/articles/images endpoint (base64, ~2 MB).
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret && process.env.NODE_ENV === "production") {
@@ -59,25 +85,40 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "lax",
+      sameSite: "strict",
     },
   }),
 );
 
-let swaggerDoc: object = {};
-try {
-  const specPath = resolve(__dirname, "../../../lib/api-spec/openapi.yaml");
-  swaggerDoc = YAML.load(specPath);
-} catch {
+// Rate limiting on authentication endpoints to prevent brute-force attacks.
+// 10 attempts per 15-minute window per IP.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many attempts, please try again later." },
+});
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/setup", authLimiter);
+
+// Swagger UI — restrict to non-production environments.
+// In production, protect it behind the admin-only requireRole middleware or disable entirely.
+if (process.env.NODE_ENV !== "production") {
+  let swaggerDoc: object = {};
   try {
-    const specPath = resolve(process.cwd(), "lib/api-spec/openapi.yaml");
+    const specPath = resolve(__dirname, "../../../lib/api-spec/openapi.yaml");
     swaggerDoc = YAML.load(specPath);
   } catch {
-    logger.warn("Could not load OpenAPI spec for Swagger UI");
+    try {
+      const specPath = resolve(process.cwd(), "lib/api-spec/openapi.yaml");
+      swaggerDoc = YAML.load(specPath);
+    } catch {
+      logger.warn("Could not load OpenAPI spec for Swagger UI");
+    }
   }
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDoc, { customSiteTitle: "Knowledge Base API" }));
 }
-
-app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDoc, { customSiteTitle: "Knowledge Base API" }));
 
 app.use("/api", router);
 
