@@ -58,13 +58,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push builder image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: builder
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.IMAGE }}:builder
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
