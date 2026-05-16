@@ -125,6 +125,39 @@ function frontendUrl(req: { protocol: string; get: (h: string) => string | undef
 
 // ── SAML ─────────────────────────────────────────────────────────────────────
 
+/** Public SAML SP metadata endpoint — paste this URL into your IdP. */
+router.get("/auth/saml/:id/metadata", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  // Metadata is useful even before the provider is enabled, so query without the enabled filter
+  const [row] = await db
+    .select()
+    .from(ssoConfigsTable)
+    .where(and(eq(ssoConfigsTable.id, id), eq(ssoConfigsTable.provider, "saml")))
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({ error: "SAML provider not found" });
+    return;
+  }
+
+  try {
+    const cfg = row.config as Record<string, string>;
+    const { SAML } = await import("@node-saml/node-saml");
+    const saml = new SAML({
+      entryPoint: cfg.entryPoint || "https://placeholder.example.com",
+      issuer: cfg.issuer ?? frontendUrl(req),
+      idpCert: cfg.idpCert || "placeholder",
+      callbackUrl: `${frontendUrl(req)}/api/auth/saml/${id}/callback`,
+    });
+    const xml = saml.generateServiceProviderMetadata(null, null);
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.send(xml);
+  } catch (err) {
+    console.error("SAML metadata error", err);
+    res.status(500).json({ error: "Failed to generate metadata" });
+  }
+});
+
 router.get("/auth/saml/:id/login", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const row = await getEnabledConfig(id);

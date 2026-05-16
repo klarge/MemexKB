@@ -73,6 +73,10 @@ function callbackUrl(provider: "saml" | "oidc", id: number) {
   return `${window.location.origin}/api/auth/${provider}/${id}/callback`;
 }
 
+function metadataUrl(id: number) {
+  return `${window.location.origin}/api/auth/saml/${id}/metadata`;
+}
+
 function SsoFormFields({
   provider,
   values,
@@ -422,9 +426,28 @@ export default function AdminSso() {
                         </Badge>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1 font-mono">
-                      <span className="truncate">{callbackUrl(row.provider, row.id)}</span>
-                      <CopyButton value={callbackUrl(row.provider, row.id)} />
+                    <div className="text-xs text-muted-foreground mt-1.5 space-y-0.5">
+                      <div className="flex items-center gap-1 font-mono">
+                        <span className="shrink-0 text-muted-foreground/60 mr-0.5">ACS</span>
+                        <span className="truncate">{callbackUrl(row.provider, row.id)}</span>
+                        <CopyButton value={callbackUrl(row.provider, row.id)} />
+                      </div>
+                      {row.provider === "saml" && (
+                        <div className="flex items-center gap-1 font-mono">
+                          <span className="shrink-0 text-muted-foreground/60 mr-0.5">MD&nbsp;</span>
+                          <span className="truncate">{metadataUrl(row.id)}</span>
+                          <CopyButton value={metadataUrl(row.id)} />
+                          <a
+                            href={metadataUrl(row.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors ml-0.5"
+                            title="Open metadata XML"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -456,7 +479,7 @@ export default function AdminSso() {
           </CardDescription>
         </CardHeader>
         <CardContent className="text-xs text-muted-foreground space-y-1.5">
-          <p><strong>SAML 2.0:</strong> Add the callback URL as the <em>Assertion Consumer Service (ACS) URL</em>. The SP Entity ID defaults to your app&apos;s origin unless you set a custom issuer.</p>
+          <p><strong>SAML 2.0:</strong> The easiest setup is to give your IdP the <strong>metadata URL</strong> (MD row on each provider card) — it bundles the ACS URL, Entity ID, and NameID format in one XML file that most IdPs can import directly. Alternatively, register the ACS URL manually as the <em>Assertion Consumer Service URL</em>. The SP Entity ID defaults to your app&apos;s origin unless you set a custom issuer.</p>
           <p><strong>SAML Group Mapping:</strong> Set the attribute name your IdP sends (e.g. <code>memberOf</code>) and add one row per value-to-group pair. Memberships for mapped groups are re-synced on every login.</p>
           <p><strong>OIDC / OAuth2:</strong> Add the callback URL as an allowed <em>Redirect URI</em> in your identity provider&apos;s application settings.</p>
           <p><strong>User provisioning:</strong> New SSO users are created automatically with the <em>user</em> role. Promote them in the Users admin page if needed.</p>
