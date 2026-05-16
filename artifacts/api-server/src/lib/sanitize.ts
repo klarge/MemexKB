@@ -3,7 +3,7 @@ import sanitizeHtml from "sanitize-html";
 const ALLOWED_TAGS = [
   "p", "h1", "h2", "h3", "h4", "h5", "h6",
   "blockquote", "pre", "ul", "ol", "li",
-  "table", "thead", "tbody", "tr", "th", "td",
+  "table", "caption", "thead", "tbody", "tr", "th", "td",
   "figure", "figcaption", "hr", "br", "div",
   "a", "strong", "em", "u", "s", "code",
   "mark", "sub", "sup", "span", "img",

@@ -230,4 +230,83 @@
     pointer-events: none;
     height: 0;
   }
+
+  /* Clearfix so prose containers fully wrap floated infoboxes */
+  .prose::after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+  .ProseMirror::after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+}
+
+/* ── InfoBox — Wikipedia-style floating summary table ────────────────────── */
+table.infobox {
+  float: right;
+  clear: right;
+  margin: 0 0 1.25rem 1.5rem;
+  border-collapse: collapse;
+  width: 260px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+table.infobox caption {
+  background: hsl(var(--primary) / 0.12);
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 6px 10px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+  caption-side: top;
+}
+
+table.infobox tbody tr {
+  border-top: 1px solid hsl(var(--border));
+}
+table.infobox tbody tr:first-child {
+  border-top: none;
+}
+
+table.infobox th {
+  padding: 5px 8px;
+  width: 42%;
+  background: hsl(var(--muted) / 0.5);
+  font-weight: 500;
+  text-align: left;
+  vertical-align: top;
+  color: hsl(var(--foreground));
+  border-right: 1px solid hsl(var(--border));
+}
+
+table.infobox td {
+  padding: 5px 8px;
+  vertical-align: top;
+  color: hsl(var(--foreground));
+  word-break: break-word;
+}
+
+/* Override prose table styles that would conflict */
+.prose table.infobox {
+  display: table;
+  width: 260px;
+}
+.prose table.infobox th,
+.prose table.infobox td {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  padding: 5px 8px;
+}
+.prose table.infobox th {
+  border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.5);
 }

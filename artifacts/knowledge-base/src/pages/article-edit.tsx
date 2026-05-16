@@ -17,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2, ArrowLeft, Save, Image as ImageIcon, Link as LinkIcon,
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Code, Quote,
-  Table as TableIcon, LayoutTemplate,
+  Table as TableIcon, LayoutTemplate, PanelRight,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -37,6 +37,7 @@ import type { SuggestionProps, SuggestionKeyDownProps } from "@tiptap/suggestion
 import { WikilinkExtension, type WikilinkItem } from "@/lib/wikilink-extension";
 import { WikilinkList, type WikilinkListHandle } from "@/lib/wikilink-list";
 import { ResizableImageView } from "@/lib/resizable-image";
+import { InfoBoxExtension } from "@/lib/infobox-extension";
 
 const ResizableImage = Image.extend({
   addAttributes() {
@@ -120,6 +121,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       TableRow,
       TableHeader,
       TableCell,
+
+      InfoBoxExtension,
 
       WikilinkExtension.configure({
         suggestion: {
@@ -354,6 +357,27 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
                     <Button variant="ghost" size="sm" title="Delete row" onClick={() => editor.chain().focus().deleteRow().run()} className="text-xs px-2 text-destructive">−row</Button>
                   </>
                 )}
+                <div className="w-px h-6 bg-border mx-0.5" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title="Insert infobox"
+                  onClick={() =>
+                    editor.chain().focus().insertContent({
+                      type: "infobox",
+                      attrs: {
+                        title: "",
+                        rows: JSON.stringify([
+                          { label: "", value: "" },
+                          { label: "", value: "" },
+                          { label: "", value: "" },
+                        ]),
+                      },
+                    }).run()
+                  }
+                >
+                  <PanelRight className="h-4 w-4" />
+                </Button>
                 {templates.length > 0 && (
                   <>
                     <div className="w-px h-6 bg-border mx-0.5" />
