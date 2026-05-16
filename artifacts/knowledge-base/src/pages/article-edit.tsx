@@ -40,12 +40,20 @@ const ResizableImage = Image.extend({
       ...this.parent?.(),
       width: {
         default: null,
+        // Serialise as an HTML width attribute so the sanitizer preserves it.
+        // (The sanitizer strips non-whitelisted CSS styles but explicitly allows
+        //  width/height attributes on <img>.)
         renderHTML: (attributes: Record<string, unknown>) => {
           if (!attributes.width) return {};
-          return { style: `width: ${attributes.width}px; max-width: 100%;` };
+          return { width: String(attributes.width) };
         },
-        parseHTML: (element: HTMLElement) =>
-          element.style.width?.replace("px", "") || null,
+        parseHTML: (element: HTMLElement) => {
+          const attr = element.getAttribute("width");
+          if (attr) return parseInt(attr, 10) || null;
+          // Fallback: legacy articles saved with inline style before this fix
+          const sw = element.style.width;
+          return sw ? parseInt(sw, 10) || null : null;
+        },
       },
     };
   },
