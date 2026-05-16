@@ -61,7 +61,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
       {
         onSuccess: () => {
           toast({ title: "Article deleted" });
-          setLocation("/articles");
+          setLocation("/");
         },
         onError: (err) => {
           toast({
@@ -140,7 +140,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
 
   if (isError || !article) {
     if (isHome) {
-      setLocation("/articles");
+      setLocation("/");
       return null;
     }
 
@@ -156,7 +156,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           The article <strong>"{displayTitle}"</strong> doesn't exist yet.
         </p>
         <div className="flex items-center justify-center gap-3 mt-6">
-          <Button variant="outline" onClick={() => setLocation("/articles")}>
+          <Button variant="outline" onClick={() => setLocation("/")}>
             <ChevronLeft className="mr-2 h-4 w-4" />
             Back to articles
           </Button>

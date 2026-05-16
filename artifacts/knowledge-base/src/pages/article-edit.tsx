@@ -287,7 +287,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation(isNew ? "/articles" : `/wiki/${slug}`)}
+          onClick={() => setLocation(isNew ? "/" : `/wiki/${slug}`)}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
