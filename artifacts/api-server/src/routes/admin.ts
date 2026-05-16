@@ -10,7 +10,7 @@ import { eq, inArray } from "drizzle-orm";
 import { createRequire } from "node:module";
 import multer from "multer";
 const _require = createRequire(import.meta.url);
-const archiver = _require("archiver") as typeof import("archiver");
+const { ZipArchive } = _require("archiver") as typeof import("archiver");
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
@@ -181,7 +181,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", 'attachment; filename="knowledge-base-export.zip"');
 
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  const archive = new ZipArchive({ zlib: { level: 9 } });
   archive.pipe(res);
 
   // Add image files to the archive under images/
