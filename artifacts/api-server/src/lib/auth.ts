@@ -124,5 +124,10 @@ declare module "express-session" {
     userRole: string;
     userEmail: string;
     userName: string;
+    oidcPending?: {
+      state: string;
+      nonce: string;
+      providerId: number;
+    };
   }
 }

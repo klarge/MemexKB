@@ -23,6 +23,7 @@ import AdminTokens from "@/pages/admin-tokens";
 import ArticleHistory from "@/pages/article-history";
 import Templates from "@/pages/templates";
 import TemplateEdit from "@/pages/template-edit";
+import AdminSso from "@/pages/admin-sso";
 
 const queryClient = new QueryClient();
 
@@ -164,6 +165,12 @@ function Router() {
       <Route path="/admin/tokens">
         <AuthRoute adminOnly>
           <AdminTokens />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/admin/sso">
+        <AuthRoute adminOnly>
+          <AdminSso />
         </AuthRoute>
       </Route>
 

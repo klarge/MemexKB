@@ -29,6 +29,7 @@ import {
   Search,
   KeyRound,
   LayoutTemplate,
+  ShieldCheck,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -160,6 +161,14 @@ export function MainLayout({ children }: { children: ReactNode }) {
                         <Link href="/admin/tokens">
                           <KeyRound className="mr-2 h-4 w-4" />
                           <span>API Keys</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location === "/admin/sso"}>
+                        <Link href="/admin/sso">
+                          <ShieldCheck className="mr-2 h-4 w-4" />
+                          <span>SSO / Identity</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
