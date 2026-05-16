@@ -80,8 +80,34 @@ export default function AdminImport() {
     await doImport(formData);
   };
 
-  const handleExport = () => {
-    window.open("/api/admin/export", "_blank");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch("/api/admin/export", { credentials: "include" });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Export failed");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "knowledge-base-export.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Export Error",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -103,9 +129,9 @@ export default function AdminImport() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleExport} className="w-full">
-              <FileArchive className="mr-2 h-4 w-4" />
-              Download ZIP Archive
+            <Button onClick={handleExport} disabled={isExporting} className="w-full">
+              {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileArchive className="mr-2 h-4 w-4" />}
+              {isExporting ? "Preparing export…" : "Download ZIP Archive"}
             </Button>
           </CardContent>
         </Card>
