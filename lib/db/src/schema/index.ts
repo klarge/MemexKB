@@ -4,3 +4,4 @@ export * from "./articles";
 export * from "./tokens";
 export * from "./templates";
 export * from "./sso";
+export * from "./settings";

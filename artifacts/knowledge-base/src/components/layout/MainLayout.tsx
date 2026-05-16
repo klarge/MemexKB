@@ -28,6 +28,7 @@ import {
   KeyRound,
   LayoutTemplate,
   ShieldCheck,
+  Paintbrush,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,11 +39,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSiteSettings, LOGO_URL } from "@/lib/site-settings";
 
 export function MainLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const logout = useLogout();
+  const { data: siteSettings } = useSiteSettings();
+
+  const siteName = siteSettings?.siteName ?? "Lexikon";
+  const hasLogo = siteSettings?.hasLogo ?? false;
 
   const handleLogout = () => {
     logout.mutate(undefined, {
@@ -65,10 +71,20 @@ export function MainLayout({ children }: { children: ReactNode }) {
         <Sidebar className="border-r border-border bg-sidebar">
           <SidebarHeader className="p-4">
             <div className="flex items-center gap-2 mb-4">
-              <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold">
-                L
+              <div className="h-8 w-8 rounded overflow-hidden flex items-center justify-center shrink-0">
+                {hasLogo ? (
+                  <img
+                    src={LOGO_URL}
+                    alt={siteName}
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold">
+                    {siteName[0]?.toUpperCase() ?? "L"}
+                  </div>
+                )}
               </div>
-              <span className="font-semibold text-lg tracking-tight">Lexikon</span>
+              <span className="font-semibold text-lg tracking-tight">{siteName}</span>
             </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -156,6 +172,14 @@ export function MainLayout({ children }: { children: ReactNode }) {
                         <Link href="/admin/sso">
                           <ShieldCheck className="mr-2 h-4 w-4" />
                           <span>SSO / Identity</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location === "/admin/customization"}>
+                        <Link href="/admin/customization">
+                          <Paintbrush className="mr-2 h-4 w-4" />
+                          <span>Customization</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

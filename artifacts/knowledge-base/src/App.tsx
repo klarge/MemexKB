@@ -22,6 +22,7 @@ import ArticleHistory from "@/pages/article-history";
 import Templates from "@/pages/templates";
 import TemplateEdit from "@/pages/template-edit";
 import AdminSso from "@/pages/admin-sso";
+import AdminCustomization from "@/pages/admin-customization";
 
 const queryClient = new QueryClient();
 
@@ -157,6 +158,12 @@ function Router() {
       <Route path="/admin/sso">
         <AuthRoute adminOnly>
           <AdminSso />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/admin/customization">
+        <AuthRoute adminOnly>
+          <AdminCustomization />
         </AuthRoute>
       </Route>
 
