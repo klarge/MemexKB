@@ -1,6 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runSeed } from "./lib/seed";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { db } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -14,6 +16,20 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// Run migrations before binding the server.
+// MIGRATIONS_DIR is set in the Docker image; skipped in dev (use drizzle-kit push).
+const migrationsDir = process.env.MIGRATIONS_DIR;
+if (migrationsDir) {
+  try {
+    logger.info({ migrationsDir }, "Running database migrations");
+    await migrate(db, { migrationsFolder: migrationsDir });
+    logger.info("Database migrations complete");
+  } catch (err) {
+    logger.error({ err }, "Database migration failed — exiting");
+    process.exit(1);
+  }
 }
 
 app.listen(port, async (err) => {

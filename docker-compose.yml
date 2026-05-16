@@ -16,37 +16,9 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── DB schema migration ──────────────────────────────────────────────────────
-  # Runs once per `docker compose up`, applies any pending schema changes, then
-  # exits.  The app service will not start until this completes successfully.
-  # Uses the :builder image (published to GHCR by the CI workflow) so no source
-  # tree or Dockerfile is needed on the Docker host — paste-friendly for Portainer.
-  migrate:
-    image: ghcr.io/klarge/lexikon:builder
-    restart: on-failure
-    command: >
-      sh -c "
-        echo 'Waiting for Postgres...' &&
-        node -e \"
-          const net = require('net');
-          (function wait() {
-            const s = new net.Socket();
-            s.connect(5432, 'db', () => { console.log('Postgres is ready'); s.destroy(); process.exit(0); });
-            s.on('error', () => { s.destroy(); setTimeout(wait, 2000); });
-          })();
-        \" &&
-        echo 'Running schema push...' &&
-        yes | pnpm --filter @workspace/db run push-force
-      "
-    environment:
-      # Accept DATABASE_URL directly from the host environment when set;
-      # fall back to the compose-managed Postgres service.
-      DATABASE_URL: ${DATABASE_URL:-postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon}
-    depends_on:
-      db:
-        condition: service_healthy
-
   # ── Application ──────────────────────────────────────────────────────────────
+  # Schema migrations run automatically on every startup via drizzle-orm/migrator
+  # before the HTTP server binds — no separate migrate container needed.
   app:
     image: ghcr.io/klarge/lexikon:latest
     restart: unless-stopped
@@ -55,11 +27,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # Accept DATABASE_URL directly from the host environment when set;
-      # fall back to the compose-managed Postgres service.
       DATABASE_URL: ${DATABASE_URL:-postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon}
       SESSION_SECRET: ${SESSION_SECRET}
       STATIC_DIR: /app/public
+      MIGRATIONS_DIR: /app/migrations
       # Optional — comma-separated list of allowed CORS origins
       # CORS_ORIGIN: https://yourdomain.com
       # Optional — seed an initial admin account on first boot
@@ -67,8 +38,8 @@ services:
       # SEED_ADMIN_EMAIL: admin@example.com
       # SEED_ADMIN_PASSWORD: changeme123
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

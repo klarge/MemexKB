@@ -50,12 +50,16 @@ COPY --from=builder /app/artifacts/api-server/dist ./dist
 # Pre-built frontend SPA (static files served by Express via STATIC_DIR)
 COPY --from=builder /app/artifacts/knowledge-base/dist/public ./public
 
+# SQL migration files — applied by drizzle-orm/migrator on every app startup
+COPY --from=builder /app/lib/db/migrations ./migrations
+
 # OpenAPI spec — loaded at startup for Swagger UI via process.cwd() fallback in app.ts
 COPY --from=builder /app/lib/api-spec/openapi.yaml ./lib/api-spec/openapi.yaml
 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV STATIC_DIR=/app/public
+ENV MIGRATIONS_DIR=/app/migrations
 
 EXPOSE 3000
 
