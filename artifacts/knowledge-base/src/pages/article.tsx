@@ -74,6 +74,8 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     );
   };
 
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
   const processContent = (html: string) => {
     const withLinks = html.replace(/\[\[([^\]]+)\]\]/g, (_match, title: string) => {
       const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -83,17 +85,29 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
   };
 
   useEffect(() => {
-    const handleWikilinkClick = (e: MouseEvent) => {
+    const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "A" && target.getAttribute("data-wikilink") === "true") {
         e.preventDefault();
         const href = target.getAttribute("href");
         if (href) setLocation(href);
+        return;
+      }
+      if (target.tagName === "IMG" && target.closest("[data-testid='article-content']")) {
+        const src = (target as HTMLImageElement).src;
+        if (src) setLightboxSrc(src);
       }
     };
-    document.addEventListener("click", handleWikilinkClick);
-    return () => document.removeEventListener("click", handleWikilinkClick);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
   }, [setLocation]);
+
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightboxSrc(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxSrc]);
 
   const triggerDownload = async (url: string, filename: string) => {
     try {
@@ -165,6 +179,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
   const canEdit = user?.role === "admin" || user?.role === "editor";
 
   return (
+    <>
     <div className="flex flex-col lg:flex-row gap-8 pb-20">
       <div className="flex-1 max-w-3xl min-w-0">
         <div className="mb-6 flex items-start justify-between">
@@ -213,7 +228,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           </Card>
         ) : (
           <div
-            className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-2 prose-th:bg-muted"
+            className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-2 prose-th:bg-muted [&_img]:cursor-zoom-in"
             dangerouslySetInnerHTML={{ __html: processContent(article.content) }}
             data-testid="article-content"
           />
@@ -327,5 +342,28 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
         )}
       </div>
     </div>
+
+    {lightboxSrc && (
+
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 cursor-zoom-out"
+        onClick={() => setLightboxSrc(null)}
+      >
+        <button
+          className="absolute top-4 right-4 text-white/70 hover:text-white bg-black/40 rounded-full p-2 transition-colors"
+          onClick={() => setLightboxSrc(null)}
+          aria-label="Close"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <img
+          src={lightboxSrc}
+          alt="Full size"
+          className="max-h-[90vh] max-w-[90vw] object-contain rounded shadow-2xl cursor-default"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+    </>
   );
 }
