@@ -1,7 +1,7 @@
 import { useGetArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
-import { Redirect } from "wouter";
 import ArticleView from "./article";
+import Articles from "./articles";
 
 export default function Home() {
   const { data: article, isLoading, isError } = useGetArticle("home", {
@@ -20,7 +20,7 @@ export default function Home() {
   }
 
   if (isError || !article) {
-    return <Redirect to="/articles" />;
+    return <Articles />;
   }
 
   return <ArticleView params={{ slug: "home" }} />;
