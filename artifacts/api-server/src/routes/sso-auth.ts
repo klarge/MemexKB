@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { createHash, randomBytes } from "node:crypto";
 import { db } from "@workspace/db";
-import { ssoConfigsTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { ssoConfigsTable, usersTable, groupMembersTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 const router = Router();
@@ -51,6 +51,71 @@ async function provisionUser(email: string, name: string, ssoProvider: string, s
     })
     .returning();
   return created;
+}
+
+/**
+ * Sync a SAML user's group memberships.
+ * Only the groups referenced in groupMappings are touched; all other group
+ * memberships are left alone. On each login the memberships are reconciled:
+ * - added if the IdP now asserts the attribute value
+ * - removed if the IdP no longer asserts it
+ */
+async function syncSamlGroups(
+  userId: number,
+  samlValues: string[],
+  groupMappings: Record<string, string>,
+) {
+  // Resolve which Lexikon group IDs the user should be in
+  const targetIds = new Set<number>();
+  for (const val of samlValues) {
+    const raw = groupMappings[val];
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (!isNaN(n)) targetIds.add(n);
+    }
+  }
+
+  // All group IDs referenced by the mapping (the ones we manage)
+  const managedIds = Object.values(groupMappings)
+    .map((v) => parseInt(v, 10))
+    .filter((n) => !isNaN(n));
+
+  if (managedIds.length === 0) return;
+
+  // Current memberships within the managed set
+  const currentRows = await db
+    .select({ groupId: groupMembersTable.groupId })
+    .from(groupMembersTable)
+    .where(
+      and(
+        eq(groupMembersTable.userId, userId),
+        inArray(groupMembersTable.groupId, managedIds),
+      ),
+    );
+
+  const currentIds = new Set(currentRows.map((r) => r.groupId));
+
+  // Add new memberships
+  const toAdd = [...targetIds].filter((id) => !currentIds.has(id));
+  if (toAdd.length > 0) {
+    await db
+      .insert(groupMembersTable)
+      .values(toAdd.map((groupId) => ({ groupId, userId })))
+      .onConflictDoNothing();
+  }
+
+  // Remove stale memberships (IdP no longer asserts this group)
+  const toRemove = [...currentIds].filter((id) => !targetIds.has(id));
+  if (toRemove.length > 0) {
+    await db
+      .delete(groupMembersTable)
+      .where(
+        and(
+          eq(groupMembersTable.userId, userId),
+          inArray(groupMembersTable.groupId, toRemove),
+        ),
+      );
+  }
 }
 
 function frontendUrl(req: { protocol: string; get: (h: string) => string | undefined }, path = "/") {
@@ -119,6 +184,23 @@ router.post("/auth/saml/:id/callback", async (req, res) => {
     }
 
     const user = await provisionUser(email, name, "saml", profile?.nameID as string ?? email);
+
+    // Sync SAML group memberships
+    if (cfg.groupAttributeName && cfg.groupMappings) {
+      try {
+        const mappings = JSON.parse(cfg.groupMappings) as Record<string, string>;
+        const rawAttr = (profile as Record<string, unknown>)[cfg.groupAttributeName];
+        const attrValues = Array.isArray(rawAttr)
+          ? rawAttr.map(String)
+          : rawAttr
+            ? [String(rawAttr)]
+            : [];
+        await syncSamlGroups(user.id, attrValues, mappings);
+      } catch (e) {
+        console.error("SAML group sync error", e);
+      }
+    }
+
     req.session.userId = user.id;
     req.session.userRole = user.role;
     req.session.userEmail = user.email;
