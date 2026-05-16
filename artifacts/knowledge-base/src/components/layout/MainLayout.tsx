@@ -31,6 +31,13 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function MainLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -159,29 +166,37 @@ export function MainLayout({ children }: { children: ReactNode }) {
           </SidebarContent>
           <SidebarFooter className="p-4">
             <SidebarSeparator className="mb-4" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <Avatar className="h-9 w-9 border border-border">
-                  <AvatarFallback className="bg-primary/10 text-primary">
-                    {user?.name?.substring(0, 2).toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col overflow-hidden">
-                  <span className="text-sm font-medium truncate">{user?.name}</span>
-                  <span className="text-xs text-muted-foreground capitalize">{user?.role}</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 mt-4">
-              <SidebarMenuButton asChild tooltip="Settings" className="flex-1 justify-center">
-                <Link href="/settings">
-                  <Settings className="h-4 w-4" />
-                </Link>
-              </SidebarMenuButton>
-              <SidebarMenuButton onClick={handleLogout} tooltip="Log out" className="flex-1 justify-center text-destructive hover:text-destructive hover:bg-destructive/10">
-                <LogOut className="h-4 w-4" />
-              </SidebarMenuButton>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent transition-colors overflow-hidden">
+                  <Avatar className="h-9 w-9 border border-border shrink-0">
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      {user?.name?.substring(0, 2).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col overflow-hidden text-left">
+                    <span className="text-sm font-medium truncate">{user?.name}</span>
+                    <span className="text-xs text-muted-foreground capitalize">{user?.role}</span>
+                  </div>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-52">
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="flex items-center gap-2 cursor-pointer">
+                    <Settings className="h-4 w-4" />
+                    Settings &amp; Password
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
         <main className="flex-1 overflow-y-auto bg-background p-6 md:p-8 lg:p-12 relative">
