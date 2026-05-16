@@ -45,6 +45,37 @@ A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + Pos
 
 ---
 
+## Screenshots
+
+**Article list**
+![Article list](docs/screenshots/article-list.jpg)
+
+**Reading an article** — with export, edit, and version history actions in the sidebar
+![Article view](docs/screenshots/article-view.jpg)
+
+**WYSIWYG editor** — TipTap toolbar, inline access control, and editor tips
+![Editor](docs/screenshots/editor.jpg)
+
+**Version history** — browse every saved snapshot and restore any version
+![Version history](docs/screenshots/version-history.jpg)
+
+**Maintenance view** — articles sorted by oldest update date
+![Maintenance](docs/screenshots/maintenance.jpg)
+
+**User management**
+![Users](docs/screenshots/admin-users.jpg)
+
+**Group management** — create groups, set descriptions, manage members
+![Groups](docs/screenshots/admin-groups.jpg)
+
+**SSO / Identity Providers** — configure SAML 2.0 or OIDC providers
+![SSO](docs/screenshots/admin-sso.jpg)
+
+**API Keys** — per-user bearer tokens with optional expiry
+![API Keys](docs/screenshots/api-tokens.jpg)
+
+---
+
 ## Self-hosting with Docker
 
 ### Prerequisites

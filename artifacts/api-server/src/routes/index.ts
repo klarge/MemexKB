@@ -10,9 +10,11 @@ import tokensRouter from "./tokens";
 import templatesRouter from "./templates";
 import ssoAdminRouter from "./sso-admin";
 import ssoAuthRouter from "./sso-auth";
+import devScreenshotRouter from "./dev-screenshot";
 
 const router: IRouter = Router();
 
+router.use(devScreenshotRouter);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(ssoAuthRouter);
