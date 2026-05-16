@@ -25,7 +25,9 @@ RUN pnpm --filter @workspace/api-server run build
 # Build the frontend SPA.
 # PORT is required by vite.config.ts even at build time (port validation).
 # BASE_PATH=/ because in Docker the frontend is served from the root path.
-RUN NODE_ENV=production PORT=4000 BASE_PATH=/ \
+# NODE_OPTIONS heap increase prevents OOM during minification on memory-
+# constrained CI runners (especially QEMU arm64 emulation).
+RUN NODE_ENV=production PORT=4000 BASE_PATH=/ NODE_OPTIONS="--max-old-space-size=4096" \
     pnpm --filter @workspace/knowledge-base run build
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
