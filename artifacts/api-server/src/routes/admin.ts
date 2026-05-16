@@ -9,8 +9,8 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { createRequire } from "node:module";
 import multer from "multer";
-const require = createRequire(import.meta.url);
-const archiver = require("archiver") as typeof import("archiver");
+const _require = createRequire(import.meta.url);
+const archiver = _require("archiver") as typeof import("archiver");
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";

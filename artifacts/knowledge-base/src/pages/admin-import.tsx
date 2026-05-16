@@ -87,8 +87,9 @@ export default function AdminImport() {
     try {
       const response = await fetch("/api/admin/export", { credentials: "include" });
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Export failed");
+        let msg = "Export failed";
+        try { const err = await response.json(); msg = err.error || msg; } catch { /* non-JSON error body */ }
+        throw new Error(msg);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
