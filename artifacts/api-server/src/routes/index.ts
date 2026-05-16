@@ -7,6 +7,7 @@ import groupsRouter from "./groups";
 import adminRouter from "./admin";
 import imagesRouter from "./images";
 import tokensRouter from "./tokens";
+import templatesRouter from "./templates";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(usersRouter);
 router.use(groupsRouter);
 router.use(adminRouter);
 router.use(imagesRouter);
+router.use(templatesRouter);
 
 export default router;

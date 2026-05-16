@@ -27,7 +27,8 @@ import {
   Database,
   LogOut,
   Search,
-  KeyRound
+  KeyRound,
+  LayoutTemplate,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -93,6 +94,16 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {(user?.role === 'admin' || user?.role === 'editor') && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={location.startsWith("/templates")}>
+                      <Link href="/templates">
+                        <LayoutTemplate className="mr-2 h-4 w-4" />
+                        <span>Templates</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  )}
                   {user?.role === 'admin' && (
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={location === "/maintenance"}>

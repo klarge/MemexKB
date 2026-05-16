@@ -17,8 +17,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2, ArrowLeft, Save, Image as ImageIcon, Link as LinkIcon,
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Code, Quote,
-  Table as TableIcon,
+  Table as TableIcon, LayoutTemplate,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -75,6 +79,12 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   const [title, setTitle] = useState(prefillTitle);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+
+  const { data: templates = [] } = useQuery<{ id: number; name: string; content: string }[]>({
+    queryKey: ["templates"],
+    queryFn: () => fetch("/api/templates").then((r) => r.json()),
+  });
 
   const { data: groupsData } = useListGroups();
   const { data: articlesData } = useListArticles({ limit: 500 });
@@ -344,8 +354,51 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
                     <Button variant="ghost" size="sm" title="Delete row" onClick={() => editor.chain().focus().deleteRow().run()} className="text-xs px-2 text-destructive">−row</Button>
                   </>
                 )}
+                {templates.length > 0 && (
+                  <>
+                    <div className="w-px h-6 bg-border mx-0.5" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Insert template"
+                      onClick={() => setTemplateDialogOpen(true)}
+                    >
+                      <LayoutTemplate className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             )}
+
+            <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <LayoutTemplate className="h-5 w-5" /> Insert Template
+                  </DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground -mt-1">
+                  Choose a template to insert at the current cursor position.
+                </p>
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {templates.map((t) => (
+                    <button
+                      key={t.id}
+                      className="w-full text-left rounded-md border border-border px-4 py-3 hover:bg-muted transition-colors"
+                      onClick={() => {
+                        editor?.chain().focus().insertContent(t.content).run();
+                        setTemplateDialogOpen(false);
+                      }}
+                    >
+                      <p className="font-medium text-sm">{t.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                        {t.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <EditorContent editor={editor} />
           </div>

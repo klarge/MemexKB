@@ -21,6 +21,8 @@ import AdminGroups from "@/pages/admin-groups";
 import AdminImport from "@/pages/admin-import";
 import AdminTokens from "@/pages/admin-tokens";
 import ArticleHistory from "@/pages/article-history";
+import Templates from "@/pages/templates";
+import TemplateEdit from "@/pages/template-edit";
 
 const queryClient = new QueryClient();
 
@@ -169,6 +171,26 @@ function Router() {
         {(params: Record<string, string>) => (
           <AuthRoute editorOnly>
             <ArticleHistory params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/templates">
+        <AuthRoute editorOnly>
+          <Templates />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/templates/new">
+        <AuthRoute editorOnly>
+          <TemplateEdit />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/templates/:id/edit">
+        {(params: Record<string, string>) => (
+          <AuthRoute editorOnly>
+            <TemplateEdit params={params} />
           </AuthRoute>
         )}
       </Route>
