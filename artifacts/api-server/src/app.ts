@@ -77,7 +77,7 @@ if (!sessionSecret) {
 
 app.use(
   session({
-    store: new PgSession({ pool: pool as unknown as PgPool, tableName: "user_sessions", createTableIfMissing: true }),
+    store: new PgSession({ pool: pool as unknown as PgPool, tableName: "user_sessions" }),
     secret: sessionSecret ?? "kb-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,

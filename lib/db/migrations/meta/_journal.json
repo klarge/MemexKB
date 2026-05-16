@@ -8,6 +8,13 @@
       "when": 1778974874526,
       "tag": "0000_brown_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778974874527,
+      "tag": "0001_add_user_sessions",
+      "breakpoints": true
     }
   ]
 }
