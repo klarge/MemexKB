@@ -16,6 +16,7 @@ replit.nix
 .local
 attached_assets
 .upm
+.github
 
 # Environment files — never bake secrets into an image
 .env
