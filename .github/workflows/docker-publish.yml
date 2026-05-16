@@ -10,30 +10,13 @@ env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/klarge/lexikon
 
-# ── Strategy overview ─────────────────────────────────────────────────────────
-# Building multi-arch with QEMU causes Rollup's native .node addons to fail at
-# run-time inside the emulated container.  Instead we build each platform on its
-# own native runner and push individual images by digest, then assemble a fat
-# manifest list in a final merge job.  This also makes each build faster.
-
 jobs:
-
-  # ── Per-platform build ──────────────────────────────────────────────────────
-  build:
-    name: Build ${{ matrix.platform }}
-    runs-on: ${{ matrix.runner }}
+  build-and-push:
+    name: Build and push linux/amd64 image
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm  # native arm64 runner — no QEMU needed
 
     steps:
       - name: Checkout repository
@@ -49,80 +32,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Build runtime image for this platform ────────────────────────────
-      - name: Build and push runtime image (by digest)
-        id: build-runtime
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: runtime
-          platforms: ${{ matrix.platform }}
-          push: true
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=runtime-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.platform }}
-
-      - name: Save runtime digest
-        run: |
-          mkdir -p /tmp/digests/runtime
-          digest="${{ steps.build-runtime.outputs.digest }}"
-          touch "/tmp/digests/runtime/${digest#sha256:}"
-
-      # ── Build builder image for this platform ────────────────────────────
-      - name: Build and push builder image (by digest)
-        id: build-builder
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: builder
-          platforms: ${{ matrix.platform }}
-          push: true
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=builder-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=builder-${{ matrix.platform }}
-
-      - name: Save builder digest
-        run: |
-          mkdir -p /tmp/digests/builder
-          digest="${{ steps.build-builder.outputs.digest }}"
-          touch "/tmp/digests/builder/${digest#sha256:}"
-
-      # Pass digests to the merge job via artifacts
-      - name: Upload digests
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ strategy.job-index }}
-          path: /tmp/digests/
-          if-no-files-found: error
-          retention-days: 1
-
-  # ── Merge platform images into fat manifests ────────────────────────────────
-  merge:
-    name: Create and push multi-arch manifests
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Download all platform digests
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # ── Runtime tags ─────────────────────────────────────────────────────
+      # ── Runtime image tags ────────────────────────────────────────────────
       # On main push:   :latest
       # On v1.2.3 tag:  :1.2.3  :1.2  :1  :latest
       - name: Extract metadata for runtime image
@@ -136,16 +46,25 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Create and push runtime manifest list
-        working-directory: /tmp/digests/runtime
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+      - name: Build and push runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Create and push builder manifest list
-        working-directory: /tmp/digests/builder
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.IMAGE }}:builder \
-            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+      - name: Build and push builder image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: builder
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:builder
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
