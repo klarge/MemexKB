@@ -103,6 +103,10 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
 
 export const InfoBoxExtension = Node.create({
   name: "infobox",
+  // Higher priority than the Table extension (default 100) so that
+  // infobox parse rules are registered first and win the <table.infobox>
+  // match before the generic <table> rule can intercept it.
+  priority: 200,
   group: "block",
   atom: true,
   draggable: true,
@@ -117,6 +121,19 @@ export const InfoBoxExtension = Node.create({
 
   parseHTML() {
     return [
+      // New format: <div data-type="infobox" data-title="…" data-rows="…">
+      // Used by renderHTML below — avoids any conflict with the Table extension.
+      {
+        tag: 'div[data-type="infobox"]',
+        getAttrs(el) {
+          const node = el as HTMLElement;
+          return {
+            title: node.getAttribute("data-title") ?? "",
+            rows: node.getAttribute("data-rows") ?? JSON.stringify([{ label: "", value: "" }]),
+          };
+        },
+      },
+      // Legacy format: <table class="infobox"> — keeps existing saved articles working.
       {
         tag: "table.infobox",
         getAttrs(el) {
@@ -147,13 +164,23 @@ export const InfoBoxExtension = Node.create({
         ["td", {}, r.value],
       ]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Wrap in a <div data-type="infobox"> so the parser always matches the
+    // outer div rule first — the inner <table class="infobox"> is purely for
+    // viewer styling and is never seen by the Table extension's parser.
     return [
-      "table",
-      mergeAttributes({ class: "infobox" }),
-      ...(title ? [["caption", {}, title]] : []),
-      ["tbody", {}, ...trNodes],
-    ] as any;
+      "div",
+      mergeAttributes({
+        "data-type": "infobox",
+        "data-title": title,
+        "data-rows": HTMLAttributes.rows as string,
+      }),
+      [
+        "table",
+        { class: "infobox" },
+        ...(title ? [["caption", {}, title] as [string, object, string]] : []),
+        ["tbody", {}, ...trNodes],
+      ],
+    ] as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   },
 
   addNodeView() {
