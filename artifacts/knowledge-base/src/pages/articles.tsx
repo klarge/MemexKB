@@ -15,6 +15,13 @@ export default function Articles() {
   const initialSearch = new URLSearchParams(queryString).get("search") ?? "";
   const [search, setSearch] = useState(initialSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
+
+  // Sync search input when the URL query string changes (e.g. sidebar search bar).
+  useEffect(() => {
+    const q = new URLSearchParams(queryString).get("search") ?? "";
+    setSearch(q);
+    setDebouncedSearch(q);
+  }, [queryString]);
   const [sort, setSort] = useState<"title" | "updated_at" | "created_at">("updated_at");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const { user } = useAuth();
