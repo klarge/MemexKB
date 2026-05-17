@@ -43,7 +43,13 @@ router.post("/auth/setup", async (req, res) => {
   req.session.userEmail = user.email;
   req.session.userName = user.name;
 
-  res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+  req.session.save((err) => {
+    if (err) {
+      res.status(500).json({ error: "Failed to create session" });
+      return;
+    }
+    res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+  });
 });
 
 router.post("/auth/login", async (req, res) => {
@@ -71,7 +77,13 @@ router.post("/auth/login", async (req, res) => {
   req.session.userEmail = user.email;
   req.session.userName = user.name;
 
-  res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+  req.session.save((err) => {
+    if (err) {
+      res.status(500).json({ error: "Failed to create session" });
+      return;
+    }
+    res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+  });
 });
 
 router.post("/auth/logout", (req, res) => {

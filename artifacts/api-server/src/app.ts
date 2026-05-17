@@ -19,6 +19,12 @@ const PgSession = connectPgSimple(session);
 
 const app: Express = express();
 
+// Trust the first proxy hop so that req.secure and the rate-limiter's IP
+// detection reflect the real client connection rather than the proxy's.
+// This is required when the app runs behind nginx, Caddy, Traefik, etc.
+// so that express-session correctly sets Secure cookies on HTTPS requests.
+app.set("trust proxy", 1);
+
 // Security headers — set before any route handlers.
 // CSP is intentionally relaxed for the Swagger UI and the embedded editor;
 // tighten per-env in a real deployment.
@@ -87,7 +93,7 @@ app.use(
       secure: process.env.COOKIE_SECURE === "true",
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "strict",
+      sameSite: "lax",
     },
   }),
 );

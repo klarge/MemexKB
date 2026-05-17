@@ -32,9 +32,11 @@ services:
       SESSION_SECRET: replace-with-a-strong-secret
       STATIC_DIR: /app/public
       MIGRATIONS_DIR: /app/migrations
-      # Set to "true" only when the app is served over HTTPS (e.g. behind a
+      # Set to "true" when the app is served over HTTPS (e.g. behind a
       # reverse proxy with TLS). Leave unset or "false" for plain HTTP.
-      # COOKIE_SECURE: "true"
+      # The app automatically trusts one proxy hop, so Secure cookies work
+      # correctly when TLS is terminated at the reverse proxy.
+      COOKIE_SECURE: "true"
       # Optional — uncomment to seed an initial admin account on first boot:
       # RUN_SEED: "true"
       # SEED_ADMIN_EMAIL: admin@example.com
