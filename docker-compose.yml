@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: lexikon
       POSTGRES_USER: lexikon
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: changeme        # ← change this password
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,26 +17,22 @@ services:
       retries: 10
 
   # ── Application ──────────────────────────────────────────────────────────────
-  # Migrations run automatically on startup via drizzle-orm/migrator before the
-  # HTTP server binds — no separate migrate container needed.
+  # Schema migrations run automatically on startup — no separate migrate container.
   app:
     image: ghcr.io/klarge/lexikon:latest
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "3000:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # DATABASE_URL is assembled from POSTGRES_PASSWORD here rather than using
-      # nested substitution (${VAR:-${OTHER:-default}} is not supported by Compose).
-      # To use an external database instead, replace this line with your full URL.
-      DATABASE_URL: postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon
-      SESSION_SECRET: ${SESSION_SECRET}
+      # Keep the password here in sync with POSTGRES_PASSWORD above.
+      DATABASE_URL: postgres://lexikon:changeme@db:5432/lexikon
+      # Generate a strong random value: openssl rand -hex 32
+      SESSION_SECRET: replace-with-a-strong-secret
       STATIC_DIR: /app/public
       MIGRATIONS_DIR: /app/migrations
-      # Optional — comma-separated list of allowed CORS origins
-      # CORS_ORIGIN: https://yourdomain.com
-      # Optional — seed an initial admin account on first boot
+      # Optional — uncomment to seed an initial admin account on first boot:
       # RUN_SEED: "true"
       # SEED_ADMIN_EMAIL: admin@example.com
       # SEED_ADMIN_PASSWORD: changeme123
