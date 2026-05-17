@@ -199,18 +199,26 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
       .map((gid) => groupMap.get(gid)?.name)
       .filter(Boolean);
 
-    // Convert HTML → markdown, then rewrite image URLs to relative paths
+    // Rewrite absolute image URLs to relative paths for both formats
+    const usedImageIds = extractImageIds(article.content);
+    const imageUrlMap: Array<[string, string]> = usedImageIds
+      .map((id) => {
+        const img = imageMap.get(id);
+        return img ? [`/api/articles/images/${id}`, `../images/${safeImageName(id, img.filename)}`] : null;
+      })
+      .filter((e): e is [string, string] => e !== null);
+
+    // Raw HTML — lossless, used for backup/restore (preserves infoboxes,
+    // table formatting, and any other custom TipTap nodes exactly)
+    let rawHtml = article.content;
+    for (const [from, to] of imageUrlMap) rawHtml = rawHtml.replaceAll(from, to);
+    archive.append(rawHtml, { name: `articles/${article.slug}.html` });
+
+    // Markdown — human-readable, portable to other tools
     let md = `# ${article.title}\n\n${turndown.turndown(article.content)}`;
-    for (const imgId of extractImageIds(article.content)) {
-      const img = imageMap.get(imgId);
-      if (img) {
-        const name = safeImageName(imgId, img.filename);
-        md = md.replaceAll(`/api/articles/images/${imgId}`, `../images/${name}`);
-      }
-    }
+    for (const [from, to] of imageUrlMap) md = md.replaceAll(from, to);
     archive.append(md, { name: `articles/${article.slug}.md` });
 
-    const usedImageIds = extractImageIds(article.content);
     const meta = {
       slug: article.slug,
       title: article.title,
@@ -347,7 +355,17 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       let articleContent = "";
       let wikilinksPass1: string[] = [];
 
-      if (mdFile) {
+      const htmlPath = file.path.replace(".json", ".html");
+      const htmlFile = directory.files.find((f) => f.path === htmlPath);
+
+      if (htmlFile) {
+        // Lossless restore: raw HTML preserves infoboxes, custom tables, etc.
+        const rawHtml = (await htmlFile.buffer()).toString("utf-8");
+        const rewrittenHtml = rewriteImageRefs(rawHtml, imagePathMap);
+        articleContent = sanitizeArticleHtml(rewrittenHtml);
+        wikilinksPass1 = extractWikilinks(rewrittenHtml);
+      } else if (mdFile) {
+        // Fallback: Markdown round-trip (third-party imports or older exports)
         const rawMd = (await mdFile.buffer()).toString("utf-8");
         const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n/, ""), imagePathMap);
         wikilinksPass1 = extractWikilinks(bodyMd);
@@ -428,13 +446,31 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
 
   for (const file of mdOnlyFiles) {
     try {
-      const rawMd = (await file.buffer()).toString("utf-8");
       const slug = file.path.replace(/^articles\//, "").replace(/\.md$/, "");
-      const h1 = extractH1(rawMd);
-      const title = h1 ?? titleFromSlug(slug);
-      const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n?/, ""), imagePathMap);
-      const wikilinksPass2 = extractWikilinks(bodyMd);
-      const articleContent = sanitizeArticleHtml(await marked.parse(bodyMd));
+
+      // Prefer raw HTML companion for lossless restore
+      const htmlCompanion = directory.files.find(
+        (f) => f.path === `articles/${slug}.html`,
+      );
+
+      let articleContent: string;
+      let wikilinksPass2: string[];
+      let title: string;
+
+      if (htmlCompanion) {
+        const rawHtml = (await htmlCompanion.buffer()).toString("utf-8");
+        const rewrittenHtml = rewriteImageRefs(rawHtml, imagePathMap);
+        articleContent = sanitizeArticleHtml(rewrittenHtml);
+        wikilinksPass2 = extractWikilinks(rewrittenHtml);
+        title = titleFromSlug(slug);
+      } else {
+        const rawMd = (await file.buffer()).toString("utf-8");
+        const h1 = extractH1(rawMd);
+        title = h1 ?? titleFromSlug(slug);
+        const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n?/, ""), imagePathMap);
+        wikilinksPass2 = extractWikilinks(bodyMd);
+        articleContent = sanitizeArticleHtml(await marked.parse(bodyMd));
+      }
 
       const [existing] = await db
         .select({ id: articlesTable.id })
