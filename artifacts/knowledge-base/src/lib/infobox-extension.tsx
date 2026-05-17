@@ -1,6 +1,7 @@
+import { useRef, useState } from "react";
 import { Node, mergeAttributes } from "@tiptap/core";
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Loader2, X, Image as ImageIcon } from "lucide-react";
 
 type InfoBoxRow = { label: string; value: string };
 
@@ -12,17 +13,60 @@ function safeParseRows(raw: unknown): InfoBoxRow[] {
   return [{ label: "", value: "" }];
 }
 
+async function uploadImageFile(file: File): Promise<string | null> {
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res = await fetch("/api/articles/images", { method: "POST", body: fd });
+    if (!res.ok) return null;
+    const data = await res.json() as { url: string };
+    return data.url;
+  } catch {
+    return null;
+  }
+}
+
 function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewProps) {
   const title = (node.attrs.title as string) ?? "";
   const rows: InfoBoxRow[] = safeParseRows(node.attrs.rows);
+  const image = (node.attrs.image as string) ?? "";
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setTitle = (v: string) => updateAttributes({ title: v });
   const setRows = (r: InfoBoxRow[]) => updateAttributes({ rows: JSON.stringify(r) });
+  const setImage = (url: string) => updateAttributes({ image: url });
 
   const addRow = () => setRows([...rows, { label: "", value: "" }]);
   const removeRow = (i: number) => setRows(rows.filter((_, idx) => idx !== i));
   const updateRow = (i: number, field: "label" | "value", val: string) =>
     setRows(rows.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)));
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    const url = await uploadImageFile(file);
+    setUploading(false);
+    if (url) setImage(url);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const item = Array.from(e.clipboardData.items).find((it) =>
+      it.type.startsWith("image/"),
+    );
+    if (!item) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const file = item.getAsFile();
+    if (file) void handleUpload(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const file = e.dataTransfer.files[0];
+    if (!file?.type.startsWith("image/")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void handleUpload(file);
+  };
 
   return (
     <NodeViewWrapper
@@ -31,6 +75,7 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
       style={{ float: "right", clear: "right", margin: "0 0 1rem 1.5rem", width: "260px" }}
     >
       <div className="border border-border rounded overflow-hidden text-sm bg-card shadow-sm select-none">
+        {/* Title */}
         <div className="bg-primary/10 border-b border-border px-2 py-2">
           <input
             className="w-full bg-transparent text-center font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none text-sm"
@@ -41,6 +86,58 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
           />
         </div>
 
+        {/* Image zone */}
+        <div
+          className={`relative border-b border-border ${image ? "bg-black/5" : "bg-muted/20 border-dashed cursor-pointer hover:bg-muted/40 transition-colors"}`}
+          style={{ minHeight: image ? undefined : "64px" }}
+          onPaste={handlePaste}
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          onClick={() => { if (!image) fileInputRef.current?.click(); }}
+        >
+          {uploading ? (
+            <div className="flex items-center justify-center h-16 text-muted-foreground text-xs gap-1">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Uploading…
+            </div>
+          ) : image ? (
+            <div className="relative group/img">
+              <img
+                src={image}
+                alt=""
+                draggable={false}
+                className="w-full object-contain"
+                style={{ maxHeight: "160px" }}
+              />
+              <button
+                onMouseDown={(e) => { e.preventDefault(); setImage(""); }}
+                className="absolute top-1 right-1 bg-background/80 rounded p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity"
+                title="Remove image"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-16 text-muted-foreground text-xs gap-1 pointer-events-none">
+              <ImageIcon className="h-4 w-4" />
+              <span>Paste or click to add image</span>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleUpload(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+
+        {/* Rows */}
         <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
           <tbody>
             {rows.map((row, i) => (
@@ -80,6 +177,7 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
           </tbody>
         </table>
 
+        {/* Footer */}
         <div className="flex items-center justify-between px-2 py-1.5 bg-muted/20 border-t border-border">
           <button
             onMouseDown={(e) => { e.preventDefault(); addRow(); }}
@@ -116,13 +214,13 @@ export const InfoBoxExtension = Node.create({
     return {
       title: { default: "" },
       rows: { default: JSON.stringify([{ label: "", value: "" }]) },
+      image: { default: "" },
     };
   },
 
   parseHTML() {
     return [
-      // New format: <div data-type="infobox" data-title="…" data-rows="…">
-      // Used by renderHTML below — avoids any conflict with the Table extension.
+      // New format: <div data-type="infobox" data-title="…" data-rows="…" data-image="…">
       {
         tag: 'div[data-type="infobox"]',
         getAttrs(el) {
@@ -130,6 +228,7 @@ export const InfoBoxExtension = Node.create({
           return {
             title: node.getAttribute("data-title") ?? "",
             rows: node.getAttribute("data-rows") ?? JSON.stringify([{ label: "", value: "" }]),
+            image: node.getAttribute("data-image") ?? "",
           };
         },
       },
@@ -140,13 +239,16 @@ export const InfoBoxExtension = Node.create({
           const node = el as HTMLElement;
           const caption = node.querySelector("caption");
           const title = caption?.textContent?.trim() ?? "";
+          const imgEl = node.querySelector("td img");
+          const image = imgEl?.getAttribute("src") ?? "";
           const rows: InfoBoxRow[] = Array.from(node.querySelectorAll("tr"))
+            .filter((tr) => tr.querySelector("th") && tr.querySelector("td"))
             .map((tr) => ({
               label: (tr.querySelector("th")?.textContent ?? "").trim(),
               value: (tr.querySelector("td")?.textContent ?? "").trim(),
             }))
             .filter((r) => r.label || r.value);
-          return { title, rows: JSON.stringify(rows.length ? rows : [{ label: "", value: "" }]) };
+          return { title, rows: JSON.stringify(rows.length ? rows : [{ label: "", value: "" }]), image };
         },
       },
     ];
@@ -154,6 +256,7 @@ export const InfoBoxExtension = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     const title = (HTMLAttributes.title as string) ?? "";
+    const imageUrl = (HTMLAttributes.image as string) ?? "";
     const rows: InfoBoxRow[] = safeParseRows(HTMLAttributes.rows);
 
     const trNodes = rows
@@ -164,21 +267,30 @@ export const InfoBoxExtension = Node.create({
         ["td", {}, r.value],
       ]);
 
-    // Wrap in a <div data-type="infobox"> so the parser always matches the
-    // outer div rule first — the inner <table class="infobox"> is purely for
-    // viewer styling and is never seen by the Table extension's parser.
+    const imageRow: [string, object, ...unknown[]] | null = imageUrl
+      ? [
+          "tr", {},
+          [
+            "td",
+            { colspan: "2", style: "text-align:center;padding:6px 4px" },
+            ["img", { src: imageUrl, style: "max-width:100%;max-height:160px;object-fit:contain" }],
+          ],
+        ]
+      : null;
+
     return [
       "div",
       mergeAttributes({
         "data-type": "infobox",
         "data-title": title,
         "data-rows": HTMLAttributes.rows as string,
+        ...(imageUrl ? { "data-image": imageUrl } : {}),
       }),
       [
         "table",
         { class: "infobox" },
         ...(title ? [["caption", {}, title] as [string, object, string]] : []),
-        ["tbody", {}, ...trNodes],
+        ["tbody", {}, ...(imageRow ? [imageRow] : []), ...trNodes],
       ],
     ] as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   },
