@@ -82,7 +82,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      // COOKIE_SECURE=true should only be set when the app is served over HTTPS.
+      // Leaving it false (the default) is correct for plain HTTP deployments.
+      secure: process.env.COOKIE_SECURE === "true",
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
       sameSite: "strict",
