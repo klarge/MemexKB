@@ -24,6 +24,67 @@ const router = Router();
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
+// ─── PDF infobox helpers ──────────────────────────────────────────────────────
+
+interface PdfInfoboxData {
+  title: string;
+  rows: Array<{ label: string; value: string }>;
+}
+
+function parsePdfInfobox(htmlFragment: string): PdfInfoboxData {
+  const captionMatch = htmlFragment.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
+  const title = captionMatch ? captionMatch[1].replace(/<[^>]+>/g, "").trim() : "";
+  const rows: PdfInfoboxData["rows"] = [];
+  const rowRe = /<tr[^>]*>[\s\S]*?<th[^>]*>([\s\S]*?)<\/th>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(htmlFragment)) !== null) {
+    const label = m[1].replace(/<[^>]+>/g, "").trim();
+    const value = m[2].replace(/<[^>]+>/g, "").trim();
+    if (label || value) rows.push({ label, value });
+  }
+  return { title, rows };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawPdfInfobox(doc: any, infobox: PdfInfoboxData, pageLeft: number, usableWidth: number) {
+  const BOX_W = 180;
+  const BOX_X = pageLeft + usableWidth - BOX_W;
+  const PAD = 5;
+  const FS = 8.5;
+  const TITLE_H = 22;
+  const ROW_H = 20;
+  const LABEL_W = Math.round(BOX_W * 0.42);
+  const VALUE_W = BOX_W - LABEL_W;
+  let curY: number = doc.y;
+
+  doc.rect(BOX_X, curY, BOX_W, TITLE_H).fillAndStroke("#2d6a4f", "#1b4332");
+  doc
+    .fillColor("#ffffff").fontSize(FS + 0.5).font("Helvetica-Bold")
+    .text(infobox.title || "Info", BOX_X + PAD, curY + 6, {
+      width: BOX_W - PAD * 2, align: "center", lineBreak: false,
+    });
+  curY += TITLE_H;
+
+  infobox.rows.forEach((row, i) => {
+    const bg = i % 2 === 0 ? "#f8f9fa" : "#ffffff";
+    doc.rect(BOX_X, curY, LABEL_W, ROW_H).fillAndStroke("#e9ecef", "#dee2e6");
+    doc.rect(BOX_X + LABEL_W, curY, VALUE_W, ROW_H).fillAndStroke(bg, "#dee2e6");
+    doc
+      .fillColor("#212529").fontSize(FS).font("Helvetica-Bold")
+      .text(row.label, BOX_X + PAD, curY + 6, {
+        width: LABEL_W - PAD * 2, align: "left", lineBreak: false,
+      });
+    doc
+      .fillColor("#212529").fontSize(FS).font("Helvetica")
+      .text(row.value, BOX_X + LABEL_W + PAD, curY + 6, {
+        width: VALUE_W - PAD * 2, align: "left", lineBreak: false,
+      });
+    curY += ROW_H;
+  });
+
+  doc.y = curY + 8;
+}
+
 async function getArticleGroups(articleId: number) {
   const ag = await db.select().from(articleGroupsTable).where(eq(articleGroupsTable.articleId, articleId));
   if (ag.length === 0) return [];
@@ -409,23 +470,49 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   doc.moveTo(60, doc.y).lineTo(535, doc.y).strokeColor("#cccccc").stroke();
   doc.moveDown(1);
 
-  // Split content into text segments and <img> tags so images can be embedded
-  type Segment = { type: "text"; html: string } | { type: "image"; src: string };
+  // Extract infoboxes (new <div data-type="infobox"> and legacy <table class="infobox">)
+  // before handing HTML to turndown so they don't get mangled into plain Markdown tables.
+  const pdfInfoboxes: PdfInfoboxData[] = [];
+  const rawHtml = article.content || "";
+
+  const cleanedHtml = rawHtml
+    .replace(/<div[^>]*data-type=["']infobox["'][^>]*>[\s\S]*?<\/div>/gi, (match) => {
+      const id = pdfInfoboxes.length;
+      pdfInfoboxes.push(parsePdfInfobox(match));
+      return `<img data-pdf-infobox="${id}" src="" alt="">`;
+    })
+    .replace(/<table[^>]*class=["'][^"']*infobox[^"']*["'][^>]*>[\s\S]*?<\/table>/gi, (match) => {
+      const id = pdfInfoboxes.length;
+      pdfInfoboxes.push(parsePdfInfobox(match));
+      return `<img data-pdf-infobox="${id}" src="" alt="">`;
+    });
+
+  // Split content into text, image and infobox segments
+  type Segment =
+    | { type: "text"; html: string }
+    | { type: "image"; src: string }
+    | { type: "infobox"; data: PdfInfoboxData };
+
   const segments: Segment[] = [];
   const imgRegex = /<img[^>]+>/gi;
-  const html = article.content || "";
   let lastIndex = 0;
   let imgMatch: RegExpExecArray | null;
-  while ((imgMatch = imgRegex.exec(html)) !== null) {
+  while ((imgMatch = imgRegex.exec(cleanedHtml)) !== null) {
     if (imgMatch.index > lastIndex) {
-      segments.push({ type: "text", html: html.slice(lastIndex, imgMatch.index) });
+      segments.push({ type: "text", html: cleanedHtml.slice(lastIndex, imgMatch.index) });
     }
-    const srcMatch = imgMatch[0].match(/src=["']([^"']+)["']/);
-    if (srcMatch) segments.push({ type: "image", src: srcMatch[1] });
+    const infoboxIdMatch = imgMatch[0].match(/data-pdf-infobox=["'](\d+)["']/);
+    if (infoboxIdMatch) {
+      segments.push({ type: "infobox", data: pdfInfoboxes[parseInt(infoboxIdMatch[1])] });
+    } else {
+      const srcMatch = imgMatch[0].match(/src=["']([^"']+)["']/);
+      if (srcMatch) segments.push({ type: "image", src: srcMatch[1] });
+    }
     lastIndex = imgMatch.index + imgMatch[0].length;
   }
-  if (lastIndex < html.length) segments.push({ type: "text", html: html.slice(lastIndex) });
+  if (lastIndex < cleanedHtml.length) segments.push({ type: "text", html: cleanedHtml.slice(lastIndex) });
 
+  const PAGE_LEFT = 60;
   const USABLE_WIDTH = 475; // A4 (595.28pt) minus 60pt margins on each side
 
   for (const seg of segments) {
@@ -435,6 +522,8 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
         doc.fontSize(11).font("Helvetica").fillColor("#333333").text(md, { align: "left", lineGap: 4 });
         doc.moveDown(0.5);
       }
+    } else if (seg.type === "infobox") {
+      drawPdfInfobox(doc, seg.data, PAGE_LEFT, USABLE_WIDTH);
     } else {
       // Resolve image buffer from DB or data URL
       let imgBuffer: Buffer | null = null;
