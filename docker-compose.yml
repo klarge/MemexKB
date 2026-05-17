@@ -17,8 +17,8 @@ services:
       retries: 10
 
   # ── Application ──────────────────────────────────────────────────────────────
-  # Schema migrations run automatically on every startup via drizzle-orm/migrator
-  # before the HTTP server binds — no separate migrate container needed.
+  # Migrations run automatically on startup via drizzle-orm/migrator before the
+  # HTTP server binds — no separate migrate container needed.
   app:
     image: ghcr.io/klarge/lexikon:latest
     restart: unless-stopped
@@ -27,7 +27,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      DATABASE_URL: ${DATABASE_URL:-postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon}
+      # DATABASE_URL is assembled from POSTGRES_PASSWORD here rather than using
+      # nested substitution (${VAR:-${OTHER:-default}} is not supported by Compose).
+      # To use an external database instead, replace this line with your full URL.
+      DATABASE_URL: postgres://lexikon:${POSTGRES_PASSWORD:-changeme}@db:5432/lexikon
       SESSION_SECRET: ${SESSION_SECRET}
       STATIC_DIR: /app/public
       MIGRATIONS_DIR: /app/migrations
