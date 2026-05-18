@@ -19,10 +19,11 @@ export function sanitizeArticleHtml(html: string): string {
     allowedSchemesAppliedToAttributes: ["href", "src"],
     allowedAttributes: {
       "*": ["class", "data-type", "data-wikilink"],
+      div: ["data-title", "data-rows", "data-image"],
       a: ["href", "target", "rel"],
-      img: ["src", "alt", "title", "width", "height"],
+      img: ["src", "alt", "title", "width", "height", "style"],
       th: ["colspan", "rowspan", "colwidth"],
-      td: ["colspan", "rowspan"],
+      td: ["colspan", "rowspan", "style"],
       p: ["style"],
       h1: ["style"], h2: ["style"], h3: ["style"],
       h4: ["style"], h5: ["style"], h6: ["style"],
@@ -30,6 +31,14 @@ export function sanitizeArticleHtml(html: string): string {
     allowedStyles: {
       "*": {
         "text-align": [/^(left|center|right|justify)$/],
+      },
+      img: {
+        "max-width": [/^\d+(%|px|rem|em)$/],
+        "max-height": [/^\d+(%|px|rem|em)$/],
+        "object-fit": [/^(contain|cover|fill|none|scale-down)$/],
+      },
+      td: {
+        "padding": [/^[\d.\s]+(px|rem|em|%)(\s[\d.\s]+(px|rem|em|%))*$/],
       },
     },
     disallowedTagsMode: "discard",
