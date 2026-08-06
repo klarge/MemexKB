@@ -1,4 +1,4 @@
-# Lexikon
+# Memex
 
 A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + PostgreSQL backend, packaged as a single Docker image.
 
@@ -28,12 +28,12 @@ A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + Pos
 
 - Articles can be restricted to one or more **groups**; unrestricted articles are visible to all authenticated users
 - Admins always bypass group restrictions
-- SAML group attributes can be **automatically synced** to Lexikon groups on every login
+- SAML group attributes can be **automatically synced** to Memex groups on every login
 
 ### Single Sign-On
 - **SAML 2.0** and **OIDC / OAuth2** — multiple providers can be active simultaneously
 - **Just-in-time provisioning** — accounts are created automatically on first SSO login
-- **SAML group mapping** — map IdP attribute values (e.g. `memberOf`) to Lexikon groups; memberships are reconciled on every login
+- **SAML group mapping** — map IdP attribute values (e.g. `memberOf`) to Memex groups; memberships are reconciled on every login
 - **SP metadata endpoint** — `/api/auth/saml/:id/metadata` returns standard XML for one-click IdP import
 - Local password login always remains available as a fallback
 
@@ -83,8 +83,8 @@ A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + Pos
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-org>/lexikon.git
-cd lexikon
+git clone https://github.com/<your-org>/memex.git
+cd memex
 
 # 2. Create your environment file
 cp .env.example .env
@@ -125,14 +125,14 @@ After logging in, remove the `RUN_SEED` / `SEED_ADMIN_*` lines from `.env` and r
 
 - **`db`** — PostgreSQL 16 with a persistent named volume (`pgdata`)
 - **`migrate`** — runs `drizzle-kit push` against the database and exits; `app` waits for it to succeed before starting
-- **`app`** — the compiled Lexikon bundle (API + static frontend) listening on port 3000
+- **`app`** — the compiled Memex bundle (API + static frontend) listening on port 3000
 
 ### Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `SESSION_SECRET` | Yes | — | Long random string for signing session cookies |
-| `POSTGRES_PASSWORD` | Yes | `changeme` | Password for the `lexikon` Postgres user |
+| `POSTGRES_PASSWORD` | Yes | `changeme` | Password for the `memex` Postgres user |
 | `DATABASE_URL` | No | derived | Full connection string — override if using an external DB |
 | `PORT` | No | `3000` | Host port mapped to the container |
 | `CORS_ORIGIN` | No | — | Comma-separated allowed CORS origins (e.g. `https://wiki.example.com`) |
@@ -148,13 +148,13 @@ Full reference: [`.env.example`](.env.example)
 Release images are published to GitHub Container Registry on every `v*.*.*` tag:
 
 ```bash
-docker pull ghcr.io/<your-org>/lexikon:latest
+docker pull ghcr.io/<your-org>/memex:latest
 ```
 
 To use a pre-built image, replace `build: .` in `docker-compose.yml` with:
 
 ```yaml
-image: ghcr.io/<your-org>/lexikon:latest
+image: ghcr.io/<your-org>/memex:latest
 ```
 
 ### Running migrations manually
@@ -168,7 +168,7 @@ docker compose run --rm migrate \
 
 ### Reverse proxy
 
-Lexikon serves both the API and the static frontend from a single port. A minimal nginx config:
+Memex serves both the API and the static frontend from a single port. A minimal nginx config:
 
 ```nginx
 server {
@@ -207,12 +207,12 @@ SSO providers are managed in **Admin → SSO / Identity**. Local password login 
 
 **Group attribute mapping**
 
-If your IdP sends group membership in a SAML attribute (e.g. `memberOf`, `groups`), you can sync those to Lexikon groups automatically:
+If your IdP sends group membership in a SAML attribute (e.g. `memberOf`, `groups`), you can sync those to Memex groups automatically:
 
 1. Open the SAML provider for editing
 2. In **Group Attribute Mapping**, enter the attribute name your IdP uses (e.g. `memberOf`)
-3. Add one row per value: left column is the exact SAML attribute value, right column is the Lexikon group to map it to
-4. Save — on every subsequent login, Lexikon will add and remove the user from the mapped groups to match what the IdP asserts. Groups not referenced in the mapping are never touched.
+3. Add one row per value: left column is the exact SAML attribute value, right column is the Memex group to map it to
+4. Save — on every subsequent login, Memex will add and remove the user from the mapped groups to match what the IdP asserts. Groups not referenced in the mapping are never touched.
 
 **Common IdP-specific notes**
 
@@ -227,7 +227,7 @@ If your IdP sends group membership in a SAML attribute (e.g. `memberOf`, `groups
 
 1. Go to **Admin → SSO / Identity → Add Provider** and choose **OIDC / OAuth2**
 2. Fill in:
-   - **Issuer / Discovery URL** — the base OIDC issuer URL (Lexikon appends `/.well-known/openid-configuration` to discover endpoints). Examples:
+   - **Issuer / Discovery URL** — the base OIDC issuer URL (Memex appends `/.well-known/openid-configuration` to discover endpoints). Examples:
      - Google: `https://accounts.google.com`
      - Azure AD: `https://login.microsoftonline.com/<tenant-id>/v2.0`
      - Keycloak: `https://keycloak.example.com/realms/<realm>`
@@ -328,7 +328,7 @@ curl -s -X POST "$BASE/api/articles" \
   -d '{
     "title": "Getting Started",
     "slug": "getting-started",
-    "content": "<p>Welcome to Lexikon!</p>"
+    "content": "<p>Welcome to Memex!</p>"
   }'
 ```
 
@@ -338,7 +338,7 @@ curl -s -X POST "$BASE/api/articles" \
 curl -s -O -J \
   -H "Authorization: Bearer $TOKEN" \
   "$BASE/api/admin/export"
-# saves lexikon-export-<date>.zip in the current directory
+# saves memex-export-<date>.zip in the current directory
 ```
 
 ---

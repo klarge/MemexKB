@@ -46,7 +46,7 @@ interface SsoConfig {
   updatedAt: string;
 }
 
-interface LexikonGroup {
+interface MemexGroup {
   id: number;
   name: string;
 }
@@ -92,7 +92,7 @@ function SsoFormFields({
   values: Record<string, string>;
   onChange: (key: string, val: string) => void;
   isEdit: boolean;
-  groups: LexikonGroup[];
+  groups: MemexGroup[];
   groupMappingRows: MappingRow[];
   onAddGroupRow: () => void;
   onUpdateGroupRow: (i: number, key: keyof MappingRow, val: string) => void;
@@ -140,7 +140,7 @@ function SsoFormFields({
           <div>
             <p className="text-sm font-medium">Group Attribute Mapping</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Map SAML attribute values to Lexikon groups. Memberships are synced on every login — added when asserted, removed when not.
+              Map SAML attribute values to Memex groups. Memberships are synced on every login — added when asserted, removed when not.
             </p>
           </div>
 
@@ -152,7 +152,7 @@ function SsoFormFields({
             <div className="space-y-2">
               <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-xs font-medium text-muted-foreground px-0.5">
                 <span>SAML attribute value</span>
-                <span>Lexikon group</span>
+                <span>Memex group</span>
                 <span />
               </div>
               {groupMappingRows.map((row, i) => (
@@ -238,7 +238,7 @@ export default function AdminSso() {
     queryFn: () => fetch("/api/admin/sso", { credentials: "include" }).then((r) => r.json()),
   });
 
-  const { data: groups = [] } = useQuery<LexikonGroup[]>({
+  const { data: groups = [] } = useQuery<MemexGroup[]>({
     queryKey: ["groups"],
     queryFn: () => fetch("/api/groups", { credentials: "include" }).then((r) => r.json()),
   });

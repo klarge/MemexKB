@@ -10,7 +10,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = "lexikon-theme";
+const STORAGE_KEY = "memex-theme";
 
 function getInitialTheme(): Theme {
   try {

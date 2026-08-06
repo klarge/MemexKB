@@ -1,4 +1,4 @@
-# Lexikon
+# Memex
 
 A self-hostable wiki-style knowledge base with a React frontend and Express backend.
 
@@ -13,7 +13,7 @@ A self-hostable wiki-style knowledge base with a React frontend and Express back
 
 ## Self-Hosting with Docker
 
-Lexikon ships as a single Docker image that bundles both the API server and the
+Memex ships as a single Docker image that bundles both the API server and the
 pre-built frontend SPA.  No Node.js or pnpm required on the host.
 
 ### Prerequisites
@@ -26,7 +26,7 @@ pre-built frontend SPA.  No Node.js or pnpm required on the host.
 ```bash
 # 1. Clone the repository
 git clone https://github.com/<your-org>/lexikon.git
-cd lexikon
+cd memex
 
 # 2. Create your environment file
 cp .env.example .env
@@ -50,7 +50,7 @@ variables are:
 | Variable | Description |
 |---|---|
 | `SESSION_SECRET` | Long random string for signing session cookies |
-| `POSTGRES_PASSWORD` | Password for the `lexikon` Postgres user |
+| `POSTGRES_PASSWORD` | Password for the `memex` Postgres user |
 | `DATABASE_URL` | Postgres connection string (auto-set by compose) |
 
 ### Schema migrations
@@ -70,11 +70,11 @@ docker compose run --rm migrate \
 Release images are published to GitHub Container Registry on every `v*.*.*` tag:
 
 ```bash
-docker pull ghcr.io/<your-org>/lexikon:latest
+docker pull ghcr.io/<your-org>/memex:latest
 ```
 
 To use a pre-built image instead of building locally, replace `build: .` with
-`image: ghcr.io/<your-org>/lexikon:<tag>` in `docker-compose.yml`.
+`image: ghcr.io/<your-org>/memex:<tag>` in `docker-compose.yml`.
 
 ## Stack
 

@@ -52,7 +52,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const { data: siteSettings } = useSiteSettings();
   const { theme, setTheme } = useTheme();
 
-  const siteName = siteSettings?.siteName ?? "Lexikon";
+  const siteName = siteSettings?.siteName ?? "Memex";
   const hasLogo = siteSettings?.hasLogo ?? false;
 
   const handleLogout = () => {

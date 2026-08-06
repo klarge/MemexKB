@@ -39,7 +39,7 @@ router.get("/settings", async (_req, res) => {
     .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
-    siteName: map.get("site_name") ?? "Lexikon",
+    siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
   });
 });
@@ -71,7 +71,7 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
     .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
-    siteName: map.get("site_name") ?? "Lexikon",
+    siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
   });
 });

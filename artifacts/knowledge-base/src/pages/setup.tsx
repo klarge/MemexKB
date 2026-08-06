@@ -77,7 +77,7 @@ export default function Setup() {
           <div className="mx-auto h-12 w-12 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl mb-2">
             L
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Welcome to Lexikon</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Welcome to Memex</CardTitle>
           <CardDescription className="text-sm leading-relaxed">
             Create your administrator account to get started.<br />
             You'll be able to invite other users once you're in.

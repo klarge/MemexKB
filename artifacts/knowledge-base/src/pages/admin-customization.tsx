@@ -18,7 +18,7 @@ export default function AdminCustomization() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayName = siteName !== "" ? siteName : (settings?.siteName ?? "Lexikon");
+  const displayName = siteName !== "" ? siteName : (settings?.siteName ?? "Memex");
 
   const saveNameMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -118,9 +118,9 @@ export default function AdminCustomization() {
               <Label htmlFor="site-name">Name</Label>
               <Input
                 id="site-name"
-                value={siteName !== "" ? siteName : (settings?.siteName ?? "Lexikon")}
+                value={siteName !== "" ? siteName : (settings?.siteName ?? "Memex")}
                 onChange={(e) => setSiteName(e.target.value)}
-                placeholder="Lexikon"
+                placeholder="Memex"
                 maxLength={100}
               />
             </div>

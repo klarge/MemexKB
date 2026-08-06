@@ -65,7 +65,7 @@ async function syncSamlGroups(
   samlValues: string[],
   groupMappings: Record<string, string>,
 ) {
-  // Resolve which Lexikon group IDs the user should be in
+  // Resolve which Memex group IDs the user should be in
   const targetIds = new Set<number>();
   for (const val of samlValues) {
     const raw = groupMappings[val];

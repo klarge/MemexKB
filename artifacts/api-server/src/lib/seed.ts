@@ -67,7 +67,7 @@ export async function runSeed(): Promise<void> {
         slug: "home",
         title: "Home",
         content:
-          "<h2>Welcome to Lexikon</h2><p>Lexikon is a self-hostable wiki-style knowledge base. Create, organize, and share articles with your team.</p><p>Use the editor to write rich articles with images and <strong>wikilinks</strong> to connect related content.</p>",
+          "<h2>Welcome to Memex</h2><p>Memex is a self-hostable wiki-style knowledge base. Create, organize, and share articles with your team.</p><p>Use the editor to write rich articles with images and <strong>wikilinks</strong> to connect related content.</p>",
       },
       {
         slug: "getting-started",
