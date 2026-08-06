@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   Book,
+  Tag,
   Home,
   Settings,
   Users,
@@ -209,6 +210,17 @@ export function MainLayout({ children }: { children: ReactNode }) {
                         <Link href="/admin/customization">
                           <Paintbrush className="mr-2 h-4 w-4" />
                           <span>Customization</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location === "/admin/tags"}
+                      >
+                        <Link href="/admin/tags">
+                          <Tag className="mr-2 h-4 w-4" />
+                          <span>Tags</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

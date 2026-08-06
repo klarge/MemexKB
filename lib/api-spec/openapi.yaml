@@ -19,6 +19,8 @@ tags:
     description: Group and membership management (admin only)
   - name: admin
     description: Admin-only bulk operations
+  - name: tags
+    description: Tag management
 paths:
   /healthz:
     get:
@@ -241,6 +243,11 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: tagId
+          in: query
+          schema:
+            type: integer
+          description: Filter articles by tag ID
       responses:
         "200":
           description: Article list
@@ -518,6 +525,99 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImageUploadResponse"
+
+  # ─── Tags ───────────────────────────────────────────────────────────────────
+  /tags:
+    get:
+      operationId: listTags
+      tags: [tags]
+      summary: List all tags (any authenticated user)
+      responses:
+        "200":
+          description: Tag list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+    post:
+      operationId: createTag
+      tags: [tags]
+      summary: Create a new tag (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagInput"
+      responses:
+        "201":
+          description: Created tag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "409":
+          description: Tag name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tags/{id}:
+    patch:
+      operationId: updateTag
+      tags: [tags]
+      summary: Update a tag (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagUpdate"
+      responses:
+        "200":
+          description: Updated tag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "404":
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteTag
+      tags: [tags]
+      summary: Delete a tag (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "404":
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Users ──────────────────────────────────────────────────────────────────
   /users:
@@ -827,6 +927,42 @@ paths:
 
 components:
   schemas:
+    # ─── Tags ──────────────────────────────────────────────────────────────────
+    Tag:
+      type: object
+      required: [id, name, color, createdAt, articleCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        articleCount:
+          type: integer
+
+    TagInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+
+    TagUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+
     # ─── Shared ────────────────────────────────────────────────────────────────
     HealthStatus:
       type: object
@@ -916,6 +1052,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GroupSummary"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
 
     Article:
       type: object
@@ -950,6 +1090,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ArticleSummary"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
 
     ArticleListResponse:
       type: object
@@ -976,6 +1120,10 @@ components:
           type: array
           items:
             type: integer
+        tagIds:
+          type: array
+          items:
+            type: integer
 
     ArticleUpdate:
       type: object
@@ -986,6 +1134,10 @@ components:
         content:
           type: string
         groupIds:
+          type: array
+          items:
+            type: integer
+        tagIds:
           type: array
           items:
             type: integer
@@ -1256,4 +1408,4 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: API token — pass as `Authorization: Bearer <token>`
+      description: "API token — pass as Authorization: Bearer <token>"

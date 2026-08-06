@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GroupSummary } from './groupSummary';
+import type { Tag } from './tag';
 
 export interface ArticleSummary {
   id: number;
@@ -20,4 +21,5 @@ export interface ArticleSummary {
   /** True when the current user can view the content */
   canAccess?: boolean;
   groups?: GroupSummary[];
+  tags?: Tag[];
 }

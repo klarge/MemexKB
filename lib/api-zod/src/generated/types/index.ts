@@ -8,6 +8,9 @@
 
 export * from './adminImportInput';
 export * from './adminImportResponse';
+export * from './apiToken';
+export * from './apiTokenCreated';
+export * from './apiTokenInput';
 export * from './article';
 export * from './articleGroupsInput';
 export * from './articleInput';
@@ -34,6 +37,9 @@ export * from './listArticlesParams';
 export * from './listArticlesSort';
 export * from './loginInput';
 export * from './messageResponse';
+export * from './tag';
+export * from './tagInput';
+export * from './tagUpdate';
 export * from './user';
 export * from './userInput';
 export * from './userInputRole';

@@ -24,6 +24,7 @@ import Templates from "@/pages/templates";
 import TemplateEdit from "@/pages/template-edit";
 import AdminSso from "@/pages/admin-sso";
 import AdminCustomization from "@/pages/admin-customization";
+import AdminTags from "@/pages/admin-tags";
 
 const queryClient = new QueryClient();
 
@@ -165,6 +166,12 @@ function Router() {
       <Route path="/admin/customization">
         <AuthRoute adminOnly>
           <AdminCustomization />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/admin/tags">
+        <AuthRoute adminOnly>
+          <AdminTags />
         </AuthRoute>
       </Route>
 

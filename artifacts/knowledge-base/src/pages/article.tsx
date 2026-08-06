@@ -340,6 +340,27 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
             </CardContent>
           </Card>
         )}
+
+        {article.tags && article.tags.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Tags</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {article.tags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="rounded-full px-3 py-1 text-xs font-medium text-white"
+                    style={{ backgroundColor: tag.color }}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
 

@@ -5,6 +5,26 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  createdAt: string;
+  articleCount: number;
+}
+
+export interface TagInput {
+  /** @minLength 1 */
+  name: string;
+  color?: string;
+}
+
+export interface TagUpdate {
+  /** @minLength 1 */
+  name?: string;
+  color?: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -64,6 +84,7 @@ export interface ArticleSummary {
   /** True when the current user can view the content */
   canAccess?: boolean;
   groups?: GroupSummary[];
+  tags?: Tag[];
 }
 
 export interface Article {
@@ -80,6 +101,7 @@ export interface Article {
   canAccess: boolean;
   groups: GroupSummary[];
   backlinks?: ArticleSummary[];
+  tags?: Tag[];
 }
 
 export interface ArticleListResponse {
@@ -93,6 +115,7 @@ export interface ArticleInput {
   /** HTML content */
   content: string;
   groupIds?: number[];
+  tagIds?: number[];
 }
 
 export interface ArticleUpdate {
@@ -100,6 +123,7 @@ export interface ArticleUpdate {
   title?: string;
   content?: string;
   groupIds?: number[];
+  tagIds?: number[];
 }
 
 export interface ArticleGroupsInput {
@@ -116,8 +140,8 @@ export interface ArticleStats {
 }
 
 export interface ImageUploadInput {
-  /** Uploaded file name (multipart/form-data handled by server middleware) */
-  filename: string;
+  /** Image file to upload (field name "file" in multipart/form-data) */
+  file: Blob;
 }
 
 export interface ImageUploadResponse {
@@ -213,8 +237,11 @@ export interface GroupMemberInput {
 }
 
 export interface AdminImportInput {
-  /** Uploaded zip file name (multipart/form-data handled by server middleware) */
-  filename: string;
+  /** A ZIP archive or single .md file (field name "file" in multipart/form-data) */
+  file?: Blob;
+  /** Multiple .md files for folder import (field name "files" in multipart/form-data) */
+  files?: Blob[];
+  /** When true, overwrite existing articles with the same slug */
   overwrite?: boolean;
 }
 
@@ -222,6 +249,37 @@ export interface AdminImportResponse {
   imported: number;
   skipped: number;
   errors: string[];
+}
+
+export interface ApiToken {
+  id: number;
+  name: string;
+  /** @nullable */
+  lastUsedAt?: string | null;
+  /** @nullable */
+  expiresAt?: string | null;
+  createdAt: string;
+}
+
+export interface ApiTokenInput {
+  /**
+     * Human-readable label for this token
+     * @minLength 1
+     */
+  name: string;
+  /** Optional expiry date-time (ISO 8601) */
+  expiresAt?: string;
+}
+
+export interface ApiTokenCreated {
+  id: number;
+  name: string;
+  /** The raw token value — save it now, it will not be shown again */
+  token: string;
+  message: string;
+  createdAt: string;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
 export type ListArticlesParams = {
@@ -233,6 +291,10 @@ sort?: ListArticlesSort;
 order?: ListArticlesOrder;
 limit?: number;
 offset?: number;
+/**
+ * Filter articles by tag ID
+ */
+tagId?: number;
 };
 
 export type ListArticlesSort = typeof ListArticlesSort[keyof typeof ListArticlesSort];

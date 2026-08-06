@@ -65,6 +65,31 @@ export const articleVersionsTable = pgTable("article_versions", {
 
 export type ArticleVersion = typeof articleVersionsTable.$inferSelect;
 
+// ─── Tags ─────────────────────────────────────────────────────────────────────
+
+export const tagsTable = pgTable("tags", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  color: text("color").notNull().default("#6366f1"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const articleTagsTable = pgTable(
+  "article_tags",
+  {
+    articleId: integer("article_id")
+      .notNull()
+      .references(() => articlesTable.id, { onDelete: "cascade" }),
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tagsTable.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.articleId, t.tagId] })],
+);
+
+export type Tag = typeof tagsTable.$inferSelect;
+export type ArticleTag = typeof articleTagsTable.$inferSelect;
+
 export const insertArticleSchema = createInsertSchema(articlesTable).omit({
   id: true,
   createdAt: true,

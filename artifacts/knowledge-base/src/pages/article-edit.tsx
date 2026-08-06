@@ -8,6 +8,8 @@ import {
   useUpdateArticle,
   useListGroups,
   useListArticles,
+  useListTags,
+  getListTagsQueryKey,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -80,6 +82,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   const [title, setTitle] = useState(prefillTitle);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+  const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
   const { data: templates = [] } = useQuery<{ id: number; name: string; content: string }[]>({
@@ -88,6 +91,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   });
 
   const { data: groupsData } = useListGroups();
+  const { data: tagsData } = useListTags({ query: { queryKey: getListTagsQueryKey() } });
   const { data: articlesData } = useListArticles({ limit: 500 });
 
   const { data: article, isLoading: isLoadingArticle } = useGetArticle(slug as string, {
@@ -224,6 +228,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     if (article && !isNew) {
       setTitle(article.title);
       setSelectedGroups(article.groups?.map((g) => g.id) || []);
+      setSelectedTags(article.tags?.map((t) => t.id) || []);
       if (editor && editor.getHTML() !== article.content) {
         editor.commands.setContent(article.content);
       }
@@ -239,7 +244,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
     if (isNew) {
       createMutation.mutate(
-        { data: { title, content, groupIds: selectedGroups } },
+        { data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
             toast({ title: "Article created" });
@@ -252,7 +257,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       );
     } else if (slug) {
       updateMutation.mutate(
-        { slug, data: { title, content, groupIds: selectedGroups } },
+        { slug, data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
@@ -431,6 +436,35 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         <div className="w-full lg:w-72 shrink-0 space-y-6">
           <Card>
             <CardContent className="p-4 space-y-4">
+              {tagsData && tagsData.length > 0 && (
+                <div>
+                  <Label className="mb-2 block">Tags</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {tagsData.map((tag) => {
+                      const selected = selectedTags.includes(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedTags((prev) =>
+                              selected ? prev.filter((id) => id !== tag.id) : [...prev, tag.id],
+                            )
+                          }
+                          className="rounded-full px-3 py-1 text-xs font-medium border transition-all"
+                          style={
+                            selected
+                              ? { backgroundColor: tag.color, color: "#fff", borderColor: tag.color }
+                              : { backgroundColor: "transparent", color: tag.color, borderColor: tag.color }
+                          }
+                        >
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <Label className="mb-2 block">Access Control</Label>
                 <p className="text-xs text-muted-foreground mb-3">

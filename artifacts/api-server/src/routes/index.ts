@@ -12,6 +12,7 @@ import ssoAdminRouter from "./sso-admin";
 import ssoAuthRouter from "./sso-auth";
 import devScreenshotRouter from "./dev-screenshot";
 import settingsRouter from "./settings";
+import tagsRouter from "./tags";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,7 @@ router.use(ssoAuthRouter);
 router.use(ssoAdminRouter);
 router.use(tokensRouter);
 router.use(articlesRouter);
+router.use(tagsRouter);
 router.use(usersRouter);
 router.use(groupsRouter);
 router.use(adminRouter);

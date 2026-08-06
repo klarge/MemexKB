@@ -12,4 +12,5 @@ export interface ArticleInput {
   /** HTML content */
   content: string;
   groupIds?: number[];
+  tagIds?: number[];
 }

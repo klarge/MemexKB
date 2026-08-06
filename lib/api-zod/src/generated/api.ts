@@ -70,6 +70,43 @@ export const ChangePasswordResponse = zod.object({
 
 
 /**
+ * @summary List API tokens for the current user
+ */
+export const ListApiTokensResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "lastUsedAt": zod.coerce.date().nullish(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListApiTokensResponse = zod.array(ListApiTokensResponseItem)
+
+
+/**
+ * @summary Create a new API token
+ */
+
+
+
+export const CreateApiTokenBody = zod.object({
+  "name": zod.string().min(1).describe('Human-readable label for this token'),
+  "expiresAt": zod.coerce.date().optional().describe('Optional expiry date-time (ISO 8601)')
+})
+
+
+/**
+ * @summary Revoke an API token
+ */
+export const RevokeApiTokenParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RevokeApiTokenResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List all articles (titles only for access-restricted ones)
  */
 export const listArticlesQuerySortDefault = `title`;
@@ -82,7 +119,8 @@ export const ListArticlesQueryParams = zod.object({
   "sort": zod.enum(['title', 'updated_at', 'created_at']).default(listArticlesQuerySortDefault),
   "order": zod.enum(['asc', 'desc']).default(listArticlesQueryOrderDefault),
   "limit": zod.coerce.number().default(listArticlesQueryLimitDefault),
-  "offset": zod.coerce.number().default(listArticlesQueryOffsetDefault)
+  "offset": zod.coerce.number().default(listArticlesQueryOffsetDefault),
+  "tagId": zod.coerce.number().optional().describe('Filter articles by tag ID')
 })
 
 export const ListArticlesResponse = zod.object({
@@ -99,6 +137,13 @@ export const ListArticlesResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })),
   "total": zod.number()
@@ -114,7 +159,8 @@ export const ListArticlesResponse = zod.object({
 export const CreateArticleBody = zod.object({
   "title": zod.string().min(1),
   "content": zod.string().describe('HTML content'),
-  "groupIds": zod.array(zod.number()).optional()
+  "groupIds": zod.array(zod.number()).optional(),
+  "tagIds": zod.array(zod.number()).optional()
 })
 
 
@@ -143,6 +189,13 @@ export const ListArticlesMaintenanceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })),
   "total": zod.number()
@@ -170,6 +223,13 @@ export const GetArticleStatsResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })),
   "oldestUpdated": zod.array(zod.object({
@@ -185,6 +245,13 @@ export const GetArticleStatsResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })).optional()
 })
@@ -225,7 +292,21 @@ export const GetArticleResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })
 
@@ -243,7 +324,8 @@ export const UpdateArticleParams = zod.object({
 export const UpdateArticleBody = zod.object({
   "title": zod.string().min(1).optional(),
   "content": zod.string().optional(),
-  "groupIds": zod.array(zod.number()).optional()
+  "groupIds": zod.array(zod.number()).optional(),
+  "tagIds": zod.array(zod.number()).optional()
 })
 
 export const UpdateArticleResponse = zod.object({
@@ -274,7 +356,21 @@ export const UpdateArticleResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })
 
@@ -311,6 +407,13 @@ export const GetArticleBacklinksResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })
 export const GetArticleBacklinksResponse = zod.array(GetArticleBacklinksResponseItem)
@@ -371,7 +474,21 @@ export const SetArticleGroupsResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })
 
@@ -380,7 +497,68 @@ export const SetArticleGroupsResponse = zod.object({
  * @summary Upload an image for use in an article
  */
 export const UploadArticleImageBody = zod.object({
-  "filename": zod.string().describe('Uploaded file name (multipart\/form-data handled by server middleware)')
+  "file": zod.instanceof(File).describe('Image file to upload (field name \"file\" in multipart\/form-data)')
+})
+
+
+/**
+ * @summary List all tags (any authenticated user)
+ */
+export const ListTagsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})
+export const ListTagsResponse = zod.array(ListTagsResponseItem)
+
+
+/**
+ * @summary Create a new tag (admin only)
+ */
+
+
+
+export const CreateTagBody = zod.object({
+  "name": zod.string().min(1),
+  "color": zod.string().optional()
+})
+
+
+/**
+ * @summary Update a tag (admin only)
+ */
+export const UpdateTagParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateTagBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "color": zod.string().optional()
+})
+
+export const UpdateTagResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})
+
+
+/**
+ * @summary Delete a tag (admin only)
+ */
+export const DeleteTagParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteTagResponse = zod.object({
+  "message": zod.string()
 })
 
 
@@ -624,8 +802,9 @@ export const RemoveGroupMemberResponse = zod.object({
 export const adminImportAllBodyOverwriteDefault = false;
 
 export const AdminImportAllBody = zod.object({
-  "filename": zod.string().describe('Uploaded zip file name (multipart\/form-data handled by server middleware)'),
-  "overwrite": zod.boolean().default(adminImportAllBodyOverwriteDefault)
+  "file": zod.instanceof(File).optional().describe('A ZIP archive or single .md file (field name \"file\" in multipart\/form-data)'),
+  "files": zod.array(zod.instanceof(File)).optional().describe('Multiple .md files for folder import (field name \"files\" in multipart\/form-data)'),
+  "overwrite": zod.boolean().default(adminImportAllBodyOverwriteDefault).describe('When true, overwrite existing articles with the same slug')
 })
 
 export const AdminImportAllResponse = zod.object({

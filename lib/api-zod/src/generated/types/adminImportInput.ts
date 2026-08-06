@@ -7,7 +7,10 @@
  */
 
 export interface AdminImportInput {
-  /** Uploaded zip file name (multipart/form-data handled by server middleware) */
-  filename: string;
+  /** A ZIP archive or single .md file (field name "file" in multipart/form-data) */
+  file?: Blob;
+  /** Multiple .md files for folder import (field name "files" in multipart/form-data) */
+  files?: Blob[];
+  /** When true, overwrite existing articles with the same slug */
   overwrite?: boolean;
 }

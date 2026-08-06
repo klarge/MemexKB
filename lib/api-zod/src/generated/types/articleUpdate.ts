@@ -11,4 +11,5 @@ export interface ArticleUpdate {
   title?: string;
   content?: string;
   groupIds?: number[];
+  tagIds?: number[];
 }

@@ -7,6 +7,8 @@ import {
   articleLinksTable,
   articleImagesTable,
   articleVersionsTable,
+  articleTagsTable,
+  tagsTable,
   groupMembersTable,
   groupsTable,
   usersTable,
@@ -92,6 +94,20 @@ async function getArticleGroups(articleId: number) {
   return groups.map((g) => ({ id: g.id, name: g.name, description: g.description }));
 }
 
+async function getArticleTags(articleId: number) {
+  const at = await db.select().from(articleTagsTable).where(eq(articleTagsTable.articleId, articleId));
+  if (at.length === 0) return [];
+  const tags = await db.select().from(tagsTable).where(inArray(tagsTable.id, at.map((x) => x.tagId)));
+  return tags.map((t) => ({ id: t.id, name: t.name, color: t.color, createdAt: t.createdAt, articleCount: 0 }));
+}
+
+async function setArticleTags(articleId: number, tagIds: number[]) {
+  await db.delete(articleTagsTable).where(eq(articleTagsTable.articleId, articleId));
+  if (tagIds.length > 0) {
+    await db.insert(articleTagsTable).values(tagIds.map((tid) => ({ articleId, tagId: tid }))).onConflictDoNothing();
+  }
+}
+
 async function getUserGroupIds(userId: number | undefined): Promise<number[]> {
   if (!userId) return [];
   const rows = await db.select({ groupId: groupMembersTable.groupId }).from(groupMembersTable).where(eq(groupMembersTable.userId, userId));
@@ -105,10 +121,26 @@ function canAccessArticle(articleGroupIds: number[], userGroupIds: number[], use
 }
 
 router.get("/articles", optionalAuth, async (req, res) => {
-  const { search, sort = "title", order = "asc", limit = 50, offset = 0 } = req.query;
+  const { search, sort = "title", order = "asc", limit = 50, offset = 0, tagId } = req.query;
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
+
+  const tagIdNum = tagId ? parseInt(String(tagId), 10) : null;
+
+  // When filtering by tag, fetch matching article IDs first
+  let tagFilterIds: number[] | null = null;
+  if (tagIdNum && !isNaN(tagIdNum)) {
+    const rows = await db
+      .select({ articleId: articleTagsTable.articleId })
+      .from(articleTagsTable)
+      .where(eq(articleTagsTable.tagId, tagIdNum));
+    tagFilterIds = rows.map((r) => r.articleId);
+    if (tagFilterIds.length === 0) {
+      res.json({ articles: [], total: 0 });
+      return;
+    }
+  }
 
   let query = db
     .select({
@@ -124,13 +156,20 @@ router.get("/articles", optionalAuth, async (req, res) => {
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .$dynamic();
 
+  const conditions = [];
   if (search && typeof search === "string") {
-    query = query.where(
+    conditions.push(
       or(
         ilike(articlesTable.title, `%${search}%`),
         ilike(articlesTable.content, `%${search}%`),
-      )
+      )!,
     );
+  }
+  if (tagFilterIds !== null) {
+    conditions.push(inArray(articlesTable.id, tagFilterIds));
+  }
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions));
   }
 
   const sortCol = sort === "updated_at" ? articlesTable.updatedAt : sort === "created_at" ? articlesTable.createdAt : articlesTable.title;
@@ -143,14 +182,13 @@ router.get("/articles", optionalAuth, async (req, res) => {
   const groupDetails = await db.select().from(groupsTable);
   const groupMap = new Map(groupDetails.map((g) => [g.id, g]));
 
+  const allArticleTags = await db.select().from(articleTagsTable);
+  const allTagDetails = await db.select().from(tagsTable);
+  const tagMap = new Map(allTagDetails.map((t) => [t.id, t]));
+
   let totalQuery = db.select({ count: count() }).from(articlesTable).$dynamic();
-  if (search && typeof search === "string") {
-    totalQuery = totalQuery.where(
-      or(
-        ilike(articlesTable.title, `%${search}%`),
-        ilike(articlesTable.content, `%${search}%`),
-      )
-    );
+  if (conditions.length > 0) {
+    totalQuery = totalQuery.where(and(...conditions));
   }
   const total = await totalQuery;
 
@@ -162,6 +200,11 @@ router.get("/articles", optionalAuth, async (req, res) => {
       .map((gid) => groupMap.get(gid))
       .filter(Boolean)
       .map((g) => ({ id: g!.id, name: g!.name, description: g!.description }));
+    const tags = allArticleTags
+      .filter((at) => at.articleId === a.id)
+      .map((at) => tagMap.get(at.tagId))
+      .filter(Boolean)
+      .map((t) => ({ id: t!.id, name: t!.name, color: t!.color, createdAt: t!.createdAt, articleCount: 0 }));
     return {
       id: a.id,
       slug: a.slug,
@@ -172,6 +215,7 @@ router.get("/articles", optionalAuth, async (req, res) => {
       isRestricted,
       canAccess,
       groups,
+      tags,
     };
   });
 
@@ -214,7 +258,7 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
 });
 
 router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req, res) => {
-  const { title, content, groupIds } = req.body;
+  const { title, content, groupIds, tagIds } = req.body;
   if (!title) {
     res.status(400).json({ error: "Title required" });
     return;
@@ -233,6 +277,10 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
 
   if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
     await db.insert(articleGroupsTable).values(groupIds.map((gid: number) => ({ articleId: article.id, groupId: gid })));
+  }
+
+  if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+    await db.insert(articleTagsTable).values(tagIds.map((tid: number) => ({ articleId: article.id, tagId: tid }))).onConflictDoNothing();
   }
 
   const wikilinks = extractWikilinks(content ?? "");
@@ -256,7 +304,8 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
   });
 
   const groups = await getArticleGroups(article.id);
-  res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, backlinks: [] });
+  const tags = await getArticleTags(article.id);
+  res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, tags, backlinks: [] });
 });
 
 router.get("/articles/:slug", optionalAuth, async (req, res) => {
@@ -282,8 +331,10 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   // Unauthenticated users cannot read article content regardless of group restrictions
   const canAccess = userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false;
 
+  const tags = await getArticleTags(article.id);
+
   if (!canAccess) {
-    res.json({ id: article.id, slug: article.slug, title: article.title, content: "", updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: false, groups, backlinks: [] });
+    res.json({ id: article.id, slug: article.slug, title: article.title, content: "", updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: false, groups, tags, backlinks: [] });
     return;
   }
 
@@ -291,7 +342,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     .select({ fromArticleId: articleLinksTable.fromArticleId })
     .from(articleLinksTable)
     .where(eq(articleLinksTable.toSlug, slug));
-  let backlinks: { id: number; slug: string; title: string; updatedAt: Date; createdAt: Date; updatedByName: string | null; isRestricted: boolean; canAccess: boolean; groups: { id: number; name: string; description: string | null }[] }[] = [];
+  let backlinks: { id: number; slug: string; title: string; updatedAt: Date; createdAt: Date; updatedByName: string | null; isRestricted: boolean; canAccess: boolean; groups: { id: number; name: string; description: string | null }[]; tags: { id: number; name: string; color: string; createdAt: Date; articleCount: number }[] }[] = [];
   if (backlinkRows.length > 0) {
     const fromIds = [...new Set(backlinkRows.map((b) => b.fromArticleId))];
     const fromArticles = await db.select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name }).from(articlesTable).leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id)).where(inArray(articlesTable.id, fromIds));
@@ -300,16 +351,17 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
       const bGroupIds = bGroups.map((g) => g.id);
       const bIsRestricted = bGroupIds.length > 0;
       const bCanAccess = canAccessArticle(bGroupIds, userGroupIds, userRole);
-      return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bCanAccess ? bGroups : [] };
+      const bTags = await getArticleTags(a.id);
+      return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bCanAccess ? bGroups : [], tags: bTags };
     }));
   }
 
-  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: true, groups, backlinks });
+  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: true, groups, tags, backlinks });
 });
 
 router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const slug = String(req.params.slug);
-  const { title, content, groupIds } = req.body;
+  const { title, content, groupIds, tagIds } = req.body;
   const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Article not found" });
@@ -325,6 +377,10 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
     if (groupIds.length > 0) {
       await db.insert(articleGroupsTable).values(groupIds.map((gid: number) => ({ articleId: article.id, groupId: gid })));
     }
+  }
+
+  if (tagIds !== undefined && Array.isArray(tagIds)) {
+    await setArticleTags(article.id, tagIds);
   }
 
   if (content !== undefined) {
@@ -356,7 +412,8 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
   });
 
   const groups = await getArticleGroups(article.id);
-  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, backlinks: [] });
+  const tags = await getArticleTags(article.id);
+  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, tags, backlinks: [] });
 });
 
 router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {

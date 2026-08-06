@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/memex-mobile/"
+title = "Memex Mobile"
+description = "A read-only offline-capable mobile companion for self-hosted Memex instances. Users enter their server URL, log in once, and the app syncs all articles locally so they can browse and search the entire knowledge base — even with no internet connection."
+version = "1.0.0"
+id = "artifacts/memex-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/memex-mobile/" ]
+localPort = 19181
+
+[services.development]
+run = "pnpm --filter @workspace/memex-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/memex-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/memex-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "19181"
+BASE_PATH = "/memex-mobile/"

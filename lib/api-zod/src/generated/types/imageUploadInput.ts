@@ -7,6 +7,6 @@
  */
 
 export interface ImageUploadInput {
-  /** Uploaded file name (multipart/form-data handled by server middleware) */
-  filename: string;
+  /** Image file to upload (field name "file" in multipart/form-data) */
+  file: Blob;
 }

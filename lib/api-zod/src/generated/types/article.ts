@@ -7,6 +7,7 @@
  */
 import type { ArticleSummary } from './articleSummary';
 import type { GroupSummary } from './groupSummary';
+import type { Tag } from './tag';
 
 export interface Article {
   id: number;
@@ -22,4 +23,5 @@ export interface Article {
   canAccess: boolean;
   groups: GroupSummary[];
   backlinks?: ArticleSummary[];
+  tags?: Tag[];
 }

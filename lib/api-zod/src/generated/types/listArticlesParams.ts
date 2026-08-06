@@ -17,4 +17,8 @@ sort?: ListArticlesSort;
 order?: ListArticlesOrder;
 limit?: number;
 offset?: number;
+/**
+ * Filter articles by tag ID
+ */
+tagId?: number;
 };
