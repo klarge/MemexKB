@@ -1,78 +1,38 @@
 # Memex
 
-A self-hostable, wiki-style knowledge base. React + Vite frontend, Express + PostgreSQL backend, packaged as a single Docker image.
-
----
+A self-hostable wiki-style knowledge base with a React frontend and Express backend.
 
 ## Features
 
-### Editing
-- **WYSIWYG editor** powered by TipTap — headings, bold/italic, lists, blockquotes, code blocks, tables (resizable), and image upload with drag-to-resize
-- **`[[Wikilinks]]`** with inline autocomplete for linking between articles
-- **InfoBox** sidebar panels for structured metadata inside articles
-- **Templates** — save reusable content layouts and insert them at the cursor
-
-### Content management
-- **Version history** — every save is snapshotted; browse and restore any previous version
-- **Backlinks** — each article shows which other articles link to it
-- **Bulk import** — upload a single `.md` file, a folder, or a full ZIP archive (Markdown + images + metadata)
-- **Bulk export** — download the entire knowledge base as a ZIP (Markdown files + images + metadata JSON)
-- **Single-article export** — download any article as Markdown or PDF
-
-### Access control
-| Role | Can do |
-|---|---|
-| `admin` | Everything — user/group/SSO management, import/export, all articles |
-| `editor` | Create and edit articles and templates |
-| `user` | Read articles they have been granted access to |
-
-- Articles can be restricted to one or more **groups**; unrestricted articles are visible to all authenticated users
-- Admins always bypass group restrictions
-- SAML group attributes can be **automatically synced** to Memex groups on every login
-
-### Single Sign-On
-- **SAML 2.0** and **OIDC / OAuth2** — multiple providers can be active simultaneously
-- **Just-in-time provisioning** — accounts are created automatically on first SSO login
-- **SAML group mapping** — map IdP attribute values (e.g. `memberOf`) to Memex groups; memberships are reconciled on every login
-- **SP metadata endpoint** — `/api/auth/saml/:id/metadata` returns standard XML for one-click IdP import
-- Local password login always remains available as a fallback
-
-### API
-- **REST API** with Swagger UI at `/api/docs`
-- **Bearer token auth** — generate tokens with optional expiry from your profile settings
-- All article CRUD, search, group management, user management, and admin operations are available over the API
+- **Articles** — rich-text editing (TipTap), wikilinks, backlinks, version history, PDF/Markdown export
+- **Tags** — colour-coded labels that can be applied to articles; admins create/manage tags, editors apply them; filterable in the article list
+- **Groups & access control** — restrict articles to specific groups; role-based access (admin / editor / viewer)
+- **Edit locking** — when a second editor opens an article that someone is already editing, they see a warning with the lock owner's name; locks expire after 2 minutes of inactivity
+- **API tokens** — long-lived bearer tokens for scripting and integrations (Settings → API Tokens)
+- **MCP server** — exposes the KB as tools for Claude Desktop, Cursor, and other MCP-compatible LLM clients
+- **Android companion app** — read-only Expo app that syncs all articles for offline use and full-text search
 
 ---
 
-## Screenshots
+## Run & Operate
 
-**Article list**
-![Article list](docs/screenshots/article-list.jpg)
+```bash
+pnpm --filter @workspace/api-server run dev       # API server (port from $PORT)
+pnpm --filter @workspace/knowledge-base run dev   # React SPA dev server
+pnpm --filter @workspace/mcp-server run dev       # MCP server (stdio, for local testing)
+pnpm run typecheck                                 # full typecheck across all packages
+pnpm run build                                     # typecheck + build all packages
+pnpm --filter @workspace/api-spec run codegen     # regenerate API hooks from OpenAPI spec
+pnpm --filter @workspace/db run push              # push DB schema changes (dev only)
+```
 
-**Reading an article** — with export, edit, and version history actions in the sidebar
-![Article view](docs/screenshots/article-view.jpg)
-
-**WYSIWYG editor** — TipTap toolbar, inline access control, and editor tips
-![Editor](docs/screenshots/editor.jpg)
-
-**Version history** — browse every saved snapshot and restore any version
-![Version history](docs/screenshots/version-history.jpg)
-
-**User management**
-![Users](docs/screenshots/admin-users.jpg)
-
-**Group management** — create groups, set descriptions, manage members
-![Groups](docs/screenshots/admin-groups.jpg)
-
-**SSO / Identity Providers** — configure SAML 2.0 or OIDC providers
-![SSO](docs/screenshots/admin-sso.jpg)
-
-**API Keys** — per-user bearer tokens with optional expiry
-![API Keys](docs/screenshots/api-tokens.jpg)
+Required env: `DATABASE_URL` (Postgres connection string), `SESSION_SECRET`
 
 ---
 
-## Self-hosting with Docker
+## Self-Hosting with Docker
+
+Memex ships as a single Docker image that bundles both the API server and the pre-built frontend SPA. No Node.js or pnpm required on the host.
 
 ### Prerequisites
 
@@ -88,281 +48,172 @@ cd memex
 
 # 2. Create your environment file
 cp .env.example .env
-```
+#    Edit .env — at minimum set SESSION_SECRET and POSTGRES_PASSWORD.
 
-Edit `.env` — at minimum you must set `SESSION_SECRET` and `POSTGRES_PASSWORD`:
-
-```bash
-# Generate a secure session secret
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-```
-
-```bash
-# 3. (First boot) create the initial admin account
-#    Add these to .env — they are safe to remove after the first start
-RUN_SEED=true
-SEED_ADMIN_EMAIL=admin@example.com
-SEED_ADMIN_PASSWORD=your-strong-password
-```
-
-```bash
-# 4. Start everything
+# 3. Start everything (Postgres + migration + app)
 docker compose up -d
 
-# 5. Open http://localhost:3000
+# 4. Open http://localhost:3000
 ```
 
-After logging in, remove the `RUN_SEED` / `SEED_ADMIN_*` lines from `.env` and run `docker compose up -d` again.
-
-### docker-compose.yml overview
-
-```
-┌─────────┐     ┌─────────┐     ┌─────┐
-│   db    │◄────│ migrate │◄────│ app │
-│postgres │     │ drizzle │     │     │
-└─────────┘     └─────────┘     └─────┘
-```
-
-- **`db`** — PostgreSQL 16 with a persistent named volume (`pgdata`)
-- **`migrate`** — runs `drizzle-kit push` against the database and exits; `app` waits for it to succeed before starting
-- **`app`** — the compiled Memex bundle (API + static frontend) listening on port 3000
+On first boot, set `RUN_SEED=true` in `.env` together with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` to create the initial admin account. Remove the seed variables after the first successful start.
 
 ### Environment variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `SESSION_SECRET` | Yes | — | Long random string for signing session cookies |
-| `POSTGRES_PASSWORD` | Yes | `changeme` | Password for the `memex` Postgres user |
-| `DATABASE_URL` | No | derived | Full connection string — override if using an external DB |
-| `PORT` | No | `3000` | Host port mapped to the container |
-| `CORS_ORIGIN` | No | — | Comma-separated allowed CORS origins (e.g. `https://wiki.example.com`) |
-| `APP_BASE_URL` | No | — | Public URL of the deployment — used in SSO callback/metadata URLs |
-| `RUN_SEED` | No | — | Set to `true` on first boot to create the initial admin account |
-| `SEED_ADMIN_EMAIL` | No | — | Email for the seeded admin account |
-| `SEED_ADMIN_PASSWORD` | No | — | Password for the seeded admin account |
+See `.env.example` for the full list. Minimum required:
 
-Full reference: [`.env.example`](.env.example)
+| Variable | Description |
+|---|---|
+| `SESSION_SECRET` | Long random string for signing session cookies |
+| `POSTGRES_PASSWORD` | Password for the `memex` Postgres user |
+| `DATABASE_URL` | Postgres connection string (auto-set by compose) |
 
-### Using pre-built images
+### Schema migrations
 
-Release images are published to GitHub Container Registry on every `v*.*.*` tag:
-
-```bash
-docker pull ghcr.io/<your-org>/memex:latest
-```
-
-To use a pre-built image, replace `build: .` in `docker-compose.yml` with:
-
-```yaml
-image: ghcr.io/<your-org>/memex:latest
-```
-
-### Running migrations manually
-
-`docker compose up` always runs migrations before starting the app. To run them in isolation (e.g. during a rolling upgrade):
+`docker compose up` automatically runs `drizzle-kit push` before starting the app. For upgrades with schema conflicts, run the migration manually:
 
 ```bash
 docker compose run --rm migrate \
   pnpm --filter @workspace/db run push
 ```
 
-### Reverse proxy
+### Published images
 
-Memex serves both the API and the static frontend from a single port. A minimal nginx config:
+```bash
+docker pull ghcr.io/<your-org>/memex:latest
+```
 
-```nginx
-server {
-    listen 443 ssl;
-    server_name wiki.example.com;
+---
 
-    location / {
-        proxy_pass         http://localhost:3000;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        client_max_body_size 50m;  # for image uploads
+## MCP Server
+
+The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compatible LLM clients. Any authenticated user with an API token can connect.
+
+**Available tools:**
+
+| Tool | Description |
+|------|-------------|
+| `search_articles` | Keyword search across titles and content |
+| `get_article` | Read the full body of an article by slug |
+| `list_articles` | Browse all articles with optional tag filtering and pagination |
+| `list_tags` | List all tags and their IDs |
+| `get_backlinks` | Find every article that links to a given one |
+
+**Setup (Claude Desktop):**
+
+1. Create an API token in Memex → Settings → API Tokens
+2. Build the server: `pnpm --filter @workspace/mcp-server build`
+3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "memex": {
+      "command": "node",
+      "args": ["/path/to/artifacts/mcp-server/dist/index.js"],
+      "env": {
+        "MEMEX_URL": "http://your-memex-host:3000",
+        "MEMEX_TOKEN": "your-api-token"
+      }
     }
+  }
 }
 ```
 
-Set `APP_BASE_URL=https://wiki.example.com` in `.env` so SSO callback and metadata URLs are generated with the correct public hostname.
+See `artifacts/mcp-server/README.md` for full setup instructions including Cursor support.
 
 ---
 
-## Configuring SSO
+## Android Companion App
 
-SSO providers are managed in **Admin → SSO / Identity**. Local password login is always available regardless of SSO configuration.
+`artifacts/memex-mobile` is a read-only Expo (React Native) app that connects to any self-hosted Memex instance.
 
-### SAML 2.0
+- Syncs all articles locally for full offline access and search
+- Tag filter chips, pull-to-refresh, dark mode
+- Enter your server URL and log in with your Memex credentials
 
-1. Go to **Admin → SSO / Identity → Add Provider** and choose **SAML 2.0**
-2. Fill in:
-   - **IdP SSO URL** — the `SingleSignOnService` URL from your IdP
-   - **SP Entity ID / Issuer** — defaults to your app's origin; must match what you register with the IdP
-   - **IdP Certificate (PEM)** — the X.509 signing certificate from your IdP
-3. Save the provider (it starts disabled)
-4. Copy the **metadata URL** from the provider card (labelled `MD`) and import it into your IdP — this auto-registers the ACS URL, Entity ID, and NameID format. Alternatively, register the **ACS URL** (labelled `ACS`) manually as the Assertion Consumer Service URL in your IdP
-5. Enable the toggle once the IdP is configured
-
-**Group attribute mapping**
-
-If your IdP sends group membership in a SAML attribute (e.g. `memberOf`, `groups`), you can sync those to Memex groups automatically:
-
-1. Open the SAML provider for editing
-2. In **Group Attribute Mapping**, enter the attribute name your IdP uses (e.g. `memberOf`)
-3. Add one row per value: left column is the exact SAML attribute value, right column is the Memex group to map it to
-4. Save — on every subsequent login, Memex will add and remove the user from the mapped groups to match what the IdP asserts. Groups not referenced in the mapping are never touched.
-
-**Common IdP-specific notes**
-
-| IdP | Attribute name | Notes |
-|---|---|---|
-| Azure AD / Entra | `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups` | Contains group object IDs by default; switch to group names in the token config if preferred |
-| Okta | `groups` | Add the Groups attribute in the SAML app's Attribute Statements |
-| Google Workspace | N/A | Google SAML does not send group attributes |
-| Keycloak | `groups` | Enable the "Group Membership" mapper in the client |
-
-### OIDC / OAuth2
-
-1. Go to **Admin → SSO / Identity → Add Provider** and choose **OIDC / OAuth2**
-2. Fill in:
-   - **Issuer / Discovery URL** — the base OIDC issuer URL (Memex appends `/.well-known/openid-configuration` to discover endpoints). Examples:
-     - Google: `https://accounts.google.com`
-     - Azure AD: `https://login.microsoftonline.com/<tenant-id>/v2.0`
-     - Keycloak: `https://keycloak.example.com/realms/<realm>`
-   - **Client ID** and **Client Secret** — from your IdP's application registration
-   - **Scopes** — space-separated; defaults to `openid email profile`
-3. Register the **callback URL** (shown on the provider card) as an allowed Redirect URI in your IdP
-4. Enable the toggle
+A GitHub Actions workflow (`.github/workflows/build-android.yml`) builds a debug APK on every push to `main`.
 
 ---
 
-## API
+## Tags
 
-The full interactive reference is available at `/api/docs` (Swagger UI) when the server is running.
+Tags are managed by admins (Settings → Tags) and can be applied to any article by editors. Each tag has a name and a colour. Articles can have multiple tags; the article list supports filtering by tag.
 
-### Authentication
+**API:**
+- `GET /api/tags` — list all tags
+- `POST /api/tags` — create a tag (admin only)
+- `PATCH /api/tags/:id` — rename or recolour a tag (admin only)
+- `DELETE /api/tags/:id` — delete a tag (admin only)
+- Tags are included on every article list and article detail response as `tags[]`
+- `GET /api/articles?tagId=N` — filter article list by tag
 
-**Session cookie** (browser) — log in via `POST /api/auth/login` and the server sets a `connect.sid` cookie automatically.
-
-**Bearer token** (scripts / integrations):
-
-1. Log in and go to your profile → **API Tokens → New Token**
-2. Copy the token (it is shown only once)
-3. Pass it in every request:
-
-```
-Authorization: Bearer <token>
-```
-
-Tokens can have an optional expiry date and can be revoked at any time from the profile page.
-
-### Key endpoints
-
-#### Articles
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/articles` | List all articles the caller can access |
-| `GET` | `/api/articles/:slug` | Get a single article by slug |
-| `POST` | `/api/articles` | Create an article (`editor` or `admin`) |
-| `PATCH` | `/api/articles/:slug` | Update an article |
-| `DELETE` | `/api/articles/:slug` | Delete an article (`admin`) |
-| `GET` | `/api/articles/:slug/versions` | List version history |
-| `GET` | `/api/articles/:slug/versions/:id` | Get a specific version |
-| `GET` | `/api/articles/:slug/backlinks` | Articles that link to this one |
-| `GET` | `/api/articles/:slug/export/markdown` | Download as Markdown |
-| `GET` | `/api/articles/:slug/export/pdf` | Download as PDF |
-
-#### Search
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/search?q=…` | Full-text search across all accessible articles |
-
-#### Groups
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/groups` | List all groups |
-| `POST` | `/api/groups` | Create a group (`admin`) |
-| `PATCH` | `/api/groups/:id` | Update a group (`admin`) |
-| `DELETE` | `/api/groups/:id` | Delete a group (`admin`) |
-| `GET` | `/api/groups/:id/members` | List group members |
-| `POST` | `/api/groups/:id/members` | Add a member (`admin`) |
-| `DELETE` | `/api/groups/:id/members/:userId` | Remove a member (`admin`) |
-
-#### Users
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/users` | List all users (`admin`) |
-| `PATCH` | `/api/users/:id` | Update a user's role or details (`admin`) |
-| `DELETE` | `/api/users/:id` | Delete a user (`admin`) |
-
-#### Import / Export (admin only)
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/admin/export` | Download full knowledge base as ZIP |
-| `POST` | `/api/admin/import` | Upload a `.md` file or ZIP archive |
-
-#### API tokens
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/tokens` | List your tokens (metadata only) |
-| `POST` | `/api/tokens` | Create a new token |
-| `DELETE` | `/api/tokens/:id` | Revoke a token |
-
-### Example: create an article with curl
-
-```bash
-TOKEN="your-api-token"
-BASE="https://wiki.example.com"
-
-curl -s -X POST "$BASE/api/articles" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Getting Started",
-    "slug": "getting-started",
-    "content": "<p>Welcome to Memex!</p>"
-  }'
-```
-
-### Example: export the full knowledge base
-
-```bash
-curl -s -O -J \
-  -H "Authorization: Bearer $TOKEN" \
-  "$BASE/api/admin/export"
-# saves memex-export-<date>.zip in the current directory
-```
+**Export/import:** Tags are included when exporting and re-applied when importing the knowledge base.
 
 ---
 
-## Development
+## Edit Locking
 
-```bash
-# Install dependencies
-pnpm install
+When an editor opens an article for editing, Memex acquires a 2-minute TTL lock on that article. If a second editor opens the same article while the lock is active, they see an inline warning showing who holds the lock and when they started editing. The editor holding the lock refreshes it automatically every 90 seconds while the editor is open; it expires naturally after 2 minutes of inactivity.
 
-# Push the DB schema (requires DATABASE_URL)
-pnpm --filter @workspace/db run push
-
-# Start the API server  (default port 8080)
-pnpm --filter @workspace/api-server run dev
-
-# Start the frontend   (default port 5173)
-pnpm --filter @workspace/knowledge-base run dev
-```
-
-See [`replit.md`](replit.md) for full stack details, architecture decisions, and a guide to where things live.
+**API:**
+- `GET /api/articles/:slug/lock` — check current lock state
+- `PUT /api/articles/:slug/lock` — acquire or refresh a lock (returns 409 if locked by someone else)
+- `DELETE /api/articles/:slug/lock` — release a lock
 
 ---
 
-## License
+## Stack
 
-MIT
+- pnpm workspaces, Node.js 24, TypeScript 5.9
+- API: Express 5
+- DB: PostgreSQL + Drizzle ORM
+- Frontend: React 19 + Vite 7 + TipTap editor
+- Mobile: Expo (React Native) — managed workflow
+- Validation: Zod, `drizzle-zod`
+- API codegen: Orval (from OpenAPI spec in `lib/api-spec/openapi.yaml`)
+- Build: esbuild (API), Vite (SPA)
+
+---
+
+## Where things live
+
+| Path | Contents |
+|------|----------|
+| `artifacts/api-server/src/` | Express API — routes, auth, middleware, seed |
+| `artifacts/knowledge-base/src/` | React SPA — pages, components, hooks |
+| `artifacts/mcp-server/src/` | MCP server — API client wrapper + tool definitions |
+| `artifacts/memex-mobile/` | Expo companion app |
+| `lib/db/src/schema/` | Drizzle ORM schema (source of truth for DB shape) |
+| `lib/api-spec/openapi.yaml` | OpenAPI spec (source of truth for API contract) |
+| `lib/api-client-react/src/generated/` | Auto-generated React Query hooks — **do not edit** |
+| `.github/workflows/build-android.yml` | GitHub Actions — builds Android APK on push |
+
+---
+
+## Architecture decisions
+
+- **Single-container Docker**: The runtime image serves both `/api/*` (Express) and all other paths (React SPA) via `STATIC_DIR`. No separate nginx needed.
+- **esbuild bundle**: The API server compiles to a single `dist/index.mjs` with all deps inlined, except `archiver`, `unzipper`, and `pdfkit` (CJS packages that must remain external).
+- **Session-based auth + bearer tokens**: `express-session` + `connect-pg-simple` for browser sessions; SHA-256-hashed bearer tokens in `api_tokens` for API/MCP access.
+- **Edit locks in Postgres**: Lock state is a single row in `edit_locks` with a `lockedAt` timestamp; expiry is enforced at read time rather than via a background job, keeping the architecture simple.
+- **pnpm deploy for migrations**: The `migrate` Docker service uses the `builder` stage so drizzle-kit is available without polluting the runtime image.
+
+---
+
+## Gotchas
+
+- The `vite.config.ts` requires `PORT` to be set even during `vite build`. The Dockerfile passes `PORT=4000` as a build-time env var.
+- `drizzle-kit push` requires a TTY when there are unresolvable schema conflicts. On a fresh database this is never an issue.
+- The MCP server uses stdio transport — it must be launched as a subprocess by the LLM client, not run as a standalone server.
+- The Android APK produced by CI is a debug build (unsigned). For production distribution, set up signing keys in the GitHub Actions workflow.
+
+---
+
+## User preferences
+
+_Populate as you build — explicit user instructions worth remembering across sessions._
+
+## Pointers
+
+- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
