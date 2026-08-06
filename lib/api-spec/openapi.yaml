@@ -404,6 +404,83 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /articles/{slug}/lock:
+    get:
+      operationId: getArticleLock
+      tags: [articles]
+      summary: Get the current edit lock status for an article
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lock status (null lockedBy means no lock)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditLockStatus"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: acquireArticleLock
+      tags: [articles]
+      summary: Acquire or refresh an edit lock for an article
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lock acquired or refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditLockStatus"
+        "409":
+          description: Article is locked by another user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditLockStatus"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: releaseArticleLock
+      tags: [articles]
+      summary: Release an edit lock (own lock only; admins can release any)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lock released
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /articles/{slug}/backlinks:
     get:
       operationId: getArticleBacklinks
@@ -1171,6 +1248,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ArticleSummary"
+
+    EditLockStatus:
+      type: object
+      required: [articleId, lockedBy]
+      properties:
+        articleId:
+          type: integer
+        lockedBy:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [userId, userName, lockedAt]
+              properties:
+                userId:
+                  type: integer
+                userName:
+                  type: string
+                lockedAt:
+                  type: string
+                  format: date-time
 
     ImageUploadInput:
       type: object

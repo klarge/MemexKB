@@ -12,6 +12,7 @@ import {
   groupMembersTable,
   groupsTable,
   usersTable,
+  editLocksTable,
 } from "@workspace/db";
 import { eq, ilike, inArray, asc, desc, count, sql, and, or } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
@@ -414,6 +415,104 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
   res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, tags, backlinks: [] });
+});
+
+// ─── Edit Locks ──────────────────────────────────────────────────────────────
+
+const LOCK_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+async function getActiveLock(articleId: number) {
+  const [lock] = await db
+    .select({
+      userId: editLocksTable.userId,
+      lockedAt: editLocksTable.lockedAt,
+      userName: usersTable.name,
+    })
+    .from(editLocksTable)
+    .leftJoin(usersTable, eq(editLocksTable.userId, usersTable.id))
+    .where(eq(editLocksTable.articleId, articleId))
+    .limit(1);
+  if (!lock) return null;
+  if (Date.now() - lock.lockedAt.getTime() > LOCK_TTL_MS) {
+    // Expired — clean it up
+    await db.delete(editLocksTable).where(eq(editLocksTable.articleId, articleId));
+    return null;
+  }
+  return lock;
+}
+
+router.get("/articles/:slug/lock", requireAuth, async (req, res) => {
+  const slug = String(req.params.slug);
+  const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  if (!article) {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+  const lock = await getActiveLock(article.id);
+  res.json({
+    articleId: article.id,
+    lockedBy: lock ? { userId: lock.userId, userName: lock.userName ?? "Unknown", lockedAt: lock.lockedAt } : null,
+  });
+});
+
+router.put("/articles/:slug/lock", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+  const slug = String(req.params.slug);
+  const userId = req.session.userId!;
+  const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  if (!article) {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+
+  const existing = await getActiveLock(article.id);
+  if (existing && existing.userId !== userId) {
+    // Locked by someone else
+    res.status(409).json({
+      articleId: article.id,
+      lockedBy: { userId: existing.userId, userName: existing.userName ?? "Unknown", lockedAt: existing.lockedAt },
+    });
+    return;
+  }
+
+  // Acquire or refresh (upsert)
+  const now = new Date();
+  await db
+    .insert(editLocksTable)
+    .values({ articleId: article.id, userId, lockedAt: now })
+    .onConflictDoUpdate({
+      target: editLocksTable.articleId,
+      set: { userId, lockedAt: now },
+    });
+
+  res.json({
+    articleId: article.id,
+    lockedBy: { userId, userName: req.session.userName ?? "Unknown", lockedAt: now },
+  });
+});
+
+router.delete("/articles/:slug/lock", requireAuth, async (req, res) => {
+  const slug = String(req.params.slug);
+  const userId = req.session.userId!;
+  const userRole = req.session.userRole;
+  const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  if (!article) {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+
+  const lock = await getActiveLock(article.id);
+  if (!lock) {
+    res.json({ message: "No active lock" });
+    return;
+  }
+
+  if (lock.userId !== userId && userRole !== "admin") {
+    res.status(403).json({ error: "Cannot release another user's lock" });
+    return;
+  }
+
+  await db.delete(editLocksTable).where(eq(editLocksTable.articleId, article.id));
+  res.json({ message: "Lock released" });
 });
 
 router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {

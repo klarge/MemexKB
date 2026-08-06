@@ -90,6 +90,19 @@ export const articleTagsTable = pgTable(
 export type Tag = typeof tagsTable.$inferSelect;
 export type ArticleTag = typeof articleTagsTable.$inferSelect;
 
+export const editLocksTable = pgTable("edit_locks", {
+  articleId: integer("article_id")
+    .notNull()
+    .references(() => articlesTable.id, { onDelete: "cascade" })
+    .primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  lockedAt: timestamp("locked_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type EditLock = typeof editLocksTable.$inferSelect;
+
 export const insertArticleSchema = createInsertSchema(articlesTable).omit({
   id: true,
   createdAt: true,

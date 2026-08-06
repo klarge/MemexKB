@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock,
+  Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock, PencilLine,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +28,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+interface LockStatus {
+  articleId: number;
+  lockedBy: { userId: number; userName: string; lockedAt: string } | null;
+}
 
 export default function ArticleView({ params }: { params?: { slug?: string } }) {
   const { slug } = params || {};
@@ -45,6 +50,43 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
       retry: false,
     },
   });
+
+  // ─── Edit lock status ─────────────────────────────────────────────────────
+  const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
+
+  useEffect(() => {
+    if (!article?.id || !user) return;
+
+    const fetchLock = async () => {
+      try {
+        const res = await fetch(`/api/articles/${actualSlug}/lock`, { credentials: "include" });
+        if (res.ok) {
+          const data: LockStatus = await res.json();
+          setLockStatus(data);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchLock();
+    const interval = setInterval(fetchLock, 30_000);
+    return () => clearInterval(interval);
+  }, [article?.id, actualSlug, user]);
+
+  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const lockHeldByOther = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId !== user?.id;
+  const lockHeldByMe = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId === user?.id;
+
+  const forceBreakLock = async () => {
+    try {
+      await fetch(`/api/articles/${actualSlug}/lock`, { method: "DELETE", credentials: "include" });
+      setLockStatus((prev) => prev ? { ...prev, lockedBy: null } : prev);
+      toast({ title: "Lock released" });
+    } catch {
+      toast({ title: "Failed to release lock", variant: "destructive" });
+    }
+  };
 
   const { data: backlinks } = useGetArticleBacklinks(actualSlug, {
     query: {
@@ -176,12 +218,37 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     );
   }
 
-  const canEdit = user?.role === "admin" || user?.role === "editor";
-
   return (
     <>
     <div className="flex flex-col lg:flex-row gap-8 pb-20">
       <div className="flex-1 max-w-3xl min-w-0">
+
+        {/* Lock status banner */}
+        {lockHeldByOther && lockStatus?.lockedBy && (
+          <div className="mb-4 flex items-center gap-3 rounded-md border border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-700 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+            <PencilLine className="h-4 w-4 shrink-0 text-yellow-500" />
+            <span>
+              <strong>{lockStatus.lockedBy.userName}</strong> is currently editing this article.
+            </span>
+            {user?.role === "admin" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-7 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900"
+                onClick={forceBreakLock}
+              >
+                Force unlock
+              </Button>
+            )}
+          </div>
+        )}
+        {lockHeldByMe && (
+          <div className="mb-4 flex items-center gap-3 rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
+            <PencilLine className="h-4 w-4 shrink-0 text-blue-500" />
+            <span>You are currently editing this article in another tab.</span>
+          </div>
+        )}
+
         <div className="mb-6 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">

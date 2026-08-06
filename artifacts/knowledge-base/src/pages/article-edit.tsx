@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { useLocation } from "wouter";
 import {
@@ -19,7 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2, ArrowLeft, Save, Image as ImageIcon, Link as LinkIcon,
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Code, Quote,
-  Table as TableIcon, LayoutTemplate, PanelRight,
+  Table as TableIcon, LayoutTemplate, PanelRight, AlertTriangle,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -104,6 +104,64 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
+
+  // ─── Edit lock ────────────────────────────────────────────────────────────────
+  const [lockConflict, setLockConflict] = useState<{ userName: string } | null>(null);
+  const lockReleasedRef = useRef(false);
+
+  const releaseLock = useCallback(async () => {
+    if (isNew || !slug || lockReleasedRef.current) return;
+    lockReleasedRef.current = true;
+    try {
+      await fetch(`/api/articles/${slug}/lock`, { method: "DELETE", credentials: "include" });
+    } catch {
+      // best-effort
+    }
+  }, [isNew, slug]);
+
+  useEffect(() => {
+    if (isNew || !slug) return;
+
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+    const acquireLock = async () => {
+      try {
+        const res = await fetch(`/api/articles/${slug}/lock`, {
+          method: "PUT",
+          credentials: "include",
+        });
+        if (res.status === 409) {
+          const data = await res.json();
+          setLockConflict({ userName: data.lockedBy?.userName ?? "Another user" });
+        }
+      } catch {
+        // ignore network errors; don't block editing
+      }
+    };
+
+    acquireLock();
+    heartbeatTimer = setInterval(acquireLock, 60_000);
+
+    return () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      releaseLock();
+    };
+  }, [isNew, slug, releaseLock]);
+
+  // Release lock on beforeunload
+  useEffect(() => {
+    if (isNew || !slug) return;
+    const onUnload = () => {
+      if (!lockReleasedRef.current) {
+        navigator.sendBeacon(`/api/articles/${slug}/lock-release`);
+        // sendBeacon doesn't support DELETE; use releaseLock best-effort via keepalive fetch
+        fetch(`/api/articles/${slug}/lock`, { method: "DELETE", credentials: "include", keepalive: true }).catch(() => {});
+        lockReleasedRef.current = true;
+      }
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [isNew, slug]);
 
   // Ref for wikilink suggestion items — avoids stale closures in the extension
   const wikilinkItemsRef = useRef<WikilinkItem[]>([]);
@@ -235,7 +293,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     }
   }, [article, isNew]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       toast({ title: "Title required", variant: "destructive" });
       return;
@@ -259,9 +317,10 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       updateMutation.mutate(
         { slug, data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
         {
-          onSuccess: (data) => {
+          onSuccess: async (data) => {
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
             toast({ title: "Article updated" });
+            await releaseLock();
             setLocation(`/wiki/${data.slug}`);
           },
           onError: (err) => {
@@ -303,6 +362,23 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           Save
         </Button>
       </div>
+
+      {lockConflict && (
+        <div className="flex items-center gap-3 rounded-md border border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-700 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
+          <span>
+            <strong>{lockConflict.userName}</strong> is currently editing this article. Your changes may conflict.
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-7 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900"
+            onClick={() => setLocation(`/wiki/${slug}`)}
+          >
+            View read-only
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="flex-1 space-y-4">
