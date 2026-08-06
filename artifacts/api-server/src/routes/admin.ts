@@ -5,6 +5,8 @@ import {
   articleGroupsTable,
   articleImagesTable,
   groupsTable,
+  tagsTable,
+  articleTagsTable,
 } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { createRequire } from "node:module";
@@ -162,6 +164,20 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
   const groups = await db.select().from(groupsTable);
   const groupMap = new Map(groups.map((g) => [g.id, g]));
 
+  // Fetch all tags and article-tag assignments
+  const allTags = await db.select().from(tagsTable);
+  const allArticleTags = await db.select().from(articleTagsTable);
+  const tagMap = new Map(allTags.map((t) => [t.id, t]));
+  // Build articleId → tag names[]
+  const articleTagNamesMap = new Map<number, string[]>();
+  for (const at of allArticleTags) {
+    const tag = tagMap.get(at.tagId);
+    if (!tag) continue;
+    const existing = articleTagNamesMap.get(at.articleId) ?? [];
+    existing.push(tag.name);
+    articleTagNamesMap.set(at.articleId, existing);
+  }
+
   // Collect all image IDs referenced across every article
   const allImageIds = new Set<number>();
   for (const article of articles) {
@@ -183,6 +199,10 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
 
   const archive = new ZipArchive({ zlib: { level: 9 } });
   archive.pipe(res);
+
+  // Add tags definitions file
+  const tagsExport = allTags.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+  archive.append(JSON.stringify(tagsExport, null, 2), { name: "tags.json" });
 
   // Add image files to the archive under images/
   for (const [imgId, img] of imageMap) {
@@ -225,6 +245,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
       groups: articleGroups,
+      tags: articleTagNamesMap.get(article.id) ?? [],
       images: usedImageIds.map((id) => {
         const img = imageMap.get(id);
         return img ? { exportPath: `images/${safeImageName(id, img.filename)}` } : null;
@@ -237,6 +258,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
     exportedAt: new Date(),
     articleCount: articles.length,
     imageCount: imageMap.size,
+    tagCount: allTags.length,
   };
   archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
 
@@ -330,6 +352,35 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
   const allGroups = await db.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable);
   const groupsByName = new Map(allGroups.map((g) => [g.name.toLowerCase(), g.id]));
 
+  // ── Pre-load / create tags ───────────────────────────────────────────────
+  // Load existing tags, then upsert any tags found in tags.json
+  const existingTags = await db.select({ id: tagsTable.id, name: tagsTable.name, color: tagsTable.color }).from(tagsTable);
+  const tagsByName = new Map(existingTags.map((t) => [t.name.toLowerCase(), t.id]));
+
+  const tagsJsonFile = directory.files.find((f) => f.path === "tags.json");
+  if (tagsJsonFile) {
+    try {
+      const tagsJson = JSON.parse((await tagsJsonFile.buffer()).toString("utf-8")) as Array<{
+        name: string;
+        color?: string;
+      }>;
+      for (const tagDef of tagsJson) {
+        if (!tagDef.name || typeof tagDef.name !== "string") continue;
+        const key = tagDef.name.toLowerCase();
+        if (!tagsByName.has(key)) {
+          const [inserted] = await db
+            .insert(tagsTable)
+            .values({ name: tagDef.name, color: tagDef.color ?? "#6366f1" })
+            .onConflictDoNothing()
+            .returning({ id: tagsTable.id });
+          if (inserted) tagsByName.set(key, inserted.id);
+        }
+      }
+    } catch (err) {
+      errors.push(`Failed to process tags.json: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   // ── Pass 1: JSON + MD pairs (full metadata, group assignments) ───────────
   const metaFiles = directory.files.filter(
     (f) => f.path.endsWith(".json") && f.path.includes("articles/") && f.path !== "manifest.json",
@@ -343,11 +394,15 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         slug: string;
         title: string;
         groups?: string[];
+        tags?: string[];
       };
       const slug = meta.slug;
       const title = meta.title;
       const metaGroupNames: string[] = Array.isArray(meta.groups)
         ? meta.groups.filter((g) => typeof g === "string")
+        : [];
+      const metaTagNames: string[] = Array.isArray(meta.tags)
+        ? meta.tags.filter((t) => typeof t === "string")
         : [];
 
       const mdPath = file.path.replace(".json", ".md");
@@ -425,6 +480,32 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
           await db
             .insert(articleGroupsTable)
             .values(resolvedGroupIds.map((groupId) => ({ articleId, groupId })))
+            .onConflictDoNothing();
+        }
+      }
+
+      // Restore tag assignments
+      if (metaTagNames.length > 0) {
+        // Create any tags that don't exist yet (may not be in tags.json for older exports)
+        for (const tagName of metaTagNames) {
+          const key = tagName.toLowerCase();
+          if (!tagsByName.has(key)) {
+            const [inserted] = await db
+              .insert(tagsTable)
+              .values({ name: tagName })
+              .onConflictDoNothing()
+              .returning({ id: tagsTable.id });
+            if (inserted) tagsByName.set(key, inserted.id);
+          }
+        }
+        const resolvedTagIds = metaTagNames
+          .map((name) => tagsByName.get(name.toLowerCase()))
+          .filter((id): id is number => id !== undefined);
+        if (resolvedTagIds.length > 0) {
+          await db.delete(articleTagsTable).where(eq(articleTagsTable.articleId, articleId));
+          await db
+            .insert(articleTagsTable)
+            .values(resolvedTagIds.map((tagId) => ({ articleId, tagId })))
             .onConflictDoNothing();
         }
       }
