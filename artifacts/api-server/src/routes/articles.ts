@@ -32,11 +32,20 @@ const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fen
 interface PdfInfoboxData {
   title: string;
   rows: Array<{ label: string; value: string }>;
+  image: string; // /api/articles/images/N, data URL, or ""
 }
 
 function parsePdfInfobox(htmlFragment: string): PdfInfoboxData {
+  // Title: prefer data-title attribute (new format), fall back to <caption> (legacy)
+  const dataTitleMatch = htmlFragment.match(/data-title=["']([^"']*)["']/i);
   const captionMatch = htmlFragment.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
-  const title = captionMatch ? captionMatch[1].replace(/<[^>]+>/g, "").trim() : "";
+  const title = dataTitleMatch?.[1] ?? (captionMatch ? captionMatch[1].replace(/<[^>]+>/g, "").trim() : "");
+
+  // Image: prefer data-image attribute (new format), fall back to first <img src> (legacy)
+  const dataImageMatch = htmlFragment.match(/data-image=["']([^"']+)["']/i);
+  const legacyImgMatch = htmlFragment.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+  const image = dataImageMatch?.[1] ?? legacyImgMatch?.[1] ?? "";
+
   const rows: PdfInfoboxData["rows"] = [];
   const rowRe = /<tr[^>]*>[\s\S]*?<th[^>]*>([\s\S]*?)<\/th>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/gi;
   let m: RegExpExecArray | null;
@@ -45,11 +54,46 @@ function parsePdfInfobox(htmlFragment: string): PdfInfoboxData {
     const value = m[2].replace(/<[^>]+>/g, "").trim();
     if (label || value) rows.push({ label, value });
   }
-  return { title, rows };
+  return { title, rows, image };
+}
+
+/** Read natural pixel dimensions from a PNG or JPEG buffer (returns null if unrecognised). */
+function readImageDimensions(buf: Buffer, mime: string): { w: number; h: number } | null {
+  try {
+    if (mime === "image/png" && buf.length >= 24) {
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      return { w, h };
+    }
+    if (mime === "image/jpeg") {
+      let i = 2; // skip SOI marker (FF D8)
+      while (i < buf.length - 9) {
+        if (buf[i] !== 0xff) break;
+        const marker = buf[i + 1];
+        const segLen = buf.readUInt16BE(i + 2);
+        // SOF markers: C0, C1, C2, C3, C5..C7, C9..CB, CD..CF
+        if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) ||
+            (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+          const h = buf.readUInt16BE(i + 5);
+          const w = buf.readUInt16BE(i + 7);
+          return { w, h };
+        }
+        i += 2 + segLen;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function drawPdfInfobox(doc: any, infobox: PdfInfoboxData, pageLeft: number, usableWidth: number) {
+function drawPdfInfobox(
+  doc: any,
+  infobox: PdfInfoboxData,
+  pageLeft: number,
+  usableWidth: number,
+  imageBuffer?: Buffer | null,
+  imageMimeType?: string,
+) {
   const BOX_W = 180;
   const BOX_X = pageLeft + usableWidth - BOX_W;
   const PAD = 5;
@@ -60,6 +104,7 @@ function drawPdfInfobox(doc: any, infobox: PdfInfoboxData, pageLeft: number, usa
   const VALUE_W = BOX_W - LABEL_W;
   let curY: number = doc.y;
 
+  // Title bar
   doc.rect(BOX_X, curY, BOX_W, TITLE_H).fillAndStroke("#2d6a4f", "#1b4332");
   doc
     .fillColor("#ffffff").fontSize(FS + 0.5).font("Helvetica-Bold")
@@ -68,6 +113,25 @@ function drawPdfInfobox(doc: any, infobox: PdfInfoboxData, pageLeft: number, usa
     });
   curY += TITLE_H;
 
+  // Image zone (if present)
+  if (imageBuffer && (imageMimeType === "image/jpeg" || imageMimeType === "image/png")) {
+    const MAX_IMG_H = 140;
+    const dims = readImageDimensions(imageBuffer, imageMimeType);
+    // Scale to fit BOX_W while preserving aspect ratio, capped at MAX_IMG_H
+    let renderH = MAX_IMG_H;
+    if (dims && dims.w > 0) {
+      const scaleW = Math.min(1, BOX_W / dims.w);
+      renderH = Math.min(MAX_IMG_H, Math.round(dims.h * scaleW));
+    }
+    try {
+      doc.image(imageBuffer, BOX_X, curY, { fit: [BOX_W, renderH] });
+    } catch { /* skip unembeddable image */ }
+    curY += renderH;
+    // thin separator line below image
+    doc.moveTo(BOX_X, curY).lineTo(BOX_X + BOX_W, curY).strokeColor("#dee2e6").lineWidth(0.5).stroke();
+  }
+
+  // Data rows
   infobox.rows.forEach((row, i) => {
     const bg = i % 2 === 0 ? "#f8f9fa" : "#ffffff";
     doc.rect(BOX_X, curY, LABEL_W, ROW_H).fillAndStroke("#e9ecef", "#dee2e6");
@@ -646,8 +710,17 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   // Split content into text, image and infobox segments
   type Segment =
     | { type: "text"; html: string }
-    | { type: "image"; src: string }
+    | { type: "image"; src: string; widthPx?: number }
     | { type: "infobox"; data: PdfInfoboxData };
+
+  /** Parse an explicit pixel width from a width attribute or inline style (e.g. style="width:200px"). */
+  function parseImgWidth(imgTag: string): number | undefined {
+    const wAttr = imgTag.match(/\bwidth=["']?(\d+)["']?/i);
+    if (wAttr) return parseInt(wAttr[1]);
+    const wStyle = imgTag.match(/style=["'][^"']*width\s*:\s*(\d+(?:\.\d+)?)px/i);
+    if (wStyle) return Math.round(parseFloat(wStyle[1]));
+    return undefined;
+  }
 
   const segments: Segment[] = [];
   const imgRegex = /<img[^>]+>/gi;
@@ -662,7 +735,9 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
       segments.push({ type: "infobox", data: pdfInfoboxes[parseInt(infoboxIdMatch[1])] });
     } else {
       const srcMatch = imgMatch[0].match(/src=["']([^"']+)["']/);
-      if (srcMatch) segments.push({ type: "image", src: srcMatch[1] });
+      if (srcMatch) {
+        segments.push({ type: "image", src: srcMatch[1], widthPx: parseImgWidth(imgMatch[0]) });
+      }
     }
     lastIndex = imgMatch.index + imgMatch[0].length;
   }
@@ -679,7 +754,31 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
         doc.moveDown(0.5);
       }
     } else if (seg.type === "infobox") {
-      drawPdfInfobox(doc, seg.data, PAGE_LEFT, USABLE_WIDTH);
+      // Resolve infobox image from DB or data URL
+      let ibImgBuffer: Buffer | null = null;
+      let ibMimeType = "";
+      if (seg.data.image) {
+        const ibLocalMatch = seg.data.image.match(/\/api\/articles\/images\/(\d+)/);
+        if (ibLocalMatch) {
+          const ibImageId = parseInt(ibLocalMatch[1]);
+          const [ibRow] = await db
+            .select({ data: articleImagesTable.data, mimeType: articleImagesTable.mimeType })
+            .from(articleImagesTable)
+            .where(eq(articleImagesTable.id, ibImageId))
+            .limit(1);
+          if (ibRow) {
+            ibImgBuffer = Buffer.from(ibRow.data, "base64");
+            ibMimeType = ibRow.mimeType;
+          }
+        } else if (seg.data.image.startsWith("data:")) {
+          const commaIdx = seg.data.image.indexOf(",");
+          if (commaIdx !== -1) {
+            ibMimeType = seg.data.image.slice(5, commaIdx).split(";")[0];
+            ibImgBuffer = Buffer.from(seg.data.image.slice(commaIdx + 1), "base64");
+          }
+        }
+      }
+      drawPdfInfobox(doc, seg.data, PAGE_LEFT, USABLE_WIDTH, ibImgBuffer, ibMimeType || undefined);
     } else {
       // Resolve image buffer from DB or data URL
       let imgBuffer: Buffer | null = null;
@@ -709,7 +808,14 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
       // PDFKit natively supports JPEG and PNG; skip other formats gracefully
       if (imgBuffer && (mimeType === "image/jpeg" || mimeType === "image/png")) {
         try {
-          doc.image(imgBuffer, { fit: [USABLE_WIDTH, 400], align: "left" });
+          // Respect the image's authored width when smaller than the page;
+          // otherwise fit to the full usable width.
+          const dims = readImageDimensions(imgBuffer, mimeType);
+          const naturalW = dims?.w ?? USABLE_WIDTH;
+          // Use the smaller of: authored width attr, natural pixel width, usable page width
+          const targetW = Math.min(seg.widthPx ?? naturalW, naturalW, USABLE_WIDTH);
+          const targetH = dims ? Math.round((targetW / naturalW) * dims.h) : 400;
+          doc.image(imgBuffer, PAGE_LEFT, doc.y, { width: targetW, height: targetH });
           doc.moveDown(0.5);
         } catch {
           // Silently skip unembeddable images
