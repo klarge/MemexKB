@@ -5,13 +5,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: lexikon
-      POSTGRES_USER: lexikon
+      POSTGRES_DB: memexkb
+      POSTGRES_USER: memexkb
       POSTGRES_PASSWORD: changeme        # ← change this password
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lexikon -d lexikon"]
+      test: ["CMD-SHELL", "pg_isready -U memexkb -d memexkb"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,7 +19,7 @@ services:
   # ── Application ──────────────────────────────────────────────────────────────
   # Schema migrations run automatically on startup — no separate migrate container.
   app:
-    image: ghcr.io/klarge/lexikon:latest
+    image: ghcr.io/klarge/memexkb:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -27,7 +27,7 @@ services:
       NODE_ENV: production
       PORT: "3000"
       # Keep the password here in sync with POSTGRES_PASSWORD above.
-      DATABASE_URL: postgres://lexikon:changeme@db:5432/lexikon
+      DATABASE_URL: postgres://memexkb:changeme@db:5432/memexkb
       # Generate a strong random value: openssl rand -hex 32
       SESSION_SECRET: replace-with-a-strong-secret
       STATIC_DIR: /app/public
