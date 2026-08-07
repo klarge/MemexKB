@@ -86,14 +86,14 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
           />
         </div>
 
-        {/* Image zone */}
+        {/* Image zone — focusable so Ctrl+V paste works; file picker only opens via the inner button */}
         <div
-          className={`relative border-b border-border ${image ? "bg-black/5" : "bg-muted/20 border-dashed cursor-pointer hover:bg-muted/40 transition-colors"}`}
+          className={`relative border-b border-border ${image ? "bg-black/5" : "bg-muted/20 hover:bg-muted/40 transition-colors"}`}
           style={{ minHeight: image ? undefined : "64px" }}
+          tabIndex={image ? undefined : 0}
           onPaste={handlePaste}
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
-          onClick={() => { if (!image) fileInputRef.current?.click(); }}
         >
           {uploading ? (
             <div className="flex items-center justify-center h-16 text-muted-foreground text-xs gap-1">
@@ -118,10 +118,16 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
               </button>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-16 text-muted-foreground text-xs gap-1 pointer-events-none">
+            /* Clicking the label opens the file picker; clicking elsewhere in the zone just focuses it for paste */
+            <button
+              type="button"
+              className="flex flex-col items-center justify-center w-full h-16 text-muted-foreground text-xs gap-1 cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              title="Click to browse, or paste / drop an image"
+            >
               <ImageIcon className="h-4 w-4" />
-              <span>Paste or click to add image</span>
-            </div>
+              <span>Click to browse or paste image</span>
+            </button>
           )}
           <input
             ref={fileInputRef}
