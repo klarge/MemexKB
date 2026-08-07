@@ -62,9 +62,7 @@ jobs:
         working-directory: artifacts/memex-mobile
         env:
           CI: '1'
-        run: |
-          pnpm install
-          npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean --skip-dependency-update expo,react,react-native
 
       # ── 7. Gradle cache + build ────────────────────────────────────────────
       - name: Cache Gradle
