@@ -60,9 +60,10 @@ jobs:
 
       - name: Expo prebuild (Android)
         working-directory: artifacts/memex-mobile
-        env:
-          CI: '1'
-        run: npx expo prebuild --platform android --clean --skip-dependency-update expo,react,react-native
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Install dependencies after prebuild
+        run: pnpm install --frozen-lockfile=false
 
       # ── 7. Gradle cache + build ────────────────────────────────────────────
       - name: Cache Gradle
