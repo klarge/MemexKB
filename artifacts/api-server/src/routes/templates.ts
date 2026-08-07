@@ -93,7 +93,7 @@ router.get("/templates/:id", requireAuth, async (req, res) => {
   res.json({ ...row, tags });
 });
 
-router.post("/templates", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.post("/templates", requireAuth, requireRole("admin"), async (req, res) => {
   const { name, content, tagIds } = req.body;
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
 
@@ -113,7 +113,7 @@ router.post("/templates", requireAuth, requireRole("admin", "editor"), async (re
   res.status(201).json({ ...row, tags });
 });
 
-router.patch("/templates/:id", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.patch("/templates/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
@@ -135,7 +135,7 @@ router.patch("/templates/:id", requireAuth, requireRole("admin", "editor"), asyn
   res.json({ ...row, tags });
 });
 
-router.delete("/templates/:id", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.delete("/templates/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 

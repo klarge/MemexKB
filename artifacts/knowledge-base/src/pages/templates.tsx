@@ -34,7 +34,7 @@ export default function Templates() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
 
-  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const canEdit = user?.role === "admin";
 
   const { data: templates = [], isLoading } = useQuery<TemplateSummary[]>({
     queryKey: ["templates"],
