@@ -5,20 +5,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Paintbrush, Upload, Trash2, Loader2 } from "lucide-react";
-import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL } from "@/lib/site-settings";
+import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical } from "lucide-react";
+import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL, type NavLink } from "@/lib/site-settings";
+
+function generateId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export default function AdminCustomization() {
   const { data: settings, isLoading } = useSiteSettings();
   const invalidate = useInvalidateSiteSettings();
   const { toast } = useToast();
 
+  // ── Site name ────────────────────────────────────────────────────────────────
   const [siteName, setSiteName] = useState<string>("");
+  const displayName = siteName !== "" ? siteName : (settings?.siteName ?? "Memex");
+
+  // ── Logo ─────────────────────────────────────────────────────────────────────
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayName = siteName !== "" ? siteName : (settings?.siteName ?? "Memex");
+  // ── Nav links ────────────────────────────────────────────────────────────────
+  const [links, setLinks] = useState<NavLink[] | null>(null); // null = not yet diverged from server
+  const [newLabel, setNewLabel] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+
+  const activeLinks: NavLink[] = links ?? settings?.navLinks ?? [];
+
+  // ── Mutations ─────────────────────────────────────────────────────────────────
 
   const saveNameMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -34,9 +49,7 @@ export default function AdminCustomization() {
       toast({ title: "Name saved", description: "The site name has been updated." });
       invalidate();
     },
-    onError: (e: Error) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const uploadLogoMutation = useMutation({
@@ -53,9 +66,7 @@ export default function AdminCustomization() {
       setLogoPreview(null);
       invalidate();
     },
-    onError: (e: Error) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const removeLogoMutation = useMutation({
@@ -70,10 +81,27 @@ export default function AdminCustomization() {
       setLogoPreview(null);
       invalidate();
     },
-    onError: (e: Error) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const saveLinksMutation = useMutation({
+    mutationFn: async (updatedLinks: NavLink[]) => {
+      const res = await fetch("/api/admin/settings/nav-links", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ links: updatedLinks }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save links");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Links saved" });
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,6 +110,28 @@ export default function AdminCustomization() {
     const reader = new FileReader();
     reader.onload = (ev) => setLogoPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleAddLink = () => {
+    const label = newLabel.trim();
+    let url = newUrl.trim();
+    if (!label || !url) {
+      toast({ title: "Both label and URL are required", variant: "destructive" });
+      return;
+    }
+    // Prepend https:// if no protocol given
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    const next: NavLink[] = [...activeLinks, { id: generateId(), label, url }];
+    setLinks(next);
+    setNewLabel("");
+    setNewUrl("");
+    saveLinksMutation.mutate(next);
+  };
+
+  const handleDeleteLink = (id: string) => {
+    const next = activeLinks.filter((l) => l.id !== id);
+    setLinks(next);
+    saveLinksMutation.mutate(next);
   };
 
   if (isLoading) {
@@ -100,7 +150,7 @@ export default function AdminCustomization() {
           Customization
         </h1>
         <p className="text-muted-foreground mt-1">
-          Rebrand the application with your own name and logo.
+          Rebrand the application with your own name, logo, and navigation links.
         </p>
       </div>
 
@@ -228,7 +278,85 @@ export default function AdminCustomization() {
         </Card>
       </div>
 
-      {/* Live preview */}
+      {/* Navigation Links */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ExternalLink className="h-4 w-4" />
+            Navigation Links
+          </CardTitle>
+          <CardDescription>
+            Links shown in a "Links" section at the bottom of the left sidebar, visible to all users. Useful for wikis, dashboards, or external tools your team uses.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Existing links */}
+          {activeLinks.length > 0 && (
+            <ul className="divide-y divide-border rounded-md border border-border">
+              {activeLinks.map((link) => (
+                <li key={link.id} className="flex items-center gap-3 px-3 py-2.5 group">
+                  <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{link.label}</p>
+                    <p className="text-xs text-muted-foreground truncate">{link.url}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteLink(link.id)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                    title="Remove link"
+                    disabled={saveLinksMutation.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Add new link form */}
+          <div className="rounded-md border border-dashed border-border p-4 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add a link</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="link-label" className="text-xs">Label</Label>
+                <Input
+                  id="link-label"
+                  placeholder="e.g. Company Wiki"
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  maxLength={100}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddLink(); }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="link-url" className="text-xs">URL</Label>
+                <Input
+                  id="link-url"
+                  placeholder="https://example.com"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  maxLength={500}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddLink(); }}
+                />
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleAddLink}
+              disabled={saveLinksMutation.isPending || !newLabel.trim() || !newUrl.trim()}
+            >
+              {saveLinksMutation.isPending
+                ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                : <Plus className="mr-2 h-3.5 w-3.5" />}
+              Add Link
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sidebar preview */}
       <Card>
         <CardHeader>
           <CardTitle>Sidebar Preview</CardTitle>

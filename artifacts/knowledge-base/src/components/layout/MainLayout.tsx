@@ -34,6 +34,7 @@ import {
   Paintbrush,
   Sun,
   Moon,
+  ExternalLink,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -133,6 +134,26 @@ export function MainLayout({ children }: { children: ReactNode }) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+
+            {(siteSettings?.navLinks ?? []).length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel>Links</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {(siteSettings?.navLinks ?? []).map((link) => (
+                      <SidebarMenuItem key={link.id}>
+                        <SidebarMenuButton asChild>
+                          <a href={link.url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            <span>{link.label}</span>
+                          </a>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
 
             {user?.role === "admin" && (
               <SidebarGroup>

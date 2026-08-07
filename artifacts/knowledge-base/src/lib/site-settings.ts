@@ -1,8 +1,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+export interface NavLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
 export interface SiteSettings {
   siteName: string;
   hasLogo: boolean;
+  navLinks: NavLink[];
 }
 
 export const SITE_SETTINGS_KEY = ["site-settings"] as const;

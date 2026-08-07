@@ -30,17 +30,27 @@ async function deleteSetting(key: string): Promise<void> {
   await db.delete(siteSettingsTable).where(eq(siteSettingsTable.key, key));
 }
 
-// ── Public: basic branding info (name + whether a logo exists) ────────────────
+// ── Public: basic branding info (name, logo, nav links) ──────────────────────
+
+function parseNavLinks(raw: string | undefined): { id: string; label: string; url: string }[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch { /* ignore */ }
+  return [];
+}
 
 router.get("/settings", async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
+    navLinks: parseNavLinks(map.get("nav_links")),
   });
 });
 
@@ -68,11 +78,12 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
+    navLinks: parseNavLinks(map.get("nav_links")),
   });
 });
 
@@ -106,6 +117,33 @@ router.post("/admin/settings/logo", requireRole("admin"), upload.single("logo"),
     setSetting("logo_mime_type", mimetype),
   ]);
   res.json({ hasLogo: true });
+});
+
+// ── Admin: save nav links ─────────────────────────────────────────────────────
+
+router.put("/admin/settings/nav-links", requireRole("admin"), async (req, res) => {
+  const { links } = req.body as { links?: unknown };
+  if (!Array.isArray(links)) {
+    res.status(400).json({ error: "links must be an array" });
+    return;
+  }
+  const validated = links
+    .filter((l): l is { id: string; label: string; url: string } =>
+      l !== null &&
+      typeof l === "object" &&
+      typeof (l as Record<string, unknown>).id === "string" &&
+      typeof (l as Record<string, unknown>).label === "string" &&
+      typeof (l as Record<string, unknown>).url === "string",
+    )
+    .map((l) => ({
+      id: l.id.trim(),
+      label: l.label.trim().slice(0, 100),
+      url: l.url.trim().slice(0, 500),
+    }))
+    .filter((l) => l.label && l.url);
+
+  await setSetting("nav_links", JSON.stringify(validated));
+  res.json({ navLinks: validated });
 });
 
 // ── Admin: remove logo ────────────────────────────────────────────────────────
