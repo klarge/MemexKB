@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/klarge/lexikon
+  IMAGE: ghcr.io/klarge/memexkb
 
 jobs:
   build-and-push:
