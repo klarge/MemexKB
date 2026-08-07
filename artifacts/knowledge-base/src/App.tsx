@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThemeProvider } from "@/lib/theme";
+import { useSiteSettings } from "@/lib/site-settings";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -27,6 +28,14 @@ import AdminCustomization from "@/pages/admin-customization";
 import AdminTags from "@/pages/admin-tags";
 
 const queryClient = new QueryClient();
+
+function TitleSync() {
+  const { data: settings } = useSiteSettings();
+  useEffect(() => {
+    document.title = settings?.siteName ?? "Memex";
+  }, [settings?.siteName]);
+  return null;
+}
 
 // Fetches whether the initial admin setup still needs to be completed.
 // Redirects to /setup for all routes until setup is done;
@@ -214,6 +223,7 @@ function App() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
+          <TitleSync />
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthProvider>
               <Router />
