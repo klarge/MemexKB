@@ -85,7 +85,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
-  const { data: templates = [] } = useQuery<{ id: number; name: string; content: string }[]>({
+  const { data: templates = [] } = useQuery<{ id: number; name: string; content: string; tags: { id: number; name: string; color: string }[] }[]>({
     queryKey: ["templates"],
     queryFn: () => fetch("/api/templates").then((r) => r.json()),
   });
@@ -492,6 +492,15 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
                       className="w-full text-left rounded-md border border-border px-4 py-3 hover:bg-muted transition-colors"
                       onClick={() => {
                         editor?.chain().focus().insertContent(t.content).run();
+                        if (t.tags?.length) {
+                          setSelectedTags((prev) => {
+                            const next = [...prev];
+                            for (const tag of t.tags) {
+                              if (!next.includes(tag.id)) next.push(tag.id);
+                            }
+                            return next;
+                          });
+                        }
                         setTemplateDialogOpen(false);
                       }}
                     >

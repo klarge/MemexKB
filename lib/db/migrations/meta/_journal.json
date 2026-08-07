@@ -29,6 +29,13 @@
       "when": 1778974874529,
       "tag": "0003_add_edit_locks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778974874530,
+      "tag": "0004_add_template_tags",
+      "breakpoints": true
     }
   ]
 }
