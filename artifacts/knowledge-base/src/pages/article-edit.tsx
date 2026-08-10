@@ -72,8 +72,12 @@ const ResizableImage = Image.extend({
 export default function ArticleEdit({ params }: { params?: { slug?: string } }) {
   const { slug } = params || {};
   const isNew = !slug || slug === "new";
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const isLog = isNew && searchParams.get("log") === "1";
   const prefillTitle = isNew
-    ? new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("title") || ""
+    ? (isLog
+        ? new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+        : searchParams.get("title") || "")
     : "";
 
   const [, setLocation] = useLocation();
@@ -84,6 +88,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [isLogSaving, setIsLogSaving] = useState(false);
 
   const { data: templates = [] } = useQuery<{ id: number; name: string; content: string; tags: { id: number; name: string; color: string }[] }[]>({
     queryKey: ["templates"],
@@ -300,6 +305,31 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     }
     const content = editor?.getHTML() || "";
 
+    if (isNew && isLog) {
+      setIsLogSaving(true);
+      try {
+        const res = await fetch("/api/articles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ title, content, groupIds: selectedGroups, tagIds: selectedTags, isLogEntry: true }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          toast({ title: "Failed to create", description: err.error, variant: "destructive" });
+          return;
+        }
+        const data = await res.json() as { slug: string };
+        toast({ title: "Log entry created" });
+        setLocation(`/wiki/${data.slug}`);
+      } catch {
+        toast({ title: "Network error", variant: "destructive" });
+      } finally {
+        setIsLogSaving(false);
+      }
+      return;
+    }
+
     if (isNew) {
       createMutation.mutate(
         { data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
@@ -343,7 +373,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     );
   }
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  const isPending = isLogSaving || createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-6 pb-20">
@@ -351,11 +381,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation(isNew ? "/" : `/wiki/${slug}`)}
+          onClick={() => setLocation(isLog ? "/log" : isNew ? "/" : `/wiki/${slug}`)}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-bold">{isNew ? "Create Article" : "Edit Article"}</h1>
+        <h1 className="text-2xl font-bold">{isLog ? "Create Log Entry" : isNew ? "Create Article" : "Edit Article"}</h1>
         <div className="flex-1" />
         <Button onClick={handleSave} disabled={isPending} data-testid="button-save-article">
           {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

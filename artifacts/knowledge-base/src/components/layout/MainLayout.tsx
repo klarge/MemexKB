@@ -35,6 +35,7 @@ import {
   Sun,
   Moon,
   ExternalLink,
+  BookOpen,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -118,6 +119,16 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {siteSettings?.logEntriesEnabled && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location === "/log"}>
+                        <Link href="/log">
+                          <BookOpen className="mr-2 h-4 w-4" />
+                          <span>Log</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                   {(user?.role === "admin" || user?.role === "editor") && (
                     <SidebarMenuItem>
                       <SidebarMenuButton

@@ -26,6 +26,7 @@ import TemplateEdit from "@/pages/template-edit";
 import AdminSso from "@/pages/admin-sso";
 import AdminCustomization from "@/pages/admin-customization";
 import AdminTags from "@/pages/admin-tags";
+import LogPage from "@/pages/log";
 
 const queryClient = new QueryClient();
 
@@ -190,6 +191,12 @@ function Router() {
             <ArticleHistory params={params} />
           </AuthRoute>
         )}
+      </Route>
+
+      <Route path="/log">
+        <AuthRoute>
+          <LogPage />
+        </AuthRoute>
       </Route>
 
       <Route path="/templates">

@@ -13,8 +13,9 @@ import {
   groupsTable,
   usersTable,
   editLocksTable,
+  siteSettingsTable,
 } from "@workspace/db";
-import { eq, ilike, inArray, asc, desc, count, sql, and, or } from "drizzle-orm";
+import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
@@ -221,7 +222,8 @@ router.get("/articles", optionalAuth, async (req, res) => {
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .$dynamic();
 
-  const conditions = [];
+  // Always exclude log entries from the regular article list
+  const conditions = [ne(articlesTable.isLogEntry, true)];
   if (search && typeof search === "string") {
     conditions.push(
       or(
@@ -233,9 +235,7 @@ router.get("/articles", optionalAuth, async (req, res) => {
   if (tagFilterIds !== null) {
     conditions.push(inArray(articlesTable.id, tagFilterIds));
   }
-  if (conditions.length > 0) {
-    query = query.where(and(...conditions));
-  }
+  query = query.where(and(...conditions));
 
   const sortCol = sort === "updated_at" ? articlesTable.updatedAt : sort === "created_at" ? articlesTable.createdAt : articlesTable.title;
   query = query.orderBy(order === "desc" ? desc(sortCol) : asc(sortCol));
@@ -252,9 +252,7 @@ router.get("/articles", optionalAuth, async (req, res) => {
   const tagMap = new Map(allTagDetails.map((t) => [t.id, t]));
 
   let totalQuery = db.select({ count: count() }).from(articlesTable).$dynamic();
-  if (conditions.length > 0) {
-    totalQuery = totalQuery.where(and(...conditions));
-  }
+  totalQuery = totalQuery.where(and(...conditions));
   const total = await totalQuery;
 
   const result = articles.map((a) => {
@@ -288,42 +286,66 @@ router.get("/articles", optionalAuth, async (req, res) => {
 });
 
 router.get("/articles/stats", requireAuth, async (req, res) => {
-  const [totalArticlesRow] = await db.select({ count: count() }).from(articlesTable);
-  const [totalUsersRow] = await db.select({ count: count() }).from(usersTable);
-  const [totalGroupsRow] = await db.select({ count: count() }).from(groupsTable);
-  const restrictedIds = await db.select({ articleId: articleGroupsTable.articleId }).from(articleGroupsTable).groupBy(articleGroupsTable.articleId);
+  const userId = req.session.userId;
+  const userRole = req.session.userRole;
+  const userGroupIds = await getUserGroupIds(userId);
 
-  const recentlyUpdated = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
-    .from(articlesTable)
-    .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .orderBy(desc(articlesTable.updatedAt))
-    .limit(5);
+  // Exclude log entries from all stats
+  const notLogEntry = ne(articlesTable.isLogEntry, true);
 
-  const oldestUpdated = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
-    .from(articlesTable)
-    .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .orderBy(asc(articlesTable.updatedAt))
-    .limit(5);
+  const [[totalArticlesRow], [totalUsersRow], [totalGroupsRow], restrictedIds] = await Promise.all([
+    db.select({ count: count() }).from(articlesTable).where(notLogEntry),
+    db.select({ count: count() }).from(usersTable),
+    db.select({ count: count() }).from(groupsTable),
+    db.select({ articleId: articleGroupsTable.articleId }).from(articleGroupsTable).groupBy(articleGroupsTable.articleId),
+  ]);
 
-  const mapArticle = (a: typeof recentlyUpdated[0]) => ({
-    id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt,
-    updatedByName: a.updatedByName ?? null, isRestricted: false, canAccess: true, groups: [],
-  });
+  // Fetch more rows than needed so group filtering still yields 5 results
+  const fetchAndFilter = async (orderFn: typeof desc) => {
+    const rows = await db
+      .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
+      .from(articlesTable)
+      .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
+      .where(notLogEntry)
+      .orderBy(orderFn(articlesTable.updatedAt))
+      .limit(30);
+
+    if (rows.length === 0) return [];
+
+    const groupRows = await db
+      .select()
+      .from(articleGroupsTable)
+      .where(inArray(articleGroupsTable.articleId, rows.map((r) => r.id)));
+
+    return rows
+      .filter((a) => {
+        const articleGroupIds = groupRows.filter((ag) => ag.articleId === a.id).map((ag) => ag.groupId);
+        return canAccessArticle(articleGroupIds, userGroupIds, userRole);
+      })
+      .slice(0, 5)
+      .map((a) => ({
+        id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt,
+        updatedByName: a.updatedByName ?? null, isRestricted: false, canAccess: true, groups: [],
+      }));
+  };
+
+  const [recentlyUpdated, oldestUpdated] = await Promise.all([
+    fetchAndFilter(desc),
+    fetchAndFilter(asc),
+  ]);
 
   res.json({
     totalArticles: Number(totalArticlesRow.count),
     restrictedArticles: restrictedIds.length,
     totalGroups: Number(totalGroupsRow.count),
     totalUsers: Number(totalUsersRow.count),
-    recentlyUpdated: recentlyUpdated.map(mapArticle),
-    oldestUpdated: oldestUpdated.map(mapArticle),
+    recentlyUpdated,
+    oldestUpdated,
   });
 });
 
 router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req, res) => {
-  const { title, content, groupIds, tagIds } = req.body;
+  const { title, content, groupIds, tagIds, isLogEntry } = req.body;
   if (!title) {
     res.status(400).json({ error: "Title required" });
     return;
@@ -334,10 +356,15 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     slug = `${slug}-${Date.now()}`;
   }
 
+  if (isLogEntry && !(await isLogEntriesEnabled())) {
+    res.status(403).json({ error: "Log entries feature is not enabled" });
+    return;
+  }
+
   const sanitizedContent = sanitizeArticleHtml(content ?? "");
   const [article] = await db
     .insert(articlesTable)
-    .values({ slug, title, content: sanitizedContent, updatedById: req.session.userId ?? null })
+    .values({ slug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), updatedById: req.session.userId ?? null })
     .returning();
 
   if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
@@ -432,6 +459,16 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
     res.status(404).json({ error: "Article not found" });
     return;
   }
+
+  // Editors must be members of at least one group the article belongs to (admins bypass)
+  const articleGroups = await getArticleGroups(existing.id);
+  const articleGroupIds = articleGroups.map((g) => g.id);
+  const userGroupIds = await getUserGroupIds(req.session.userId);
+  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+    res.status(403).json({ error: "You do not have permission to edit this article" });
+    return;
+  }
+
   const updates: Record<string, unknown> = { updatedAt: new Date(), updatedById: req.session.userId ?? null };
   if (title !== undefined) updates.title = title;
   if (content !== undefined) updates.content = sanitizeArticleHtml(content);
@@ -479,6 +516,74 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
   res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, tags, backlinks: [] });
+});
+
+// ─── Log Entries ─────────────────────────────────────────────────────────────
+
+async function isLogEntriesEnabled(): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(siteSettingsTable)
+    .where(eq(siteSettingsTable.key, "log_entries_enabled"))
+    .limit(1);
+  return row?.value === "true";
+}
+
+router.get("/log", requireAuth, async (req, res) => {
+  if (!(await isLogEntriesEnabled())) {
+    res.status(403).json({ error: "Log entries feature is not enabled" });
+    return;
+  }
+
+  const userId = req.session.userId;
+  const userRole = req.session.userRole;
+  const userGroupIds = await getUserGroupIds(userId);
+
+  const entries = await db
+    .select({
+      id: articlesTable.id,
+      slug: articlesTable.slug,
+      title: articlesTable.title,
+      createdAt: articlesTable.createdAt,
+      updatedAt: articlesTable.updatedAt,
+      updatedByName: usersTable.name,
+    })
+    .from(articlesTable)
+    .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
+    .where(eq(articlesTable.isLogEntry, true))
+    .orderBy(desc(articlesTable.createdAt))
+    .limit(500);
+
+  if (entries.length === 0) {
+    res.json({ entries: [], total: 0 });
+    return;
+  }
+
+  // Apply the same group-access model as the regular article list
+  const entryIds = entries.map((e) => e.id);
+  const allGroups = await db
+    .select()
+    .from(articleGroupsTable)
+    .where(inArray(articleGroupsTable.articleId, entryIds));
+
+  const result = entries
+    .map((e) => {
+      const entryGroupIds = allGroups
+        .filter((ag) => ag.articleId === e.id)
+        .map((ag) => ag.groupId);
+      if (!canAccessArticle(entryGroupIds, userGroupIds, userRole)) return null;
+      return {
+        id: e.id,
+        slug: e.slug,
+        title: e.title,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        updatedByName: e.updatedByName ?? null,
+      };
+    })
+    .filter((e): e is NonNullable<typeof e> => e !== null);
+
+  res.json({ entries: result, total: result.length });
 });
 
 // ─── Edit Locks ──────────────────────────────────────────────────────────────

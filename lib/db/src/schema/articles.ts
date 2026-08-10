@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, primaryKey, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -9,6 +9,7 @@ export const articlesTable = pgTable("articles", {
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
+  isLogEntry: boolean("is_log_entry").notNull().default(false),
   updatedById: integer("updated_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),

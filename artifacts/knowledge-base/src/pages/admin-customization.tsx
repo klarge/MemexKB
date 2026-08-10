@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical } from "lucide-react";
+import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical, BookOpen } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL, type NavLink } from "@/lib/site-settings";
 
 function generateId() {
@@ -25,6 +26,10 @@ export default function AdminCustomization() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Log entries toggle ───────────────────────────────────────────────────────
+  const [logEntriesEnabled, setLogEntriesEnabled] = useState<boolean | null>(null);
+  const activeLogEntries = logEntriesEnabled ?? settings?.logEntriesEnabled ?? false;
 
   // ── Nav links ────────────────────────────────────────────────────────────────
   const [links, setLinks] = useState<NavLink[] | null>(null); // null = not yet diverged from server
@@ -100,6 +105,27 @@ export default function AdminCustomization() {
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const saveLogSettingMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logEntriesEnabled: enabled }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const handleToggleLogEntries = (checked: boolean) => {
+    setLogEntriesEnabled(checked);
+    saveLogSettingMutation.mutate(checked);
+  };
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -352,6 +378,33 @@ export default function AdminCustomization() {
                 : <Plus className="mr-2 h-3.5 w-3.5" />}
               Add Link
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Log Entries */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            Log Entries
+          </CardTitle>
+          <CardDescription>
+            When enabled, a "Log" section appears in the sidebar and editors can create date-titled journal entries that are kept separate from regular wiki articles.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="log-entries-toggle"
+              checked={activeLogEntries}
+              onCheckedChange={handleToggleLogEntries}
+              disabled={saveLogSettingMutation.isPending}
+            />
+            <label htmlFor="log-entries-toggle" className="text-sm cursor-pointer select-none">
+              {activeLogEntries ? "Enabled" : "Disabled"}
+            </label>
+            {saveLogSettingMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           </div>
         </CardContent>
       </Card>

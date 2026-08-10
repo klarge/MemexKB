@@ -45,12 +45,13 @@ router.get("/settings", async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
     navLinks: parseNavLinks(map.get("nav_links")),
+    logEntriesEnabled: map.get("log_entries_enabled") === "true",
   });
 });
 
@@ -78,26 +79,34 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
     navLinks: parseNavLinks(map.get("nav_links")),
+    logEntriesEnabled: map.get("log_entries_enabled") === "true",
   });
 });
 
-// ── Admin: update site name ───────────────────────────────────────────────────
+// ── Admin: update settings ────────────────────────────────────────────────────
 
 router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
-  const { siteName } = req.body as { siteName?: string };
-  if (typeof siteName !== "string" || !siteName.trim()) {
-    res.status(400).json({ error: "siteName is required and must be a non-empty string" });
-    return;
+  const { siteName, logEntriesEnabled } = req.body as { siteName?: string; logEntriesEnabled?: boolean };
+
+  if (siteName !== undefined) {
+    if (typeof siteName !== "string" || !siteName.trim()) {
+      res.status(400).json({ error: "siteName must be a non-empty string" });
+      return;
+    }
+    await setSetting("site_name", siteName.trim().slice(0, 100));
   }
-  const trimmed = siteName.trim().slice(0, 100);
-  await setSetting("site_name", trimmed);
-  res.json({ siteName: trimmed });
+
+  if (logEntriesEnabled !== undefined) {
+    await setSetting("log_entries_enabled", String(Boolean(logEntriesEnabled)));
+  }
+
+  res.json({ ok: true });
 });
 
 // ── Admin: upload logo ────────────────────────────────────────────────────────
