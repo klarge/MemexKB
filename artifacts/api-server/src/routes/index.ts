@@ -10,6 +10,7 @@ import tokensRouter from "./tokens";
 import templatesRouter from "./templates";
 import tasksRouter from "./tasks";
 import projectsRouter from "./projects";
+import dashboardRouter from "./dashboard";
 import ssoAdminRouter from "./sso-admin";
 import ssoAuthRouter from "./sso-auth";
 import devScreenshotRouter from "./dev-screenshot";
@@ -34,5 +35,6 @@ router.use(imagesRouter);
 router.use(templatesRouter);
 router.use(tasksRouter);
 router.use(projectsRouter);
+router.use(dashboardRouter);
 
 export default router;

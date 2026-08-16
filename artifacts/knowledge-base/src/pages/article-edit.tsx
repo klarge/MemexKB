@@ -20,6 +20,7 @@ import {
   Loader2, ArrowLeft, Save, Image as ImageIcon, Link as LinkIcon,
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Code, Quote,
   Table as TableIcon, LayoutTemplate, PanelRight, AlertTriangle,
+  Check, CloudOff, RotateCcw, X,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -47,9 +48,6 @@ const ResizableImage = Image.extend({
       ...this.parent?.(),
       width: {
         default: null,
-        // Serialise as an HTML width attribute so the sanitizer preserves it.
-        // (The sanitizer strips non-whitelisted CSS styles but explicitly allows
-        //  width/height attributes on <img>.)
         renderHTML: (attributes: Record<string, unknown>) => {
           if (!attributes.width) return {};
           return { width: String(attributes.width) };
@@ -57,7 +55,6 @@ const ResizableImage = Image.extend({
         parseHTML: (element: HTMLElement) => {
           const attr = element.getAttribute("width");
           if (attr) return parseInt(attr, 10) || null;
-          // Fallback: legacy articles saved with inline style before this fix
           const sw = element.style.width;
           return sw ? parseInt(sw, 10) || null : null;
         },
@@ -68,6 +65,29 @@ const ResizableImage = Image.extend({
     return ReactNodeViewRenderer(ResizableImageView);
   },
 });
+
+// ─── Autosave status indicator ────────────────────────────────────────────────
+
+type AutosaveStatus = "idle" | "saving" | "saved" | "error";
+
+function AutosaveChip({ status }: { status: AutosaveStatus }) {
+  if (status === "idle") return null;
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground select-none">
+      {status === "saving" && (
+        <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</>
+      )}
+      {status === "saved" && (
+        <><Check className="h-3 w-3 text-green-500" /> Saved</>
+      )}
+      {status === "error" && (
+        <><CloudOff className="h-3 w-3 text-destructive" /><span className="text-destructive">Autosave failed</span></>
+      )}
+    </span>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ArticleEdit({ params }: { params?: { slug?: string } }) {
   const { slug } = params || {};
@@ -80,6 +100,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         : searchParams.get("title") || "")
     : "";
 
+  const draftKey = isLog ? "memex-draft-log" : "memex-draft-article";
+
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -89,6 +111,27 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [isLogSaving, setIsLogSaving] = useState(false);
+
+  // ── Autosave state ──────────────────────────────────────────────────────────
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("idle");
+  const [draftBanner, setDraftBanner] = useState(false);
+
+  // Refs so autosave timer always captures the latest values
+  const titleRef = useRef(title);
+  const groupsRef = useRef(selectedGroups);
+  const tagsRef = useRef(selectedTags);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks what was last successfully saved to the server (existing articles)
+  const lastSavedRef = useRef<{ title: string; content: string } | null>(null);
+  // Draft content to apply once the editor is ready (new articles)
+  const pendingDraftRef = useRef<string | null>(null);
+  // Stable ref to the schedule function so editor.on('update') never goes stale
+  const scheduleAutosaveRef = useRef<() => void>(() => {});
+
+  // Keep refs current every render
+  titleRef.current = title;
+  groupsRef.current = selectedGroups;
+  tagsRef.current = selectedTags;
 
   const { data: templates = [] } = useQuery<{ id: number; name: string; content: string; tags: { id: number; name: string; color: string }[] }[]>({
     queryKey: ["templates"],
@@ -153,13 +196,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     };
   }, [isNew, slug, releaseLock]);
 
-  // Release lock on beforeunload
   useEffect(() => {
     if (isNew || !slug) return;
     const onUnload = () => {
       if (!lockReleasedRef.current) {
         navigator.sendBeacon(`/api/articles/${slug}/lock-release`);
-        // sendBeacon doesn't support DELETE; use releaseLock best-effort via keepalive fetch
         fetch(`/api/articles/${slug}/lock`, { method: "DELETE", credentials: "include", keepalive: true }).catch(() => {});
         lockReleasedRef.current = true;
       }
@@ -168,7 +209,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [isNew, slug]);
 
-  // Ref for wikilink suggestion items — avoids stale closures in the extension
+  // ─── Wikilink items ref ───────────────────────────────────────────────────────
   const wikilinkItemsRef = useRef<WikilinkItem[]>([]);
   useEffect(() => {
     wikilinkItemsRef.current = (articlesData?.articles ?? []).map((a) => ({
@@ -218,9 +259,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
                 root = createRoot(container);
                 root.render(
                   <WikilinkList
-                    ref={(ref) => {
-                      componentRef = ref;
-                    }}
+                    ref={(ref) => { componentRef = ref; }}
                     items={props.items}
                     command={props.command}
                   />,
@@ -234,9 +273,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
                 }
                 root?.render(
                   <WikilinkList
-                    ref={(ref) => {
-                      componentRef = ref;
-                    }}
+                    ref={(ref) => { componentRef = ref; }}
                     items={props.items}
                     command={props.command}
                   />,
@@ -287,6 +324,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     },
   });
 
+  // ─── Load article into form ────────────────────────────────────────────────
   useEffect(() => {
     if (article && !isNew) {
       setTitle(article.title);
@@ -295,14 +333,144 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       if (editor && editor.getHTML() !== article.content) {
         editor.commands.setContent(article.content);
       }
+      // Seed lastSavedRef with what's on the server
+      lastSavedRef.current = { title: article.title, content: article.content };
     }
-  }, [article, isNew]);
+  }, [article, isNew, editor]);
 
+  // ─── Draft restore (new articles) ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isNew) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as { title?: string; content?: string };
+      const hasContent = draft.title?.trim() || (draft.content && draft.content !== "<p></p>");
+      if (!hasContent) return;
+      if (draft.title) setTitle(draft.title);
+      if (draft.content) pendingDraftRef.current = draft.content;
+      setDraftBanner(true);
+    } catch {
+      localStorage.removeItem(draftKey);
+    }
+  }, [isNew, draftKey]);
+
+  // Apply pending draft content once the editor is ready
+  useEffect(() => {
+    if (!editor || !pendingDraftRef.current) return;
+    editor.commands.setContent(pendingDraftRef.current);
+    pendingDraftRef.current = null;
+  }, [editor]);
+
+  // ─── Autosave: existing articles ──────────────────────────────────────────
+  const scheduleAutosave = useCallback(() => {
+    if (isNew || !slug || !editor) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      if (!lastSavedRef.current) return;
+
+      const currentTitle = titleRef.current.trim();
+      const currentContent = editor.getHTML();
+
+      if (!currentTitle) return;
+      if (
+        currentTitle === lastSavedRef.current.title &&
+        currentContent === lastSavedRef.current.content
+      ) return;
+
+      setAutosaveStatus("saving");
+      try {
+        const res = await fetch(`/api/articles/${slug}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            title: currentTitle,
+            content: currentContent,
+            groupIds: groupsRef.current,
+            tagIds: tagsRef.current,
+          }),
+        });
+        if (!res.ok) throw new Error("autosave failed");
+        lastSavedRef.current = { title: currentTitle, content: currentContent };
+        setAutosaveStatus("saved");
+        queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
+      } catch {
+        setAutosaveStatus("error");
+      }
+    }, 3000);
+  }, [isNew, slug, editor, queryClient]);
+
+  // ─── Autosave: new articles → localStorage ────────────────────────────────
+  const scheduleDraftSave = useCallback(() => {
+    if (!isNew || !editor) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
+    autosaveTimerRef.current = setTimeout(() => {
+      const currentTitle = titleRef.current;
+      const currentContent = editor.getHTML();
+      const isEmpty = !currentTitle.trim() && currentContent === "<p></p>";
+      if (isEmpty) return;
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({ title: currentTitle, content: currentContent }));
+        setAutosaveStatus("saved");
+      } catch {
+        // storage quota — silently ignore
+      }
+    }, 3000);
+  }, [isNew, editor, draftKey]);
+
+  // Keep the ref current (avoids stale closures in editor.on)
+  scheduleAutosaveRef.current = isNew ? scheduleDraftSave : scheduleAutosave;
+
+  // Wire up editor → autosave
+  useEffect(() => {
+    if (!editor) return;
+    const handler = () => scheduleAutosaveRef.current();
+    editor.on("update", handler);
+    return () => {
+      editor.off("update", handler);
+    };
+  }, [editor]);
+
+  // Wire up title change → autosave (for existing articles)
+  useEffect(() => {
+    if (!lastSavedRef.current) return; // article not loaded yet
+    scheduleAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title]);
+
+  // Wire up title change → draft save (for new articles)
+  useEffect(() => {
+    if (!isNew) return;
+    scheduleDraftSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, isNew]);
+
+  // Fade "saved" chip back to idle after 3 s
+  useEffect(() => {
+    if (autosaveStatus !== "saved") return;
+    const t = setTimeout(() => setAutosaveStatus("idle"), 3000);
+    return () => clearTimeout(t);
+  }, [autosaveStatus]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, []);
+
+  // ─── Manual save ─────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!title.trim()) {
       toast({ title: "Title required", variant: "destructive" });
       return;
     }
+    // Cancel any pending autosave
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
     const content = editor?.getHTML() || "";
 
     if (isNew && isLog) {
@@ -320,6 +488,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           return;
         }
         const data = await res.json() as { slug: string };
+        localStorage.removeItem(draftKey);
         toast({ title: "Log entry created" });
         setLocation(`/wiki/${data.slug}`);
       } catch {
@@ -335,6 +504,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         { data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
+            localStorage.removeItem(draftKey);
             toast({ title: "Article created" });
             setLocation(`/wiki/${data.slug}`);
           },
@@ -348,6 +518,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         { slug, data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: async (data) => {
+            lastSavedRef.current = { title, content };
+            setAutosaveStatus("idle");
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
             toast({ title: "Article updated" });
             await releaseLock();
@@ -387,11 +559,31 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         </Button>
         <h1 className="text-2xl font-bold">{isLog ? "Create Log Entry" : isNew ? "Create Article" : "Edit Article"}</h1>
         <div className="flex-1" />
+        <AutosaveChip status={autosaveStatus} />
         <Button onClick={handleSave} disabled={isPending} data-testid="button-save-article">
           {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           Save
         </Button>
       </div>
+
+      {/* Draft restored banner */}
+      {draftBanner && (
+        <div className="flex items-center gap-3 rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
+          <RotateCcw className="h-4 w-4 shrink-0 text-blue-500" />
+          <span>Your unsaved draft has been restored. Save to keep it permanently.</span>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem(draftKey);
+              setDraftBanner(false);
+            }}
+            className="ml-auto text-blue-500 hover:text-blue-700 dark:hover:text-blue-200"
+            aria-label="Dismiss and discard draft"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {lockConflict && (
         <div className="flex items-center gap-3 rounded-md border border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-700 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
@@ -616,6 +808,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
                 <li>You can paste images directly into the editor.</li>
                 <li>Drag the corner handle of any image to resize it.</li>
                 <li>Use the <kbd className="bg-muted px-1 rounded border"><TableIcon className="h-3 w-3 inline" /></kbd> button to insert a table.</li>
+                <li>Changes are saved automatically as you type.</li>
               </ul>
             </CardContent>
           </Card>

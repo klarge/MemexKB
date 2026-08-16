@@ -27,7 +27,6 @@ import {
   Shield,
   Database,
   LogOut,
-  Search,
   KeyRound,
   LayoutTemplate,
   ShieldCheck,
@@ -40,7 +39,6 @@ import {
   ListTodo,
   FolderKanban,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -70,12 +68,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
     });
   };
 
-  const onSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && e.currentTarget.value) {
-      setLocation(`/?search=${encodeURIComponent(e.currentTarget.value)}`);
-    }
-  };
-
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   return (
@@ -98,14 +90,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
                 )}
               </div>
               <span className="font-semibold text-lg tracking-tight">{siteName}</span>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search knowledge..."
-                className="pl-9 bg-background/50 border-border focus-visible:ring-primary"
-                onKeyDown={onSearch}
-              />
             </div>
           </SidebarHeader>
 

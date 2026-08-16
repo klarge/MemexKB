@@ -592,6 +592,112 @@ router.get("/log", requireAuth, async (req, res) => {
   res.json({ entries: result, total: result.length });
 });
 
+// ─── Unified Search ───────────────────────────────────────────────────────────
+
+router.get("/search", requireAuth, async (req, res) => {
+  const { q } = req.query;
+  if (!q || typeof q !== "string" || q.trim().length < 2) {
+    res.json({ articles: [], logEntries: [] });
+    return;
+  }
+  const term = q.trim();
+  const userId = req.session.userId;
+  const userRole = req.session.userRole;
+  const userGroupIds = await getUserGroupIds(userId);
+
+  const searchCond = or(
+    ilike(articlesTable.title, `%${term}%`),
+    ilike(articlesTable.content, `%${term}%`),
+  );
+
+  // ── Articles ──
+  const rawArticles = await db
+    .select({
+      id: articlesTable.id,
+      slug: articlesTable.slug,
+      title: articlesTable.title,
+      updatedAt: articlesTable.updatedAt,
+      updatedByName: usersTable.name,
+    })
+    .from(articlesTable)
+    .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
+    .where(and(ne(articlesTable.isLogEntry, true), searchCond!))
+    .orderBy(desc(articlesTable.updatedAt))
+    .limit(20);
+
+  const articleIds = rawArticles.map((a) => a.id);
+  const articleGroups =
+    articleIds.length > 0
+      ? await db
+          .select()
+          .from(articleGroupsTable)
+          .where(inArray(articleGroupsTable.articleId, articleIds))
+      : [];
+
+  const articles = rawArticles
+    .filter((a) => {
+      const gids = articleGroups.filter((g) => g.articleId === a.id).map((g) => g.groupId);
+      return canAccessArticle(gids, userGroupIds, userRole);
+    })
+    .slice(0, 8)
+    .map((a) => ({
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      updatedAt: a.updatedAt,
+      updatedByName: a.updatedByName ?? null,
+    }));
+
+  // ── Log entries (only if feature enabled) ──
+  let logEntries: typeof articles = [];
+  if (await isLogEntriesEnabled()) {
+    const rawLogs = await db
+      .select({
+        id: articlesTable.id,
+        slug: articlesTable.slug,
+        title: articlesTable.title,
+        updatedAt: articlesTable.updatedAt,
+        updatedByName: usersTable.name,
+      })
+      .from(articlesTable)
+      .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
+      .where(
+        and(
+          eq(articlesTable.isLogEntry, true),
+          eq(articlesTable.createdById, userId!),
+          searchCond!,
+        ),
+      )
+      .orderBy(desc(articlesTable.createdAt))
+      .limit(10);
+
+    const logIds = rawLogs.map((e) => e.id);
+    const logGroups =
+      logIds.length > 0
+        ? await db
+            .select()
+            .from(articleGroupsTable)
+            .where(inArray(articleGroupsTable.articleId, logIds))
+        : [];
+
+    logEntries = rawLogs
+      .filter((e) => {
+        const gids = logGroups.filter((g) => g.articleId === e.id).map((g) => g.groupId);
+        return canAccessArticle(gids, userGroupIds, userRole);
+      })
+      .slice(0, 5)
+      .map((e) => ({
+        id: e.id,
+        slug: e.slug,
+        title: e.title,
+        updatedAt: e.updatedAt,
+        updatedByName: e.updatedByName ?? null,
+      }));
+  }
+
+  res.json({ articles, logEntries });
+});
+
 // ─── Edit Locks ──────────────────────────────────────────────────────────────
 
 const LOCK_TTL_MS = 2 * 60 * 1000; // 2 minutes

@@ -7,8 +7,16 @@ import {
   groupsTable,
   tagsTable,
   articleTagsTable,
+  usersTable,
+  taskListsTable,
+  tasksTable,
+  projectsTable,
+  boardsTable,
+  boardColumnsTable,
+  boardCardsTable,
+  boardCardMembersTable,
 } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, asc, desc, ne } from "drizzle-orm";
 import { createRequire } from "node:module";
 import multer from "multer";
 const _require = createRequire(import.meta.url);
@@ -602,6 +610,123 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
   }
 
   res.json({ imported, skipped, errors });
+});
+
+// ─── Additional Exports ───────────────────────────────────────────────────────
+
+router.get("/admin/export/logs", requireAuth, requireRole("admin"), async (_req, res) => {
+  const entries = await db
+    .select({
+      slug: articlesTable.slug,
+      title: articlesTable.title,
+      content: articlesTable.content,
+      createdAt: articlesTable.createdAt,
+      updatedAt: articlesTable.updatedAt,
+      createdByName: usersTable.name,
+    })
+    .from(articlesTable)
+    .leftJoin(usersTable, eq(articlesTable.createdById, usersTable.id))
+    .where(eq(articlesTable.isLogEntry, true))
+    .orderBy(desc(articlesTable.createdAt));
+
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", 'attachment; filename="logs-export.json"');
+  res.json({
+    exportedAt: new Date(),
+    entryCount: entries.length,
+    entries: entries.map((e) => ({
+      slug: e.slug,
+      title: e.title,
+      content: e.content,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+      createdByName: e.createdByName ?? null,
+    })),
+  });
+});
+
+router.get("/admin/export/tasks", requireAuth, requireRole("admin"), async (_req, res) => {
+  const [lists, tasks, users] = await Promise.all([
+    db.select().from(taskListsTable).orderBy(asc(taskListsTable.createdAt)),
+    db.select().from(tasksTable).orderBy(asc(tasksTable.listId), asc(tasksTable.position), asc(tasksTable.createdAt)),
+    db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable),
+  ]);
+
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", 'attachment; filename="tasks-export.json"');
+  res.json({
+    exportedAt: new Date(),
+    listCount: lists.length,
+    taskCount: tasks.length,
+    lists: lists.map((list) => ({
+      name: list.name,
+      owner: userMap.get(list.userId) ?? null,
+      createdAt: list.createdAt,
+      tasks: tasks
+        .filter((t) => t.listId === list.id)
+        .map((t) => ({
+          title: t.title,
+          completed: t.completedAt !== null,
+          completedAt: t.completedAt ?? null,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        })),
+    })),
+  });
+});
+
+router.get("/admin/export/projects", requireAuth, requireRole("admin"), async (_req, res) => {
+  const [projects, boards, columns, cards, members, users] = await Promise.all([
+    db.select().from(projectsTable).orderBy(asc(projectsTable.createdAt)),
+    db.select().from(boardsTable).orderBy(asc(boardsTable.position)),
+    db.select().from(boardColumnsTable).orderBy(asc(boardColumnsTable.position)),
+    db.select().from(boardCardsTable).orderBy(asc(boardCardsTable.position)),
+    db.select().from(boardCardMembersTable),
+    db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable),
+  ]);
+
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+  const cardMembersMap = new Map<number, string[]>();
+  for (const m of members) {
+    const names = cardMembersMap.get(m.cardId) ?? [];
+    names.push(userMap.get(m.userId) ?? `user:${m.userId}`);
+    cardMembersMap.set(m.cardId, names);
+  }
+
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", 'attachment; filename="projects-export.json"');
+  res.json({
+    exportedAt: new Date(),
+    projectCount: projects.length,
+    projects: projects.map((project) => ({
+      name: project.name,
+      description: project.description || null,
+      createdBy: userMap.get(project.createdById ?? -1) ?? null,
+      createdAt: project.createdAt,
+      boards: boards
+        .filter((b) => b.projectId === project.id)
+        .map((board) => ({
+          name: board.name,
+          columns: columns
+            .filter((c) => c.boardId === board.id)
+            .map((col) => ({
+              name: col.name,
+              cards: cards
+                .filter((c) => c.columnId === col.id)
+                .map((card) => ({
+                  title: card.title,
+                  description: card.description || null,
+                  dueDate: card.dueDate ?? null,
+                  assignedTo: cardMembersMap.get(card.id) ?? [],
+                  createdAt: card.createdAt,
+                })),
+            })),
+        })),
+    })),
+  });
 });
 
 export default router;

@@ -7,6 +7,7 @@ import {
   boardColumnsTable,
   boardCardsTable,
   boardCardMembersTable,
+  boardCardCommentsTable,
   groupsTable,
   groupMembersTable,
   usersTable,
@@ -437,6 +438,62 @@ router.delete("/cards/:cardId/members/:userId", requireAuth, async (req, res) =>
   const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
   await db.delete(boardCardMembersTable).where(and(eq(boardCardMembersTable.cardId, cardId), eq(boardCardMembersTable.userId, userId)));
+  res.status(204).send();
+});
+
+// ─── Card Comments ────────────────────────────────────────────────────────────
+
+router.get("/cards/:cardId/comments", requireAuth, async (req, res) => {
+  const cardId = Number(req.params.cardId);
+  const projectId = await getProjectIdForCard(cardId);
+  if (!projectId) { res.status(404).json({ error: "Card not found" }); return; }
+  const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+  const comments = await db
+    .select({
+      id: boardCardCommentsTable.id,
+      cardId: boardCardCommentsTable.cardId,
+      userId: boardCardCommentsTable.userId,
+      content: boardCardCommentsTable.content,
+      createdAt: boardCardCommentsTable.createdAt,
+      userName: usersTable.name,
+    })
+    .from(boardCardCommentsTable)
+    .leftJoin(usersTable, eq(boardCardCommentsTable.userId, usersTable.id))
+    .where(eq(boardCardCommentsTable.cardId, cardId))
+    .orderBy(asc(boardCardCommentsTable.createdAt));
+  res.json(comments);
+});
+
+router.post("/cards/:cardId/comments", requireAuth, async (req, res) => {
+  const cardId = Number(req.params.cardId);
+  const projectId = await getProjectIdForCard(cardId);
+  if (!projectId) { res.status(404).json({ error: "Card not found" }); return; }
+  const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+  const { content } = req.body as { content?: string };
+  if (!content?.trim()) { res.status(400).json({ error: "Content required" }); return; }
+  const [comment] = await db
+    .insert(boardCardCommentsTable)
+    .values({ cardId, userId: req.session.userId!, content: content.trim() })
+    .returning();
+  const [user] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, req.session.userId!)).limit(1);
+  res.status(201).json({ ...comment, userName: user?.name ?? null });
+});
+
+router.delete("/cards/:cardId/comments/:commentId", requireAuth, async (req, res) => {
+  const cardId = Number(req.params.cardId);
+  const commentId = Number(req.params.commentId);
+  const projectId = await getProjectIdForCard(cardId);
+  if (!projectId) { res.status(404).json({ error: "Card not found" }); return; }
+  const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+  const [comment] = await db.select().from(boardCardCommentsTable).where(eq(boardCardCommentsTable.id, commentId)).limit(1);
+  if (!comment) { res.status(404).json({ error: "Comment not found" }); return; }
+  if (comment.userId !== req.session.userId && req.session.userRole !== "admin") {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  await db.delete(boardCardCommentsTable).where(eq(boardCardCommentsTable.id, commentId));
   res.status(204).send();
 });
 

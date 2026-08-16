@@ -82,7 +82,20 @@ export const boardCardMembersTable = pgTable(
   (t) => [primaryKey({ columns: [t.cardId, t.userId] })],
 );
 
+export const boardCardCommentsTable = pgTable("board_card_comments", {
+  id: serial("id").primaryKey(),
+  cardId: integer("card_id")
+    .notNull()
+    .references(() => boardCardsTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Project = typeof projectsTable.$inferSelect;
 export type Board = typeof boardsTable.$inferSelect;
 export type BoardColumn = typeof boardColumnsTable.$inferSelect;
 export type BoardCard = typeof boardCardsTable.$inferSelect;
+export type BoardCardComment = typeof boardCardCommentsTable.$inferSelect;

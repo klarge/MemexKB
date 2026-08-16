@@ -6,6 +6,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -129,7 +130,9 @@ function SortableTaskItem({
       <button
         type="button"
         onClick={() => onDelete(task.id)}
-        className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+        className={`shrink-0 transition-all text-muted-foreground hover:text-destructive ${
+          done ? "opacity-50 hover:opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
         aria-label="Delete task"
       >
         <Trash2 className="h-3.5 w-3.5" />
@@ -211,7 +214,8 @@ function ListCard({
     : activeTasks;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -339,19 +343,30 @@ function ListCard({
       {/* Completed section */}
       {completedTasks.length > 0 && (
         <div className="border-t">
-          <button
-            type="button"
-            onClick={() => setShowCompleted((s) => !s)}
-            className="flex items-center gap-1.5 w-full px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showCompleted ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
-            {completedTasks.length}{" "}
-            {completedTasks.length === 1 ? "completed task" : "completed tasks"}
-          </button>
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setShowCompleted((s) => !s)}
+              className="flex items-center gap-1.5 flex-1 px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showCompleted ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+              {completedTasks.length}{" "}
+              {completedTasks.length === 1 ? "completed task" : "completed tasks"}
+            </button>
+            <button
+              type="button"
+              onClick={() => completedTasks.forEach((t) => onDeleteTask(t.id))}
+              className="px-3 py-2.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
+              aria-label="Delete all completed tasks"
+              title="Delete all completed"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
           {showCompleted && (
             <div className="pb-1 bg-muted/10">
               {completedTasks.map((task) => (
