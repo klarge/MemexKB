@@ -735,7 +735,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
       </div>
 
       {/* Kanban canvas */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto p-6">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -743,7 +743,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
         >
-          <div className="flex gap-4 items-start min-h-full">
+          <div className="flex gap-4 items-start h-full p-6">
             {columnOrder.map((cId) => {
               const col = columnMap[cId];
               if (!col) return null;
