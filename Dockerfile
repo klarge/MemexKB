@@ -4,7 +4,10 @@
 # Stage 2 (runtime): lean Alpine image — only the compiled output and a handful of runtime packages
 
 # ── Stage 1: Builder ─────────────────────────────────────────────────────────
-FROM node:24-slim AS builder
+# Always build on the native runner platform so pnpm/esbuild/vite run at full
+# speed without QEMU emulation. The compiled output (JS bundles, static assets)
+# is architecture-independent, so this is always safe.
+FROM --platform=$BUILDPLATFORM node:24-slim AS builder
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -29,6 +32,8 @@ RUN NODE_ENV=production PORT=4000 BASE_PATH=/ \
     pnpm --filter @workspace/knowledge-base run build
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+# This stage uses the target platform (arm64, amd64, etc.) — the Node binary
+# here must match the architecture the container will actually run on.
 FROM node:24-alpine AS runtime
 
 WORKDIR /app
