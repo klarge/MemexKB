@@ -12,7 +12,7 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and push linux/amd64 image
+    name: Build and push multi-platform image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,7 +51,7 @@ jobs:
         with:
           context: .
           target: runtime
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
