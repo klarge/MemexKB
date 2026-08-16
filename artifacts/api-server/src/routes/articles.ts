@@ -14,6 +14,13 @@ import {
   usersTable,
   editLocksTable,
   siteSettingsTable,
+  tasksTable,
+  taskListsTable,
+  boardCardsTable,
+  boardColumnsTable,
+  boardsTable,
+  projectsTable,
+  projectGroupsTable,
 } from "@workspace/db";
 import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
@@ -597,7 +604,7 @@ router.get("/log", requireAuth, async (req, res) => {
 router.get("/search", requireAuth, async (req, res) => {
   const { q } = req.query;
   if (!q || typeof q !== "string" || q.trim().length < 2) {
-    res.json({ articles: [], logEntries: [] });
+    res.json({ articles: [], logEntries: [], tasks: [], cards: [] });
     return;
   }
   const term = q.trim();
@@ -695,9 +702,95 @@ router.get("/search", requireAuth, async (req, res) => {
       }));
   }
 
-  res.json({ articles, logEntries });
-});
+  // ── Tasks (user-scoped) ──
+  const rawTasks = await db
+    .select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      updatedAt: tasksTable.updatedAt,
+      listId: tasksTable.listId,
+      listName: taskListsTable.name,
+    })
+    .from(tasksTable)
+    .leftJoin(taskListsTable, eq(tasksTable.listId, taskListsTable.id))
+    .where(
+      and(
+        eq(tasksTable.userId, userId!),
+        ilike(tasksTable.title, `%${term}%`),
+      ),
+    )
+    .orderBy(desc(tasksTable.updatedAt))
+    .limit(8);
 
+  const tasks = rawTasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    updatedAt: t.updatedAt,
+    listName: t.listName ?? null,
+  }));
+
+  // ── Board cards (restricted to projects the user can access) ──
+  let accessibleProjectIds: number[];
+  if (userRole === "admin") {
+    const allProjects = await db.select({ id: projectsTable.id }).from(projectsTable);
+    accessibleProjectIds = allProjects.map((p) => p.id);
+  } else {
+    const ownProjects = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(eq(projectsTable.createdById, userId!));
+    let groupProjectIds: number[] = [];
+    if (userGroupIds.length > 0) {
+      const pgRows = await db
+        .select({ projectId: projectGroupsTable.projectId })
+        .from(projectGroupsTable)
+        .where(inArray(projectGroupsTable.groupId, userGroupIds));
+      groupProjectIds = pgRows.map((r) => r.projectId);
+    }
+    accessibleProjectIds = [...new Set([...ownProjects.map((p) => p.id), ...groupProjectIds])];
+  }
+
+  let cards: { id: number; title: string; updatedAt: Date; projectId: number; boardId: number; boardName: string | null; projectName: string | null }[] = [];
+  if (accessibleProjectIds.length > 0) {
+    const rawCards = await db
+      .select({
+        id: boardCardsTable.id,
+        title: boardCardsTable.title,
+        updatedAt: boardCardsTable.updatedAt,
+        projectId: boardsTable.projectId,
+        boardId: boardsTable.id,
+        boardName: boardsTable.name,
+        projectName: projectsTable.name,
+      })
+      .from(boardCardsTable)
+      .innerJoin(boardColumnsTable, eq(boardCardsTable.columnId, boardColumnsTable.id))
+      .innerJoin(boardsTable, eq(boardColumnsTable.boardId, boardsTable.id))
+      .innerJoin(projectsTable, eq(boardsTable.projectId, projectsTable.id))
+      .where(
+        and(
+          inArray(boardsTable.projectId, accessibleProjectIds),
+          or(
+            ilike(boardCardsTable.title, `%${term}%`),
+            ilike(boardCardsTable.description, `%${term}%`),
+          )!,
+        ),
+      )
+      .orderBy(desc(boardCardsTable.updatedAt))
+      .limit(8);
+
+    cards = rawCards.map((c) => ({
+      id: c.id,
+      title: c.title,
+      updatedAt: c.updatedAt,
+      projectId: c.projectId,
+      boardId: c.boardId,
+      boardName: c.boardName ?? null,
+      projectName: c.projectName ?? null,
+    }));
+  }
+
+  res.json({ articles, logEntries, tasks, cards });
+});
 // ─── Edit Locks ──────────────────────────────────────────────────────────────
 
 const LOCK_TTL_MS = 2 * 60 * 1000; // 2 minutes

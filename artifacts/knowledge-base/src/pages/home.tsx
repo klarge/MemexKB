@@ -21,6 +21,8 @@ import {
   ListTodo,
   Calendar,
   FolderKanban,
+  CheckSquare,
+  LayoutKanban,
 } from "lucide-react";
 import { formatDistanceToNow, format, isPast, isToday } from "date-fns";
 
@@ -57,9 +59,28 @@ type SearchResult = {
   updatedByName: string | null;
 };
 
+type TaskSearchResult = {
+  id: number;
+  title: string;
+  updatedAt: string;
+  listName: string | null;
+};
+
+type CardSearchResult = {
+  id: number;
+  title: string;
+  updatedAt: string;
+  projectId: number;
+  boardId: number;
+  boardName: string | null;
+  projectName: string | null;
+};
+
 type SearchResults = {
   articles: SearchResult[];
   logEntries: SearchResult[];
+  tasks: TaskSearchResult[];
+  cards: CardSearchResult[];
 };
 
 type ActiveTask = {
@@ -224,7 +245,11 @@ export default function Home() {
   });
 
   const hasResults =
-    searchData && (searchData.articles.length > 0 || searchData.logEntries.length > 0);
+    searchData &&
+    (searchData.articles.length > 0 ||
+      searchData.logEntries.length > 0 ||
+      (searchData.tasks ?? []).length > 0 ||
+      (searchData.cards ?? []).length > 0);
   const noResults = searching && !searchFetching && searchData && !hasResults;
 
   // ── Dashboard data ────────────────────────────────────────────────────────
@@ -280,7 +305,7 @@ export default function Home() {
             ref={inputRef}
             value={rawQuery}
             onChange={(e) => setRawQuery(e.target.value)}
-            placeholder="Search articles and log entries…"
+            placeholder="Search articles, tasks, and project cards…"
             className="pl-9 pr-9 h-10 text-sm"
           />
           {rawQuery && !searchFetching && (
@@ -343,6 +368,62 @@ export default function Home() {
               <div className="rounded-lg border bg-card divide-y divide-border overflow-hidden">
                 {searchData.logEntries.map((r) => (
                   <SearchResultRow key={r.id} result={r} icon={<ScrollText className="h-4 w-4" />} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {searchData && (searchData.tasks ?? []).length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <CheckSquare className="h-4 w-4 text-muted-foreground" />
+                <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Tasks</h2>
+                <span className="ml-1 text-xs text-muted-foreground tabular-nums">({searchData.tasks.length})</span>
+              </div>
+              <div className="rounded-lg border bg-card divide-y divide-border overflow-hidden">
+                {searchData.tasks.map((t) => (
+                  <Link key={t.id} href="/tasks">
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
+                      <div className="shrink-0 text-muted-foreground">
+                        <CheckSquare className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{t.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {t.listName && <span>{t.listName} · </span>}
+                          Updated {formatDistanceToNow(new Date(t.updatedAt), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {searchData && (searchData.cards ?? []).length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <LayoutKanban className="h-4 w-4 text-muted-foreground" />
+                <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Project Cards</h2>
+                <span className="ml-1 text-xs text-muted-foreground tabular-nums">({searchData.cards.length})</span>
+              </div>
+              <div className="rounded-lg border bg-card divide-y divide-border overflow-hidden">
+                {searchData.cards.map((c) => (
+                  <Link key={c.id} href={`/projects/${c.projectId}/boards/${c.boardId}`}>
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
+                      <div className="shrink-0 text-muted-foreground">
+                        <LayoutKanban className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{c.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {c.projectName && <span>{c.projectName}{c.boardName ? ` · ${c.boardName}` : ""} · </span>}
+                          Updated {formatDistanceToNow(new Date(c.updatedAt), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
                 ))}
               </div>
             </section>
