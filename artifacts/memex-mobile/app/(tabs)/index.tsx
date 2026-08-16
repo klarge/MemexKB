@@ -17,6 +17,7 @@ import { useColors } from '@/hooks/useColors';
 import { useApp, type CachedArticle } from '@/context/AppContext';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { BottomTabBar } from '@/components/BottomTabBar';
 
 // ─── Article card ─────────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ export default function ArticleList() {
         )}
       </View>
 
-      {/* Article list */}
+      {/* Article list / empty states */}
       {cachedArticles.length === 0 && !isSyncing ? (
         <View style={s.empty}>
           <Feather name="book-open" size={40} color={colors.mutedForeground} />
@@ -262,7 +263,7 @@ export default function ArticleList() {
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           scrollEnabled={!!filtered.length}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+          contentContainerStyle={{ paddingBottom: 20 }}
           refreshControl={
             <RefreshControl
               refreshing={isSyncing}
@@ -272,6 +273,8 @@ export default function ArticleList() {
           }
         />
       )}
+
+      <BottomTabBar active="articles" />
     </View>
   );
 }

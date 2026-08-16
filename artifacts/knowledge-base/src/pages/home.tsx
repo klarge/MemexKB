@@ -22,7 +22,7 @@ import {
   Calendar,
   FolderKanban,
   CheckSquare,
-  LayoutKanban,
+  KanbanSquare,
 } from "lucide-react";
 import { formatDistanceToNow, format, isPast, isToday } from "date-fns";
 
@@ -404,7 +404,7 @@ export default function Home() {
           {searchData && (searchData.cards ?? []).length > 0 && (
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <LayoutKanban className="h-4 w-4 text-muted-foreground" />
+                <KanbanSquare className="h-4 w-4 text-muted-foreground" />
                 <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Project Cards</h2>
                 <span className="ml-1 text-xs text-muted-foreground tabular-nums">({searchData.cards.length})</span>
               </div>
@@ -413,7 +413,7 @@ export default function Home() {
                   <Link key={c.id} href={`/projects/${c.projectId}/boards/${c.boardId}`}>
                     <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
                       <div className="shrink-0 text-muted-foreground">
-                        <LayoutKanban className="h-4 w-4" />
+                        <KanbanSquare className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{c.title}</p>
