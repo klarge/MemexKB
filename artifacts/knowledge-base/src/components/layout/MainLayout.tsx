@@ -36,6 +36,9 @@ import {
   Moon,
   ExternalLink,
   BookOpen,
+  Library,
+  ListTodo,
+  FolderKanban,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -119,12 +122,43 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location.startsWith("/knowledge")}
+                    >
+                      <Link href="/knowledge">
+                        <Library className="mr-2 h-4 w-4" />
+                        <span>Knowledge</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   {siteSettings?.logEntriesEnabled && (
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={location === "/log"}>
                         <Link href="/log">
                           <BookOpen className="mr-2 h-4 w-4" />
                           <span>Log</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {siteSettings?.tasksEnabled !== false && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.startsWith("/tasks")}>
+                        <Link href="/tasks">
+                          <ListTodo className="mr-2 h-4 w-4" />
+                          <span>Tasks</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {siteSettings?.projectsEnabled !== false && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.startsWith("/projects")}>
+                        <Link href="/projects">
+                          <FolderKanban className="mr-2 h-4 w-4" />
+                          <span>Projects</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

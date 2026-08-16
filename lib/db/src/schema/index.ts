@@ -5,3 +5,5 @@ export * from "./tokens";
 export * from "./templates";
 export * from "./sso";
 export * from "./settings";
+export * from "./tasks";
+export * from "./projects";

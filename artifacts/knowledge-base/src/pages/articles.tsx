@@ -59,7 +59,7 @@ export default function Articles() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Articles</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-primary">Knowledge</h1>
           <p className="text-muted-foreground mt-1">Browse and search all knowledge base articles.</p>
         </div>
         {(user?.role === "admin" || user?.role === "editor") && (

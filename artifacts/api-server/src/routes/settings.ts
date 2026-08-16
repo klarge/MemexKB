@@ -45,13 +45,15 @@ router.get("/settings", async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
     navLinks: parseNavLinks(map.get("nav_links")),
     logEntriesEnabled: map.get("log_entries_enabled") === "true",
+    tasksEnabled: map.get("tasks_enabled") !== "false",
+    projectsEnabled: map.get("projects_enabled") !== "false",
   });
 });
 
@@ -79,20 +81,27 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
     navLinks: parseNavLinks(map.get("nav_links")),
     logEntriesEnabled: map.get("log_entries_enabled") === "true",
+    tasksEnabled: map.get("tasks_enabled") !== "false",
+    projectsEnabled: map.get("projects_enabled") !== "false",
   });
 });
 
 // ── Admin: update settings ────────────────────────────────────────────────────
 
 router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
-  const { siteName, logEntriesEnabled } = req.body as { siteName?: string; logEntriesEnabled?: boolean };
+  const { siteName, logEntriesEnabled, tasksEnabled, projectsEnabled } = req.body as {
+    siteName?: string;
+    logEntriesEnabled?: boolean;
+    tasksEnabled?: boolean;
+    projectsEnabled?: boolean;
+  };
 
   if (siteName !== undefined) {
     if (typeof siteName !== "string" || !siteName.trim()) {
@@ -104,6 +113,14 @@ router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
 
   if (logEntriesEnabled !== undefined) {
     await setSetting("log_entries_enabled", String(Boolean(logEntriesEnabled)));
+  }
+
+  if (tasksEnabled !== undefined) {
+    await setSetting("tasks_enabled", String(Boolean(tasksEnabled)));
+  }
+
+  if (projectsEnabled !== undefined) {
+    await setSetting("projects_enabled", String(Boolean(projectsEnabled)));
   }
 
   res.json({ ok: true });

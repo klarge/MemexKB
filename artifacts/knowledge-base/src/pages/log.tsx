@@ -34,6 +34,22 @@ export default function LogPage() {
 
   const entries = data?.entries ?? [];
 
+  // Check if today's entry already exists
+  const todayTitle = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const todayEntry = entries.find((e) => e.title === todayTitle);
+
+  const handleNewEntry = () => {
+    if (todayEntry) {
+      setLocation(`/wiki/${todayEntry.slug}/edit`);
+    } else {
+      setLocation("/wiki/new?log=1");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -47,8 +63,9 @@ export default function LogPage() {
           </p>
         </div>
         {canEdit && (
-          <Button onClick={() => setLocation("/wiki/new?log=1")}>
-            <Plus className="mr-2 h-4 w-4" /> New Entry
+          <Button onClick={handleNewEntry}>
+            <Plus className="mr-2 h-4 w-4" />
+            {todayEntry ? "Edit Today's Entry" : "New Entry"}
           </Button>
         )}
       </div>

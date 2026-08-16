@@ -10,6 +10,9 @@ export const articlesTable = pgTable("articles", {
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   isLogEntry: boolean("is_log_entry").notNull().default(false),
+  createdById: integer("created_by_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
   updatedById: integer("updated_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),

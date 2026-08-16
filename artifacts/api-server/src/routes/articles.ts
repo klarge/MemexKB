@@ -364,7 +364,7 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
   const sanitizedContent = sanitizeArticleHtml(content ?? "");
   const [article] = await db
     .insert(articlesTable)
-    .values({ slug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), updatedById: req.session.userId ?? null })
+    .values({ slug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
     .returning();
 
   if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
@@ -460,6 +460,12 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
     return;
   }
 
+  // Log entries can only be edited by their creator or an admin
+  if (existing.isLogEntry && req.session.userRole !== "admin" && existing.createdById !== req.session.userId) {
+    res.status(403).json({ error: "You can only edit your own log entries" });
+    return;
+  }
+
   // Editors must be members of at least one group the article belongs to (admins bypass)
   const articleGroups = await getArticleGroups(existing.id);
   const articleGroupIds = articleGroups.map((g) => g.id);
@@ -550,7 +556,7 @@ router.get("/log", requireAuth, async (req, res) => {
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .where(eq(articlesTable.isLogEntry, true))
+    .where(and(eq(articlesTable.isLogEntry, true), eq(articlesTable.createdById, userId!)))
     .orderBy(desc(articlesTable.createdAt))
     .limit(500);
 

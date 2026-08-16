@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical, BookOpen } from "lucide-react";
+import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical, BookOpen, ListTodo, FolderKanban } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL, type NavLink } from "@/lib/site-settings";
 
@@ -30,6 +30,14 @@ export default function AdminCustomization() {
   // ── Log entries toggle ───────────────────────────────────────────────────────
   const [logEntriesEnabled, setLogEntriesEnabled] = useState<boolean | null>(null);
   const activeLogEntries = logEntriesEnabled ?? settings?.logEntriesEnabled ?? false;
+
+  // ── Tasks toggle ─────────────────────────────────────────────────────────────
+  const [tasksEnabled, setTasksEnabled] = useState<boolean | null>(null);
+  const activeTasksEnabled = tasksEnabled ?? settings?.tasksEnabled ?? true;
+
+  // ── Projects toggle ───────────────────────────────────────────────────────────
+  const [projectsEnabled, setProjectsEnabled] = useState<boolean | null>(null);
+  const activeProjectsEnabled = projectsEnabled ?? settings?.projectsEnabled ?? true;
 
   // ── Nav links ────────────────────────────────────────────────────────────────
   const [links, setLinks] = useState<NavLink[] | null>(null); // null = not yet diverged from server
@@ -125,6 +133,44 @@ export default function AdminCustomization() {
   const handleToggleLogEntries = (checked: boolean) => {
     setLogEntriesEnabled(checked);
     saveLogSettingMutation.mutate(checked);
+  };
+
+  const saveTasksSettingMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tasksEnabled: enabled }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+      return res.json();
+    },
+    onSuccess: () => { invalidate(); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const handleToggleTasks = (checked: boolean) => {
+    setTasksEnabled(checked);
+    saveTasksSettingMutation.mutate(checked);
+  };
+
+  const saveProjectsSettingMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectsEnabled: enabled }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+      return res.json();
+    },
+    onSuccess: () => { invalidate(); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const handleToggleProjects = (checked: boolean) => {
+    setProjectsEnabled(checked);
+    saveProjectsSettingMutation.mutate(checked);
   };
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -405,6 +451,60 @@ export default function AdminCustomization() {
               {activeLogEntries ? "Enabled" : "Disabled"}
             </label>
             {saveLogSettingMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tasks */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ListTodo className="h-4 w-4" />
+            Tasks
+          </CardTitle>
+          <CardDescription>
+            When enabled, a "Tasks" section appears in the sidebar where users can create personal to-do lists and track items with checkboxes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="tasks-toggle"
+              checked={activeTasksEnabled}
+              onCheckedChange={handleToggleTasks}
+              disabled={saveTasksSettingMutation.isPending}
+            />
+            <label htmlFor="tasks-toggle" className="text-sm cursor-pointer select-none">
+              {activeTasksEnabled ? "Enabled" : "Disabled"}
+            </label>
+            {saveTasksSettingMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Projects */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FolderKanban className="h-4 w-4" />
+            Projects
+          </CardTitle>
+          <CardDescription>
+            When enabled, a "Projects" section appears in the sidebar where users can create Kanban boards with columns, cards, due dates, and member assignments. Projects can be shared with groups.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="projects-toggle"
+              checked={activeProjectsEnabled}
+              onCheckedChange={handleToggleProjects}
+              disabled={saveProjectsSettingMutation.isPending}
+            />
+            <label htmlFor="projects-toggle" className="text-sm cursor-pointer select-none">
+              {activeProjectsEnabled ? "Enabled" : "Disabled"}
+            </label>
+            {saveProjectsSettingMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           </div>
         </CardContent>
       </Card>

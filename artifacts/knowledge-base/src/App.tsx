@@ -27,6 +27,11 @@ import AdminSso from "@/pages/admin-sso";
 import AdminCustomization from "@/pages/admin-customization";
 import AdminTags from "@/pages/admin-tags";
 import LogPage from "@/pages/log";
+import TasksPage from "@/pages/tasks";
+import ProjectsPage from "@/pages/projects";
+import ProjectPage from "@/pages/project";
+import BoardPage from "@/pages/board";
+import Knowledge from "@/pages/articles";
 
 const queryClient = new QueryClient();
 
@@ -189,6 +194,40 @@ function Router() {
         {(params: Record<string, string>) => (
           <AuthRoute editorOnly>
             <ArticleHistory params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/knowledge">
+        <AuthRoute>
+          <Knowledge />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/tasks">
+        <AuthRoute>
+          <TasksPage />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/projects">
+        <AuthRoute>
+          <ProjectsPage />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/projects/:projectId">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <ProjectPage params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/projects/:projectId/boards/:boardId">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <BoardPage params={params} />
           </AuthRoute>
         )}
       </Route>

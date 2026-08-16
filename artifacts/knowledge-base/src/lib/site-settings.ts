@@ -11,6 +11,8 @@ export interface SiteSettings {
   hasLogo: boolean;
   navLinks: NavLink[];
   logEntriesEnabled: boolean;
+  tasksEnabled: boolean;
+  projectsEnabled: boolean;
 }
 
 export const SITE_SETTINGS_KEY = ["site-settings"] as const;
