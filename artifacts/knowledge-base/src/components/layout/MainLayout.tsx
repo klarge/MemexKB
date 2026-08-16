@@ -222,6 +222,28 @@ export function MainLayout({ children }: { children: ReactNode }) {
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
+                        isActive={location === "/admin/customization"}
+                      >
+                        <Link href="/admin/customization">
+                          <Paintbrush className="mr-2 h-4 w-4" />
+                          <span>Customization</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location === "/admin/tags"}
+                      >
+                        <Link href="/admin/tags">
+                          <Tag className="mr-2 h-4 w-4" />
+                          <span>Tags</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
                         isActive={location === "/admin/import-export"}
                       >
                         <Link href="/admin/import-export">
@@ -249,28 +271,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
                         <Link href="/admin/sso">
                           <ShieldCheck className="mr-2 h-4 w-4" />
                           <span>SSO / Identity</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={location === "/admin/customization"}
-                      >
-                        <Link href="/admin/customization">
-                          <Paintbrush className="mr-2 h-4 w-4" />
-                          <span>Customization</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={location === "/admin/tags"}
-                      >
-                        <Link href="/admin/tags">
-                          <Tag className="mr-2 h-4 w-4" />
-                          <span>Tags</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
