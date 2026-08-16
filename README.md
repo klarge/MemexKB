@@ -4,6 +4,22 @@ A self-hostable wiki and productivity hub with a React frontend and Express back
 
 ---
 
+## Features
+
+- **Dashboard** — home page showing recent log entries, recently updated articles, and a "Needs Review" list (oldest by last-updated date)
+- **Articles** — rich-text editing (TipTap), wikilinks, backlinks, version history, tags, PDF/Markdown export
+- **Log Entries** — optional date-titled journal, kept separate from the main article list; togglable by admins
+- **Tasks** — personal to-do lists with multiple named lists, checkbox items, and completed-task collapse; visible only to you; togglable by admins
+- **Projects** — collaborative Kanban boards: create Projects, add Boards, define Columns, drag-and-drop Cards with due dates and member assignment; share Projects with Groups; togglable by admins
+- **Groups & access control** — restrict articles and projects to specific groups; role-based access (admin / editor / viewer)
+- **Tags** — colour-coded labels on articles; filterable in the article list
+- **Edit locking** — warns a second editor when someone is already editing an article
+- **API tokens** — long-lived bearer tokens for scripting and integrations (Settings → API Keys)
+- **MCP server** — exposes the KB as tools for Claude Desktop, Cursor, and other MCP-compatible clients
+- **Android companion app** — read-only Expo app for offline article access and full-text search
+
+---
+
 ## Screenshots
 
 ### Dashboard
@@ -30,21 +46,6 @@ A self-hostable wiki and productivity hub with a React frontend and Express back
 ![Admin Customization](docs/screenshots/admin-customization.jpg)
 *Admins can rename the site, upload a logo, manage navigation links, and toggle individual features on or off.*
 
----
-
-## Features
-
-- **Dashboard** — home page showing recent log entries, recently updated articles, and a "Needs Review" list (oldest by last-updated date)
-- **Articles** — rich-text editing (TipTap), wikilinks, backlinks, version history, tags, PDF/Markdown export
-- **Log Entries** — optional date-titled journal, kept separate from the main article list; togglable by admins
-- **Tasks** — personal to-do lists with multiple named lists, checkbox items, and completed-task collapse; visible only to you; togglable by admins
-- **Projects** — collaborative Kanban boards: create Projects, add Boards, define Columns, drag-and-drop Cards with due dates and member assignment; share Projects with Groups; togglable by admins
-- **Groups & access control** — restrict articles and projects to specific groups; role-based access (admin / editor / viewer)
-- **Tags** — colour-coded labels on articles; filterable in the article list
-- **Edit locking** — warns a second editor when someone is already editing an article
-- **API tokens** — long-lived bearer tokens for scripting and integrations (Settings → API Keys)
-- **MCP server** — exposes the KB as tools for Claude Desktop, Cursor, and other MCP-compatible clients
-- **Android companion app** — read-only Expo app for offline article access and full-text search
 
 ---
 
