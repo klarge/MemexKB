@@ -61,8 +61,11 @@ router.get("/dashboard", requireAuth, async (req, res) => {
         listName: taskListsTable.name,
       })
       .from(tasksTable)
-      .innerJoin(taskListsTable, eq(tasksTable.listId, taskListsTable.id))
-      .where(and(eq(tasksTable.userId, userId), isNull(tasksTable.completedAt)))
+      .innerJoin(
+        taskListsTable,
+        and(eq(tasksTable.listId, taskListsTable.id), eq(taskListsTable.userId, userId))
+      )
+      .where(isNull(tasksTable.completedAt))
       .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt))
       .limit(10);
   }

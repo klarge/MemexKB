@@ -15,9 +15,6 @@ export const tasksTable = pgTable("tasks", {
   listId: integer("list_id")
     .notNull()
     .references(() => taskListsTable.id, { onDelete: "cascade" }),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => usersTable.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   position: integer("position").notNull().default(0),
   completedAt: timestamp("completed_at", { withTimezone: true }),

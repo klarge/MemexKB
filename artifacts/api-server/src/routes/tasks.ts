@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, taskListsTable, tasksTable, siteSettingsTable } from "@workspace/db";
-import { eq, and, asc, max, sql } from "drizzle-orm";
+import { eq, and, asc, inArray, max, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -21,25 +21,23 @@ router.use(async (req, res, next) => {
 router.get("/tasks/lists", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
 
-  const [lists, tasks] = await Promise.all([
-    db
-      .select()
-      .from(taskListsTable)
-      .where(eq(taskListsTable.userId, userId))
-      .orderBy(asc(taskListsTable.createdAt)),
-    db
-      .select()
-      .from(tasksTable)
-      .where(eq(tasksTable.userId, userId))
-      .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt)),
-  ]);
+  // Fetch lists owned by this user, then tasks that belong to those lists.
+  // Ownership is tracked on task_lists.user_id — no user_id column needed on tasks.
+  const lists = await db
+    .select()
+    .from(taskListsTable)
+    .where(eq(taskListsTable.userId, userId))
+    .orderBy(asc(taskListsTable.createdAt));
 
-  const result = lists.map((list) => ({
-    ...list,
-    tasks: tasks.filter((t) => t.listId === list.id),
-  }));
+  const tasks = lists.length > 0
+    ? await db
+        .select()
+        .from(tasksTable)
+        .where(inArray(tasksTable.listId, lists.map((l) => l.id)))
+        .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt))
+    : [];
 
-  res.json(result);
+  res.json(lists.map((list) => ({ ...list, tasks: tasks.filter((t) => t.listId === list.id) })));
 });
 
 // POST /api/tasks/lists — create a list
@@ -116,7 +114,7 @@ router.post("/tasks", requireAuth, async (req, res) => {
 
   const [task] = await db
     .insert(tasksTable)
-    .values({ listId: list.id, userId: req.session.userId!, title: title.trim(), position })
+    .values({ listId: list.id, title: title.trim(), position })
     .returning();
   res.status(201).json(task);
 });
@@ -142,19 +140,13 @@ router.patch("/tasks/lists/:listId/reorder", requireAuth, async (req, res) => {
     return;
   }
 
-  // Update each task's position in parallel
+  // Update each task's position in parallel (list ownership already verified above)
   await Promise.all(
     taskIds.map((id, index) =>
       db
         .update(tasksTable)
         .set({ position: index })
-        .where(
-          and(
-            eq(tasksTable.id, id),
-            eq(tasksTable.listId, listId),
-            eq(tasksTable.userId, req.session.userId!)
-          )
-        )
+        .where(and(eq(tasksTable.id, id), eq(tasksTable.listId, listId)))
     )
   );
 
@@ -166,6 +158,21 @@ router.patch("/tasks/:id", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { completed, title } = req.body as { completed?: boolean; title?: string };
 
+  // Verify ownership via the task's list
+  const [owned] = await db
+    .select({ id: tasksTable.id })
+    .from(tasksTable)
+    .innerJoin(
+      taskListsTable,
+      and(eq(tasksTable.listId, taskListsTable.id), eq(taskListsTable.userId, req.session.userId!))
+    )
+    .where(eq(tasksTable.id, id))
+    .limit(1);
+  if (!owned) {
+    res.status(404).json({ error: "Task not found" });
+    return;
+  }
+
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (title !== undefined) updates.title = title.trim();
   if (completed !== undefined) updates.completedAt = completed ? new Date() : null;
@@ -173,26 +180,31 @@ router.patch("/tasks/:id", requireAuth, async (req, res) => {
   const [task] = await db
     .update(tasksTable)
     .set(updates)
-    .where(and(eq(tasksTable.id, id), eq(tasksTable.userId, req.session.userId!)))
+    .where(eq(tasksTable.id, id))
     .returning();
-  if (!task) {
-    res.status(404).json({ error: "Task not found" });
-    return;
-  }
   res.json(task);
 });
 
 // DELETE /api/tasks/:id — delete a task
 router.delete("/tasks/:id", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const [deleted] = await db
-    .delete(tasksTable)
-    .where(and(eq(tasksTable.id, id), eq(tasksTable.userId, req.session.userId!)))
-    .returning();
-  if (!deleted) {
+
+  // Verify ownership via the task's list
+  const [owned] = await db
+    .select({ id: tasksTable.id })
+    .from(tasksTable)
+    .innerJoin(
+      taskListsTable,
+      and(eq(tasksTable.listId, taskListsTable.id), eq(taskListsTable.userId, req.session.userId!))
+    )
+    .where(eq(tasksTable.id, id))
+    .limit(1);
+  if (!owned) {
     res.status(404).json({ error: "Task not found" });
     return;
   }
+
+  await db.delete(tasksTable).where(eq(tasksTable.id, id));
   res.status(204).send();
 });
 
