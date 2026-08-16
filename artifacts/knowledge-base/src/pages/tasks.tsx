@@ -3,6 +3,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Plus,
   Trash2,
   ListTodo,
@@ -14,6 +29,7 @@ import {
   Pencil,
   Check,
   X,
+  GripVertical,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,6 +38,7 @@ type Task = {
   id: number;
   listId: number;
   title: string;
+  position: number;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -43,9 +60,9 @@ const json = (method: string, url: string, body?: unknown) =>
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-// ─── TaskItem ─────────────────────────────────────────────────────────────────
+// ─── SortableTaskItem ─────────────────────────────────────────────────────────
 
-function TaskItem({
+function SortableTaskItem({
   task,
   onToggle,
   onDelete,
@@ -54,9 +71,40 @@ function TaskItem({
   onToggle: (id: number, completed: boolean) => void;
   onDelete: (id: number) => void;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
   const done = task.completedAt !== null;
+
   return (
-    <div className="group flex items-center gap-2.5 px-4 py-2 hover:bg-muted/40 rounded-md transition-colors">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group flex items-center gap-2 px-3 py-2 hover:bg-muted/40 rounded-md transition-colors"
+    >
+      {/* Drag handle — only shown for active (non-completed) tasks */}
+      <button
+        type="button"
+        className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors touch-none opacity-0 group-hover:opacity-100"
+        aria-label="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
       <button
         type="button"
         onClick={() => onToggle(task.id, !done)}
@@ -69,6 +117,7 @@ function TaskItem({
           <Circle className="h-[18px] w-[18px]" />
         )}
       </button>
+
       <span
         className={`flex-1 text-sm leading-snug select-none ${
           done ? "line-through text-muted-foreground" : ""
@@ -76,6 +125,7 @@ function TaskItem({
       >
         {task.title}
       </span>
+
       <button
         type="button"
         onClick={() => onDelete(task.id)}
@@ -101,7 +151,9 @@ function AddTaskRow({ onAdd }: { onAdd: (title: string) => void }) {
   };
 
   return (
-    <div className="flex items-center gap-2.5 px-4 py-2.5">
+    <div className="flex items-center gap-2 px-3 py-2.5">
+      {/* Spacer to align with drag handle */}
+      <span className="w-4 shrink-0" />
       <Plus className="h-[18px] w-[18px] text-muted-foreground/60 shrink-0" />
       <input
         className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 leading-snug"
@@ -126,6 +178,7 @@ function ListCard({
   onAddTask,
   onToggleTask,
   onDeleteTask,
+  onReorderTasks,
 }: {
   list: TaskList;
   onDeleteList: (id: number) => void;
@@ -133,15 +186,47 @@ function ListCard({
   onAddTask: (listId: number, title: string) => void;
   onToggleTask: (id: number, completed: boolean) => void;
   onDeleteTask: (id: number) => void;
+  onReorderTasks: (listId: number, taskIds: number[]) => void;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameValue, setNameValue] = useState(list.name);
 
-  const activeTasks = list.tasks.filter((t) => t.completedAt === null);
+  // Keep a local optimistic order for active tasks
+  const [localActiveIds, setLocalActiveIds] = useState<number[] | null>(null);
+
+  const activeTasks = list.tasks
+    .filter((t) => t.completedAt === null)
+    .sort((a, b) => a.position - b.position);
+
   const completedTasks = list.tasks
     .filter((t) => t.completedAt !== null)
     .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
+
+  // Derive the display order: use optimistic ids if a drag just happened
+  const activeTasksOrdered = localActiveIds
+    ? localActiveIds
+        .map((id) => activeTasks.find((t) => t.id === id))
+        .filter((t): t is Task => t !== undefined)
+    : activeTasks;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const ids = activeTasksOrdered.map((t) => t.id);
+    const oldIndex = ids.indexOf(Number(active.id));
+    const newIndex = ids.indexOf(Number(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(ids, oldIndex, newIndex);
+    setLocalActiveIds(reordered);
+    onReorderTasks(list.id, reordered);
+  };
 
   const commitRename = () => {
     const n = nameValue.trim();
@@ -204,22 +289,51 @@ function ListCard({
         )}
       </div>
 
-      {/* Active tasks */}
+      {/* Active tasks — sortable */}
       <div className="py-1">
         {activeTasks.length === 0 && (
-          <p className="px-4 py-2 text-xs text-muted-foreground/60 italic">
+          <p className="px-10 py-2 text-xs text-muted-foreground/60 italic">
             No tasks yet — add one below.
           </p>
         )}
-        {activeTasks.map((task) => (
-          <TaskItem
-            key={task.id}
-            task={task}
-            onToggle={onToggleTask}
-            onDelete={onDeleteTask}
-          />
-        ))}
-        <AddTaskRow onAdd={(title) => onAddTask(list.id, title)} />
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={activeTasksOrdered.map((t) => t.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {activeTasksOrdered.map((task) => (
+              <SortableTaskItem
+                key={task.id}
+                task={task}
+                onToggle={(id, completed) => {
+                  // Remove from local order when completed
+                  if (completed && localActiveIds) {
+                    setLocalActiveIds(localActiveIds.filter((i) => i !== id));
+                  }
+                  onToggleTask(id, completed);
+                }}
+                onDelete={(id) => {
+                  if (localActiveIds) {
+                    setLocalActiveIds(localActiveIds.filter((i) => i !== id));
+                  }
+                  onDeleteTask(id);
+                }}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+
+        <AddTaskRow
+          onAdd={(title) => {
+            setLocalActiveIds(null); // reset local order so new task appears at end
+            onAddTask(list.id, title);
+          }}
+        />
       </div>
 
       {/* Completed section */}
@@ -241,7 +355,7 @@ function ListCard({
           {showCompleted && (
             <div className="pb-1 bg-muted/10">
               {completedTasks.map((task) => (
-                <TaskItem
+                <SortableTaskItem
                   key={task.id}
                   task={task}
                   onToggle={onToggleTask}
@@ -307,11 +421,11 @@ export default function TasksPage() {
     onSuccess: invalidate,
   });
 
-  const handleCreateList = () => {
-    const name = newListName.trim();
-    if (!name) return;
-    createList.mutate(name);
-  };
+  const reorderTasks = useMutation({
+    mutationFn: ({ listId, taskIds }: { listId: number; taskIds: number[] }) =>
+      json("PATCH", `/api/tasks/lists/${listId}/reorder`, { taskIds }),
+    // No invalidate — optimistic local state handles the UI; server syncs quietly
+  });
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -396,10 +510,17 @@ export default function TasksPage() {
               onAddTask={(listId, title) => addTask.mutate({ listId, title })}
               onToggleTask={(id, completed) => toggleTask.mutate({ id, completed })}
               onDeleteTask={(id) => deleteTask.mutate(id)}
+              onReorderTasks={(listId, taskIds) => reorderTasks.mutate({ listId, taskIds })}
             />
           ))}
         </div>
       )}
     </div>
   );
+
+  function handleCreateList() {
+    const name = newListName.trim();
+    if (!name) return;
+    createList.mutate(name);
+  }
 }

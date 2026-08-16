@@ -21,7 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowLeft, Plus, Trash2, Loader2, X, GripVertical, Calendar, User, Check, Pencil,
+  ArrowLeft, Plus, Trash2, Loader2, X, GripVertical, Calendar, User, Check, Pencil, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -266,6 +266,106 @@ function KanbanColumn({
 
 // ─── Card Detail Panel ────────────────────────────────────────────────────────
 
+// ─── Member search picker ─────────────────────────────────────────────────────
+
+function MemberPicker({
+  projectMembers,
+  assignedIds,
+  onToggle,
+}: {
+  projectMembers: ProjectMember[];
+  assignedIds: Set<number>;
+  onToggle: (userId: number, add: boolean) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const assigned = projectMembers.filter((m) => assignedIds.has(m.id));
+  const q = query.trim().toLowerCase();
+  const unassigned = projectMembers.filter(
+    (m) =>
+      !assignedIds.has(m.id) &&
+      (q === "" || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)),
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Search members…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full pl-8 pr-3 py-1.5 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Assigned members — always visible at the top */}
+      {assigned.length > 0 && (
+        <div className="space-y-0.5">
+          {assigned.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onToggle(m.id, false)}
+              className="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+            >
+              <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-bold ring-1 ring-primary/30 shrink-0">
+                {m.name[0]?.toUpperCase()}
+              </div>
+              <span className="flex-1 text-left truncate">{m.name}</span>
+              <Check className="h-3.5 w-3.5 shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Divider between assigned and search results */}
+      {assigned.length > 0 && unassigned.length > 0 && (
+        <div className="border-t" />
+      )}
+
+      {/* Unassigned members — filtered by search */}
+      {unassigned.length > 0 ? (
+        <div className="space-y-0.5 max-h-48 overflow-y-auto">
+          {unassigned.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onToggle(m.id, true)}
+              className="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm hover:bg-muted/50 text-foreground transition-colors"
+            >
+              <div className="h-6 w-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-[10px] font-bold ring-1 ring-border shrink-0">
+                {m.name[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <p className="truncate">{m.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{m.email}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : query && assigned.length === 0 ? (
+        <p className="text-xs text-muted-foreground/60 italic px-3 py-2">No members match "{query}".</p>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Card Detail Panel ────────────────────────────────────────────────────────
+
 function CardDetailPanel({
   card,
   projectMembers,
@@ -373,32 +473,14 @@ function CardDetailPanel({
           {/* Members */}
           {projectMembers.length > 0 && (
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5" /> Assigned To
               </label>
-              <div className="space-y-1">
-                {projectMembers.map((m) => {
-                  const assigned = memberIds.has(m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => onToggleMember(card.id, m.id, !assigned)}
-                      className={`flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm transition-colors ${
-                        assigned ? "bg-primary/10 text-primary" : "hover:bg-muted/50 text-foreground"
-                      }`}
-                    >
-                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ring-1 ${
-                        assigned ? "bg-primary text-white ring-primary/30" : "bg-muted text-muted-foreground ring-border"
-                      }`}>
-                        {m.name[0]?.toUpperCase()}
-                      </div>
-                      <span className="flex-1 text-left">{m.name}</span>
-                      {assigned && <Check className="h-3.5 w-3.5" />}
-                    </button>
-                  );
-                })}
-              </div>
+              <MemberPicker
+                projectMembers={projectMembers}
+                assignedIds={memberIds}
+                onToggle={(userId, add) => onToggleMember(card.id, userId, add)}
+              />
             </div>
           )}
         </div>
@@ -432,9 +514,20 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
-  // Sync from server data (skip while dragging)
+  // When true, the next boardData-triggered sync is skipped once.
+  // This prevents the drop from snapping back: onDragEnd sets the flag before
+  // clearing activeCardId, so the effect that fires on that state change is
+  // suppressed. The *next* run — after persistReorder invalidates the query
+  // and boardData actually reflects the new layout — proceeds normally.
+  const skipNextSyncRef = useRef(false);
+
+  // Sync from server data — skipped while dragging, and once after each drop.
   useEffect(() => {
     if (activeCardId !== null || !boardData) return;
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
     const newItems: Record<string, number[]> = {};
     for (const col of boardData.columns) {
       newItems[colKey(col.id)] = [...col.cards]
@@ -502,6 +595,10 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   }
 
   function onDragEnd({ active, over }: DragEndEvent) {
+    // Skip the sync that fires when activeCardId flips to null — boardData is
+    // still stale at that point. The next sync after persistReorder refreshes
+    // boardData will pick up the authoritative order.
+    skipNextSyncRef.current = true;
     setActiveCardId(null);
     if (!over) return;
     const ac = findContainer(active.id as number);

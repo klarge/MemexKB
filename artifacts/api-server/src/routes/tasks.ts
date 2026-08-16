@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, taskListsTable, tasksTable, siteSettingsTable } from "@workspace/db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, max, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -31,7 +31,7 @@ router.get("/tasks/lists", requireAuth, async (req, res) => {
       .select()
       .from(tasksTable)
       .where(eq(tasksTable.userId, userId))
-      .orderBy(asc(tasksTable.createdAt)),
+      .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt)),
   ]);
 
   const result = lists.map((list) => ({
@@ -107,11 +107,58 @@ router.post("/tasks", requireAuth, async (req, res) => {
     res.status(404).json({ error: "List not found" });
     return;
   }
+  // Place new task at the end of active (non-completed) tasks
+  const [{ maxPos }] = await db
+    .select({ maxPos: max(tasksTable.position) })
+    .from(tasksTable)
+    .where(and(eq(tasksTable.listId, list.id), sql`${tasksTable.completedAt} IS NULL`));
+  const position = (maxPos ?? -1) + 1;
+
   const [task] = await db
     .insert(tasksTable)
-    .values({ listId: list.id, userId: req.session.userId!, title: title.trim() })
+    .values({ listId: list.id, userId: req.session.userId!, title: title.trim(), position })
     .returning();
   res.status(201).json(task);
+});
+
+// PATCH /api/tasks/lists/:listId/reorder — persist drag-and-drop order
+router.patch("/tasks/lists/:listId/reorder", requireAuth, async (req, res) => {
+  const listId = Number(req.params.listId);
+  const { taskIds } = req.body as { taskIds?: number[] };
+
+  if (!Array.isArray(taskIds)) {
+    res.status(400).json({ error: "taskIds must be an array" });
+    return;
+  }
+
+  // Verify the list belongs to this user
+  const [list] = await db
+    .select()
+    .from(taskListsTable)
+    .where(and(eq(taskListsTable.id, listId), eq(taskListsTable.userId, req.session.userId!)))
+    .limit(1);
+  if (!list) {
+    res.status(404).json({ error: "List not found" });
+    return;
+  }
+
+  // Update each task's position in parallel
+  await Promise.all(
+    taskIds.map((id, index) =>
+      db
+        .update(tasksTable)
+        .set({ position: index })
+        .where(
+          and(
+            eq(tasksTable.id, id),
+            eq(tasksTable.listId, listId),
+            eq(tasksTable.userId, req.session.userId!)
+          )
+        )
+    )
+  );
+
+  res.json({ ok: true });
 });
 
 // PATCH /api/tasks/:id — toggle completion or rename
