@@ -147,19 +147,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )}
-                  {(user?.role === "admin" || user?.role === "editor") && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={location.startsWith("/templates")}
-                      >
-                        <Link href="/templates">
-                          <LayoutTemplate className="mr-2 h-4 w-4" />
-                          <span>Templates</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -216,6 +203,17 @@ export function MainLayout({ children }: { children: ReactNode }) {
                         <Link href="/admin/groups">
                           <Shield className="mr-2 h-4 w-4" />
                           <span>Groups</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location.startsWith("/templates")}
+                      >
+                        <Link href="/templates">
+                          <LayoutTemplate className="mr-2 h-4 w-4" />
+                          <span>Templates</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
