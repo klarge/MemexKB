@@ -156,7 +156,7 @@ export default function LogScreen() {
       <View style={s.header}>
         <View style={s.headerTop}>
           <Feather name="edit-3" size={20} color={colors.primary} />
-          <Text style={s.headerTitle}>Log</Text>
+          <Text style={s.headerTitle}>Logs</Text>
           <View style={{ flex: 1 }} />
           {!isOnline && (
             <View style={s.offlineBadge}>

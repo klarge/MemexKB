@@ -9,7 +9,7 @@ export type TabName = 'articles' | 'log' | 'tasks';
 
 const TABS: { name: TabName; icon: React.ComponentProps<typeof Feather>['name']; label: string; route: string }[] = [
   { name: 'articles', icon: 'book-open',    label: 'Articles', route: '/(tabs)/'     },
-  { name: 'log',      icon: 'edit-3',       label: 'Log',      route: '/(tabs)/log'  },
+  { name: 'log',      icon: 'edit-3',       label: 'Logs',     route: '/(tabs)/log'  },
   { name: 'tasks',    icon: 'check-square', label: 'Tasks',    route: '/(tabs)/tasks'},
 ];
 

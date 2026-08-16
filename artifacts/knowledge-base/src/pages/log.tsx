@@ -56,7 +56,7 @@ export default function LogPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <BookOpen className="h-6 w-6" />
-            Log
+            Logs
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             A running journal of dated entries.

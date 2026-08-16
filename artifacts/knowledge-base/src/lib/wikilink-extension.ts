@@ -24,6 +24,16 @@ export const WikilinkExtension = Extension.create<WikilinkExtensionOptions>({
         char: "[[",
         pluginKey: WikilinkPluginKey,
         allowSpaces: true,
+
+        // Deactivate the suggestion as soon as the text from the trigger to
+        // the cursor contains ']]' — this fires immediately after a link is
+        // committed (either via the picker or typed manually), so the popup
+        // closes without requiring an Escape press on any platform.
+        allow: ({ state, range }: { state: import("@tiptap/pm/state").EditorState; range: { from: number; to: number } }) => {
+          const text = state.doc.textBetween(range.from, range.to, undefined, "\ufffc");
+          return !text.includes("]]");
+        },
+
         command: ({
           editor,
           range,
@@ -33,11 +43,14 @@ export const WikilinkExtension = Extension.create<WikilinkExtensionOptions>({
           range: { from: number; to: number };
           props: WikilinkItem;
         }) => {
+          // Insert [[title]] followed by a space so the cursor lands in a
+          // natural typing position. The 'allow' predicate above then fires,
+          // sees ']]' in the suggestion text, and deactivates the popup.
           editor
             .chain()
             .focus()
             .deleteRange(range)
-            .insertContent(`[[${props.title}]]`)
+            .insertContent(`[[${props.title}]] `)
             .run();
         },
         items: (): WikilinkItem[] => [],
