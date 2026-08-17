@@ -161,13 +161,15 @@ function KanbanColumn({
   const [newCardTitle, setNewCardTitle] = useState("");
   const [editing, setEditing] = useState(false);
   const [colName, setColName] = useState(column.name);
+  const addCardRef = useRef<HTMLTextAreaElement>(null);
 
   const submitCard = () => {
     const t = newCardTitle.trim();
     if (!t) return;
     onAddCard(column.id, t);
     setNewCardTitle("");
-    setAddingCard(false);
+    // Stay open for rapid entry — Escape closes
+    setTimeout(() => addCardRef.current?.focus(), 0);
   };
 
   const commitRename = () => {
@@ -243,10 +245,11 @@ function KanbanColumn({
         {addingCard ? (
           <div className="space-y-2">
             <textarea
+              ref={addCardRef}
               autoFocus
               className="w-full text-sm bg-background border rounded-lg p-2 resize-none outline-none focus:ring-1 focus:ring-primary"
               rows={2}
-              placeholder="Card title…"
+              placeholder="Card title… (Enter to add, Shift+Enter for new line, Esc to close)"
               value={newCardTitle}
               onChange={(e) => setNewCardTitle(e.target.value)}
               onKeyDown={(e) => {

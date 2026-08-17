@@ -434,6 +434,48 @@ export default function Home() {
       {/* ── Dashboard (hidden while searching) ── */}
       {!searching && (
         <>
+          {/* Log section */}
+          {logEnabled && (
+            <SectionShell
+              icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
+              title="Recent Log"
+              viewAllHref="/log"
+              viewAllLabel="View all"
+              loading={logLoading}
+              empty={!logLoading && recentLogs.length === 0}
+              action={
+                canEdit ? (
+                  <Button size="sm" onClick={handleTodayLog} className="gap-1.5">
+                    {todayEntry ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                    {todayEntry ? "Edit Today's Entry" : "Today's Log"}
+                  </Button>
+                ) : undefined
+              }
+            >
+              {recentLogs.map((entry) => (
+                <Link key={entry.id} href={`/wiki/${entry.slug}`}>
+                  <div className="flex items-center gap-4 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <div className="shrink-0 text-center w-10">
+                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider leading-none">
+                        {format(new Date(entry.createdAt), "MMM")}
+                      </div>
+                      <div className="text-xl font-bold tabular-nums leading-tight">
+                        {format(new Date(entry.createdAt), "d")}
+                      </div>
+                    </div>
+                    <div className="w-px h-8 bg-border shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{entry.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Updated {formatDistanceToNow(new Date(entry.updatedAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </SectionShell>
+          )}
+
           {/* Active tasks + Upcoming cards — side by side on wider screens */}
           {(tasksEnabled || projectsEnabled) && (
             <div className="grid gap-6 md:grid-cols-2">
@@ -486,48 +528,6 @@ export default function Home() {
                 </SectionShell>
               )}
             </div>
-          )}
-
-          {/* Log section */}
-          {logEnabled && (
-            <SectionShell
-              icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
-              title="Recent Log"
-              viewAllHref="/log"
-              viewAllLabel="View all"
-              loading={logLoading}
-              empty={!logLoading && recentLogs.length === 0}
-              action={
-                canEdit ? (
-                  <Button size="sm" onClick={handleTodayLog} className="gap-1.5">
-                    {todayEntry ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                    {todayEntry ? "Edit Today's Entry" : "Today's Log"}
-                  </Button>
-                ) : undefined
-              }
-            >
-              {recentLogs.map((entry) => (
-                <Link key={entry.id} href={`/wiki/${entry.slug}`}>
-                  <div className="flex items-center gap-4 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="shrink-0 text-center w-10">
-                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider leading-none">
-                        {format(new Date(entry.createdAt), "MMM")}
-                      </div>
-                      <div className="text-xl font-bold tabular-nums leading-tight">
-                        {format(new Date(entry.createdAt), "d")}
-                      </div>
-                    </div>
-                    <div className="w-px h-8 bg-border shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{entry.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Updated {formatDistanceToNow(new Date(entry.updatedAt), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </SectionShell>
           )}
 
           {/* Article sections */}
