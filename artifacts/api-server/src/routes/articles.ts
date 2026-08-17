@@ -715,7 +715,7 @@ router.get("/search", requireAuth, async (req, res) => {
     .leftJoin(taskListsTable, eq(tasksTable.listId, taskListsTable.id))
     .where(
       and(
-        eq(tasksTable.userId, userId!),
+        eq(taskListsTable.userId, userId!),
         ilike(tasksTable.title, `%${term}%`),
       ),
     )
