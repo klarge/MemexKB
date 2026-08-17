@@ -140,7 +140,9 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   const { data: groupsData } = useListGroups();
   const { data: tagsData } = useListTags({ query: { queryKey: getListTagsQueryKey() } });
-  const { data: articlesData } = useListArticles({ limit: 500 });
+  // Limit to 100 most-recently-updated articles for wikilink autocomplete.
+  // 500 was unnecessarily large and would be slow at scale.
+  const { data: articlesData } = useListArticles({ limit: 100, sort: "updated_at", order: "desc" });
 
   const { data: article, isLoading: isLoadingArticle } = useGetArticle(slug as string, {
     query: {

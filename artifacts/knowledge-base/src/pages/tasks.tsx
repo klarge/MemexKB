@@ -392,10 +392,12 @@ export default function TasksPage() {
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
 
-  const { data: lists = [], isLoading } = useQuery<TaskList[]>({
+  const { data: listsData, isLoading } = useQuery<{ lists: TaskList[]; truncated: boolean }>({
     queryKey: ["task-lists"],
     queryFn: () => fetch("/api/tasks/lists").then((r) => r.json()),
   });
+  const lists = listsData?.lists ?? [];
+  const tasksTruncated = listsData?.truncated ?? false;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["task-lists"] });
 
@@ -498,6 +500,14 @@ export default function TasksPage() {
           >
             <X className="h-4 w-4" />
           </Button>
+        </div>
+      )}
+
+      {/* Truncation notice */}
+      {tasksTruncated && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+          <span className="font-medium">Showing first 200 tasks.</span>{" "}
+          <span className="text-amber-700 dark:text-amber-400">Complete or delete tasks to see all items, or use search to find specific ones.</span>
         </div>
       )}
 

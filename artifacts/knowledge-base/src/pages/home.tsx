@@ -258,10 +258,12 @@ export default function Home() {
     queryFn: () => fetch("/api/articles/stats").then((r) => r.json()),
   });
 
-  const { data: logData, isLoading: logLoading } = useQuery<{ entries: LogEntry[]; total: number }>({
-    queryKey: ["log-entries"],
-    queryFn: () => fetch("/api/log").then((r) => r.json()),
+  const { data: logData, isLoading: logLoading } = useQuery<{ entries: LogEntry[]; total: number; hasMore: boolean }>({
+    // Separate key from the full log page so they don't share cache with different offsets.
+    queryKey: ["log-entries-home"],
+    queryFn: () => fetch("/api/log?limit=3").then((r) => r.json()),
     enabled: logEnabled,
+    staleTime: 60_000,
   });
 
   const { data: dashboard, isLoading: dashboardLoading } = useQuery<DashboardData>({

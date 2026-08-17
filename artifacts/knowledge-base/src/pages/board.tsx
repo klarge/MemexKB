@@ -51,7 +51,7 @@ type Card = {
   members: CardMember[];
 };
 type Column = { id: number; name: string; position: number; cards: Card[] };
-type BoardData = { id: number; projectId: number; name: string; columns: Column[] };
+type BoardData = { id: number; projectId: number; name: string; columns: Column[]; cardsTruncated?: boolean };
 type ProjectMember = { id: number; name: string; email: string };
 
 const colKey = (id: number) => `col-${id}`;
@@ -866,6 +866,14 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
         <div className="h-4 w-px bg-border" />
         <h1 className="font-semibold text-sm">{boardData.name}</h1>
       </div>
+
+      {/* Card cap notice */}
+      {boardData.cardsTruncated && (
+        <div className="shrink-0 px-6 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+          <span className="font-medium">Showing first 300 cards.</span>
+          <span className="text-amber-700 dark:text-amber-400">Complete or delete cards to reduce the board size.</span>
+        </div>
+      )}
 
       {/* Kanban canvas */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden">

@@ -18,6 +18,9 @@ router.use(async (req, res, next) => {
 });
 
 // GET /api/tasks/lists — all lists with embedded tasks for the current user
+// Safety cap: at most 200 tasks returned in total to keep responses bounded.
+const TASKS_CAP = 200;
+
 router.get("/tasks/lists", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
 
@@ -27,17 +30,26 @@ router.get("/tasks/lists", requireAuth, async (req, res) => {
     .select()
     .from(taskListsTable)
     .where(eq(taskListsTable.userId, userId))
-    .orderBy(asc(taskListsTable.createdAt));
+    .orderBy(asc(taskListsTable.createdAt), asc(taskListsTable.id));
 
-  const tasks = lists.length > 0
+  const allTasks = lists.length > 0
     ? await db
         .select()
         .from(tasksTable)
         .where(inArray(tasksTable.listId, lists.map((l) => l.id)))
-        .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt))
+        // id is the unique tie-breaker so the cap is deterministic even when
+        // position and created_at values collide.
+        .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt), asc(tasksTable.id))
+        .limit(TASKS_CAP + 1)
     : [];
 
-  res.json(lists.map((list) => ({ ...list, tasks: tasks.filter((t) => t.listId === list.id) })));
+  const truncated = allTasks.length > TASKS_CAP;
+  const tasks = truncated ? allTasks.slice(0, TASKS_CAP) : allTasks;
+
+  res.json({
+    lists: lists.map((list) => ({ ...list, tasks: tasks.filter((t) => t.listId === list.id) })),
+    truncated,
+  });
 });
 
 // POST /api/tasks/lists — create a list

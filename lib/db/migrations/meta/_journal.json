@@ -64,6 +64,27 @@
       "when": 1778974874534,
       "tag": "0008_add_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778974874535,
+      "tag": "0009_fix_tasks_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778974874536,
+      "tag": "0010_add_card_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778974874537,
+      "tag": "0011_add_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

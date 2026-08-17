@@ -548,11 +548,47 @@ router.get("/log", requireAuth, async (req, res) => {
     return;
   }
 
-  const userId = req.session.userId;
+  const userId = req.session.userId!;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
 
-  const entries = await db
+  // Safe integer parsing — rejects non-integers (decimals floored would silently
+  // skew pages), values outside the PostgreSQL int4 range, and non-numeric input.
+  const PG_INT4_MAX = 2_147_483_647;
+  const parsePageInt = (val: unknown, fallback: number, cap = PG_INT4_MAX): number => {
+    const n = Number(val);
+    if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return fallback;
+    return Math.min(n, cap);
+  };
+  const PAGE_SIZE = Math.min(Math.max(1, parsePageInt(req.query.limit, 50)), 100);
+  const offset = parsePageInt(req.query.offset, 0);
+
+  // Push group-access authorization into SQL so LIMIT/OFFSET operate on
+  // already-authorized rows and pagination remains correct.
+  //   - No groups on article  → always accessible
+  //   - Admin role            → always accessible
+  //   - Otherwise             → user must be in one of the article's groups
+  const noGroupClause = sql`NOT EXISTS (
+    SELECT 1 FROM article_groups ag WHERE ag.article_id = ${articlesTable.id}
+  )`;
+  const inGroupClause = userGroupIds.length > 0
+    ? sql`EXISTS (
+        SELECT 1 FROM article_groups ag
+        WHERE ag.article_id = ${articlesTable.id}
+          AND ag.group_id = ANY(ARRAY[${sql.join(userGroupIds.map((id) => sql`${id}`), sql`, `)}]::int[])
+      )`
+    : sql`FALSE`;
+  const accessClause = userRole === "admin" ? sql`TRUE` : or(noGroupClause, inGroupClause)!;
+
+  const logWhere = and(
+    eq(articlesTable.isLogEntry, true),
+    eq(articlesTable.createdById, userId),
+    accessClause,
+  );
+
+  // Fetch limit+1 so we can detect hasMore without a separate count query.
+  // Ordering by (created_at DESC, id DESC) is deterministic even when timestamps collide.
+  const fetched = await db
     .select({
       id: articlesTable.id,
       slug: articlesTable.slug,
@@ -563,40 +599,22 @@ router.get("/log", requireAuth, async (req, res) => {
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .where(and(eq(articlesTable.isLogEntry, true), eq(articlesTable.createdById, userId!)))
-    .orderBy(desc(articlesTable.createdAt))
-    .limit(500);
+    .where(logWhere)
+    .orderBy(desc(articlesTable.createdAt), desc(articlesTable.id))
+    .limit(PAGE_SIZE + 1)
+    .offset(offset);
 
-  if (entries.length === 0) {
-    res.json({ entries: [], total: 0 });
-    return;
-  }
+  const hasMore = fetched.length > PAGE_SIZE;
+  const result = (hasMore ? fetched.slice(0, PAGE_SIZE) : fetched).map((e) => ({
+    id: e.id,
+    slug: e.slug,
+    title: e.title,
+    createdAt: e.createdAt,
+    updatedAt: e.updatedAt,
+    updatedByName: e.updatedByName ?? null,
+  }));
 
-  // Apply the same group-access model as the regular article list
-  const entryIds = entries.map((e) => e.id);
-  const allGroups = await db
-    .select()
-    .from(articleGroupsTable)
-    .where(inArray(articleGroupsTable.articleId, entryIds));
-
-  const result = entries
-    .map((e) => {
-      const entryGroupIds = allGroups
-        .filter((ag) => ag.articleId === e.id)
-        .map((ag) => ag.groupId);
-      if (!canAccessArticle(entryGroupIds, userGroupIds, userRole)) return null;
-      return {
-        id: e.id,
-        slug: e.slug,
-        title: e.title,
-        createdAt: e.createdAt,
-        updatedAt: e.updatedAt,
-        updatedByName: e.updatedByName ?? null,
-      };
-    })
-    .filter((e): e is NonNullable<typeof e> => e !== null);
-
-  res.json({ entries: result, total: result.length });
+  res.json({ entries: result, hasMore });
 });
 
 // ─── Unified Search ───────────────────────────────────────────────────────────

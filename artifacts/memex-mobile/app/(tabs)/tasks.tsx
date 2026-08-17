@@ -357,8 +357,9 @@ export default function TasksScreen() {
       const res = await apiFetch('/tasks/lists');
       if (res.status === 403) { setError('Tasks feature is disabled on this server.'); return; }
       if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json() as TaskList[];
-      setLists(data);
+      const data = await res.json() as { lists: TaskList[]; truncated: boolean } | TaskList[];
+      // Handle both the new { lists, truncated } shape and the legacy array shape
+      setLists(Array.isArray(data) ? data : data.lists);
     } catch {
       setError('Could not load tasks.');
     } finally {

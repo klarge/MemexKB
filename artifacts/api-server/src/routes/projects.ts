@@ -13,7 +13,7 @@ import {
   usersTable,
   siteSettingsTable,
 } from "@workspace/db";
-import { eq, and, inArray, asc, desc, count, max } from "drizzle-orm";
+import { eq, and, inArray, asc, desc, count, max, or, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -94,45 +94,66 @@ async function getProjectIdForCard(cardId: number): Promise<number | null> {
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
+// Safety cap: return at most this many projects per request.
+const PROJECTS_CAP = 100;
+
 router.get("/projects", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const userRole = req.session.userRole;
 
-  let accessibleIds: number[];
+  // Fetch CAP+1 rows to detect true truncation without a separate count query.
+  // rawRows.length > PROJECTS_CAP means there are more rows than we'll return.
+  let rawRows: { id: number }[];
   if (userRole === "admin") {
-    const all = await db.select({ id: projectsTable.id }).from(projectsTable);
-    accessibleIds = all.map((p) => p.id);
+    rawRows = await db.select({ id: projectsTable.id }).from(projectsTable)
+      .orderBy(desc(projectsTable.updatedAt), asc(projectsTable.id))
+      .limit(PROJECTS_CAP + 1);
   } else {
-    const own = await db.select({ id: projectsTable.id }).from(projectsTable).where(eq(projectsTable.createdById, userId));
+    // Single access-filtered query: owned OR group-shared projects, globally
+    // ordered by (updated_at DESC, id ASC). Prevents unbounded scans and gives
+    // a stable, deterministic result regardless of owned vs. shared ratio.
     const userGroupIds = await getUserGroupIds(userId);
-    let groupProjectIds: number[] = [];
-    if (userGroupIds.length > 0) {
-      const pgRows = await db.select({ projectId: projectGroupsTable.projectId }).from(projectGroupsTable).where(inArray(projectGroupsTable.groupId, userGroupIds));
-      groupProjectIds = pgRows.map((r) => r.projectId);
-    }
-    accessibleIds = [...new Set([...own.map((p) => p.id), ...groupProjectIds])];
+    const groupAccessClause = userGroupIds.length > 0
+      ? sql`EXISTS (
+          SELECT 1 FROM project_groups pg
+          WHERE pg.project_id = ${projectsTable.id}
+            AND pg.group_id = ANY(ARRAY[${sql.join(userGroupIds.map((id) => sql`${id}`), sql`, `)}]::int[])
+        )`
+      : sql`FALSE`;
+    const accessFilter = or(eq(projectsTable.createdById, userId), groupAccessClause)!;
+    // No DISTINCT needed: the correlated EXISTS cannot produce duplicate project rows,
+    // and SELECT DISTINCT would require updated_at in the select list for ORDER BY.
+    rawRows = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(accessFilter)
+      .orderBy(desc(projectsTable.updatedAt), asc(projectsTable.id))
+      .limit(PROJECTS_CAP + 1);
   }
 
-  if (accessibleIds.length === 0) { res.json([]); return; }
+  const truncated = rawRows.length > PROJECTS_CAP;
+  const accessibleIds = rawRows.slice(0, PROJECTS_CAP).map((r) => r.id);
 
-  const projects = await db
-    .select()
-    .from(projectsTable)
-    .where(inArray(projectsTable.id, accessibleIds))
-    .orderBy(desc(projectsTable.updatedAt));
+  if (accessibleIds.length === 0) { res.json({ projects: [], truncated: false }); return; }
 
-  const boardCounts = await db
-    .select({ projectId: boardsTable.projectId, count: count() })
-    .from(boardsTable)
-    .where(inArray(boardsTable.projectId, accessibleIds))
-    .groupBy(boardsTable.projectId);
+  const [projects, boardCounts] = await Promise.all([
+    db.select().from(projectsTable)
+      .where(inArray(projectsTable.id, accessibleIds))
+      // id tie-breaker preserves the same deterministic order as the access query
+      .orderBy(desc(projectsTable.updatedAt), asc(projectsTable.id)),
+    db.select({ projectId: boardsTable.projectId, count: count() })
+      .from(boardsTable)
+      .where(inArray(boardsTable.projectId, accessibleIds))
+      .groupBy(boardsTable.projectId),
+  ]);
 
-  res.json(
-    projects.map((p) => ({
+  res.json({
+    projects: projects.map((p) => ({
       ...p,
       boardCount: Number(boardCounts.find((bc) => bc.projectId === p.id)?.count ?? 0),
     })),
-  );
+    truncated,
+  });
 });
 
 router.post("/projects", requireAuth, async (req, res) => {
@@ -260,12 +281,24 @@ router.get("/boards/:boardId", requireAuth, async (req, res) => {
   const [board] = await db.select().from(boardsTable).where(eq(boardsTable.id, boardId)).limit(1);
   const columns = await db.select().from(boardColumnsTable).where(eq(boardColumnsTable.boardId, boardId)).orderBy(asc(boardColumnsTable.position));
 
+  const CARDS_CAP = 300;
   let cards: (typeof boardCardsTable.$inferSelect)[] = [];
   let members: { cardId: number; userId: number; name: string }[] = [];
 
   if (columns.length > 0) {
     const colIds = columns.map((c) => c.id);
-    cards = await db.select().from(boardCardsTable).where(inArray(boardCardsTable.columnId, colIds)).orderBy(asc(boardCardsTable.position));
+    // Order by id ASC (insertion order) for stable, fair board-wide truncation:
+    // position is column-local so ordering by it would unfairly omit entire columns.
+    // Fetch one extra to detect truncation without a separate count query.
+    const fetched = await db
+      .select()
+      .from(boardCardsTable)
+      .where(inArray(boardCardsTable.columnId, colIds))
+      .orderBy(asc(boardCardsTable.id))
+      .limit(CARDS_CAP + 1);
+    const cardsTruncated = fetched.length > CARDS_CAP;
+    cards = cardsTruncated ? fetched.slice(0, CARDS_CAP) : fetched;
+
     if (cards.length > 0) {
       const cardIds = cards.map((c) => c.id);
       members = await db
@@ -274,20 +307,33 @@ router.get("/boards/:boardId", requireAuth, async (req, res) => {
         .innerJoin(usersTable, eq(boardCardMembersTable.userId, usersTable.id))
         .where(inArray(boardCardMembersTable.cardId, cardIds));
     }
+
+    const result = {
+      ...board,
+      projectId,
+      cardsTruncated: fetched.length > CARDS_CAP,
+      columns: columns.map((col) => ({
+        ...col,
+        // Sort the retained cards by (position, id) per column so the kanban
+        // ordering is correct even though the DB fetch used id ASC for capping.
+        cards: cards
+          .filter((c) => c.columnId === col.id)
+          .sort((a, b) => a.position - b.position || a.id - b.id)
+          .map((card) => ({
+            ...card,
+            members: members.filter((m) => m.cardId === card.id).map((m) => ({ id: m.userId, name: m.name })),
+          })),
+      })),
+    };
+    res.json(result);
+    return;
   }
 
   const result = {
     ...board,
     projectId,
-    columns: columns.map((col) => ({
-      ...col,
-      cards: cards
-        .filter((c) => c.columnId === col.id)
-        .map((card) => ({
-          ...card,
-          members: members.filter((m) => m.cardId === card.id).map((m) => ({ id: m.userId, name: m.name })),
-        })),
-    })),
+    cardsTruncated: false,
+    columns: [],
   };
 
   res.json(result);

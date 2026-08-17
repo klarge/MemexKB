@@ -22,10 +22,12 @@ export default function ProjectsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
-  const { data: projects = [], isLoading } = useQuery<Project[]>({
+  const { data: projectsData, isLoading } = useQuery<{ projects: Project[]; truncated: boolean }>({
     queryKey: ["projects"],
     queryFn: () => fetch("/api/projects").then((r) => r.json()),
   });
+  const projects = projectsData?.projects ?? [];
+  const projectsTruncated = projectsData?.truncated ?? false;
 
   const createProject = useMutation({
     mutationFn: () =>
@@ -88,6 +90,14 @@ export default function ProjectsPage() {
               <X className="h-4 w-4" />
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Truncation notice */}
+      {projectsTruncated && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+          <span className="font-medium">Showing first 100 projects.</span>{" "}
+          <span className="text-amber-700 dark:text-amber-400">Delete unused projects to see all items, or use search to find specific ones.</span>
         </div>
       )}
 

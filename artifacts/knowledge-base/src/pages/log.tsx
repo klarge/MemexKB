@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, Link, Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -5,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Plus, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 import { useSiteSettings } from "@/lib/site-settings";
+
+const PAGE_SIZE = 50;
 
 type LogEntry = {
   id: number;
@@ -21,18 +24,41 @@ export default function LogPage() {
   const canEdit = user?.role === "admin" || user?.role === "editor";
   const { data: siteSettings, isLoading: settingsLoading } = useSiteSettings();
 
-  const { data, isLoading } = useQuery<{ entries: LogEntry[]; total: number }>({
-    queryKey: ["log-entries"],
-    queryFn: () => fetch("/api/log").then((r) => r.json()),
+  const [offset, setOffset] = useState(0);
+  // Accumulated entries across all pages
+  const [allEntries, setAllEntries] = useState<LogEntry[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  // Prevent double-accumulation on StrictMode double-effects
+  const lastMergedOffset = useRef(-1);
+
+  const { data: page, isLoading, isFetching } = useQuery<{
+    entries: LogEntry[];
+    total: number;
+    hasMore: boolean;
+  }>({
+    queryKey: ["log-entries", offset],
+    queryFn: () =>
+      fetch(`/api/log?limit=${PAGE_SIZE}&offset=${offset}`).then((r) => r.json()),
     enabled: siteSettings?.logEntriesEnabled === true,
+    staleTime: 30_000,
   });
+
+  // Merge each page into the accumulated list exactly once
+  useEffect(() => {
+    if (!page || lastMergedOffset.current === offset) return;
+    lastMergedOffset.current = offset;
+    setAllEntries((prev) => (offset === 0 ? page.entries : [...prev, ...page.entries]));
+    setHasMore(page.hasMore);
+  }, [page, offset]);
+
+  const loadMore = useCallback(() => {
+    setOffset((prev) => prev + PAGE_SIZE);
+  }, []);
 
   // Redirect to home if the feature is disabled
   if (!settingsLoading && siteSettings && !siteSettings.logEntriesEnabled) {
     return <Redirect to="/" />;
   }
-
-  const entries = data?.entries ?? [];
 
   // Check if today's entry already exists
   const todayTitle = new Date().toLocaleDateString("en-US", {
@@ -40,7 +66,7 @@ export default function LogPage() {
     month: "long",
     day: "numeric",
   });
-  const todayEntry = entries.find((e) => e.title === todayTitle);
+  const todayEntry = allEntries.find((e) => e.title === todayTitle);
 
   const handleNewEntry = () => {
     if (todayEntry) {
@@ -70,11 +96,11 @@ export default function LogPage() {
         )}
       </div>
 
-      {isLoading ? (
+      {isLoading && allEntries.length === 0 ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : entries.length === 0 ? (
+      ) : allEntries.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen className="mx-auto h-10 w-10 opacity-20 mb-3" />
           <p className="font-medium">No log entries yet</p>
@@ -84,7 +110,7 @@ export default function LogPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => (
+          {allEntries.map((entry) => (
             <Link key={entry.id} href={`/wiki/${entry.slug}`}>
               <div className="group flex items-center gap-5 rounded-lg border border-border bg-card px-5 py-4 hover:bg-muted/40 transition-colors cursor-pointer">
                 {/* Date badge */}
@@ -115,6 +141,18 @@ export default function LogPage() {
               </div>
             </Link>
           ))}
+
+          {hasMore && (
+            <div className="flex justify-center pt-4">
+              <Button variant="outline" onClick={loadMore} disabled={isFetching}>
+                {isFetching ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading…</>
+                ) : (
+                  "Load more"
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
