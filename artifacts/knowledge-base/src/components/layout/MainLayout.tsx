@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useLogout } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/lib/theme";
 import {
   Sidebar,
@@ -52,6 +53,7 @@ import { useSiteSettings, LOGO_URL } from "@/lib/site-settings";
 export function MainLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const logout = useLogout();
   const { data: siteSettings } = useSiteSettings();
   const { theme, setTheme } = useTheme();
@@ -62,8 +64,11 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const handleLogout = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
+        // Clear the auth query so all components see the user as logged out
+        // without needing a full page reload (which can race against cookie
+        // changes on Docker Desktop for Mac).
+        queryClient.clear();
         setLocation("/login");
-        window.location.reload();
       },
     });
   };

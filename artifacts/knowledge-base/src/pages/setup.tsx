@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,17 +45,20 @@ export default function Setup() {
       const res = await fetch("/api/auth/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? "Setup failed. Please try again.");
       }
-      // Invalidate setup-status and auth so the app re-checks everything
+      // Populate the auth cache directly from the response so the app sees the
+      // authenticated user immediately — no refetch race and no full-page reload
+      // (which can race against Set-Cookie on Docker Desktop for Mac).
+      const user = await res.json();
+      queryClient.setQueryData(getGetMeQueryKey(), user);
       await queryClient.invalidateQueries({ queryKey: ["setup-status"] });
-      await queryClient.invalidateQueries({ queryKey: ["auth-me"] });
       setLocation("/");
-      window.location.reload();
     } catch (err: unknown) {
       toast({
         title: "Setup failed",

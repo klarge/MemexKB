@@ -32,11 +32,18 @@ services:
       SESSION_SECRET: replace-with-a-strong-secret
       STATIC_DIR: /app/public
       MIGRATIONS_DIR: /app/migrations
-      # Set to "true" when the app is served over HTTPS (e.g. behind a
-      # reverse proxy with TLS). Leave unset or "false" for plain HTTP.
-      # The app automatically trusts one proxy hop, so Secure cookies work
-      # correctly when TLS is terminated at the reverse proxy.
-      COOKIE_SECURE: "true"
+      # ── Cookie / session ────────────────────────────────────────────────────
+      # COOKIE_SECURE: Set to "true" only when serving over HTTPS (e.g. behind
+      # a TLS-terminating reverse proxy). Leave "false" or remove for plain HTTP
+      # deployments such as Docker Desktop direct port-mapping — browsers will
+      # silently reject a Secure cookie over http://localhost.
+      COOKIE_SECURE: "false"
+      # COOKIE_SAMESITE: "lax" (default) | "strict" | "none".
+      # Use "none" only with HTTPS; it automatically enables the Secure flag.
+      # COOKIE_SAMESITE: "lax"
+      # TRUST_PROXY: Number of trusted reverse-proxy hops. Default is 1.
+      # Set to 0 when running without any reverse proxy (direct port-mapping).
+      # TRUST_PROXY: "1"
       # Optional — uncomment to seed an initial admin account on first boot:
       # RUN_SEED: "true"
       # SEED_ADMIN_EMAIL: admin@example.com

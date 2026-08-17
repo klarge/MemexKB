@@ -66,6 +66,12 @@ ENV PORT=3000
 ENV STATIC_DIR=/app/public
 ENV MIGRATIONS_DIR=/app/migrations
 
+# SESSION_SECRET must be overridden in production (required).
+# TRUST_PROXY: set to 0 when running without a reverse proxy (e.g. Docker Desktop
+#   for Mac direct port-mapping). Defaults to 1 (trust one proxy hop).
+# COOKIE_SECURE: set to true when serving over HTTPS.
+# COOKIE_SAMESITE: "lax" (default) | "strict" | "none" (auto-enables Secure).
+
 EXPOSE 3000
 
 CMD ["node", "--enable-source-maps", "/app/dist/index.mjs"]

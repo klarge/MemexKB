@@ -3,8 +3,8 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useQuery } from "@tanstack/react-query";
-import { useLogin } from "@workspace/api-client-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ const SSO_ERRORS: Record<string, string> = {
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const login = useLogin();
 
   // Show SSO error from redirect params
@@ -63,9 +64,13 @@ export default function Login() {
 
   const onSubmit = (data: LoginFormValues) => {
     login.mutate({ data }, {
-      onSuccess: () => {
+      onSuccess: (user) => {
+        // Populate the auth cache directly from the login response so navigation
+        // to "/" sees the user as authenticated immediately — no refetch race
+        // and no full-page reload (which can race against Set-Cookie on Docker
+        // Desktop for Mac).
+        queryClient.setQueryData(getGetMeQueryKey(), user);
         setLocation("/");
-        window.location.reload();
       },
       onError: (error) => {
         toast({

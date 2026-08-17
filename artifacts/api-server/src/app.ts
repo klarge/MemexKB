@@ -108,14 +108,33 @@ app.use(
     secret: sessionSecret ?? "kb-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
-    cookie: {
+    cookie: (() => {
       // COOKIE_SECURE=true should only be set when the app is served over HTTPS.
       // Leaving it false (the default) is correct for plain HTTP deployments.
-      secure: process.env.COOKIE_SECURE === "true",
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "lax",
-    },
+      const secure = process.env.COOKIE_SECURE === "true";
+
+      // COOKIE_SAMESITE controls the SameSite cookie attribute.
+      // Valid values: "lax" (default), "strict", "none".
+      // Note: browsers require Secure=true when SameSite=None; setting
+      // COOKIE_SAMESITE=none automatically enables the Secure flag.
+      const rawSameSite = (process.env.COOKIE_SAMESITE ?? "lax").toLowerCase();
+      let sameSite: "lax" | "strict" | "none";
+      if (rawSameSite === "strict") {
+        sameSite = "strict";
+      } else if (rawSameSite === "none") {
+        sameSite = "none";
+      } else {
+        sameSite = "lax";
+      }
+      const effectiveSecure = secure || sameSite === "none";
+
+      return {
+        secure: effectiveSecure,
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite,
+      };
+    })(),
   }),
 );
 

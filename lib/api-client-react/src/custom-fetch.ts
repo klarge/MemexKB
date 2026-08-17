@@ -360,7 +360,16 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const response = await fetch(input, {
+    // Explicitly include credentials (cookies) with every request.
+    // The browser default ("same-origin") should be equivalent for same-origin
+    // apps, but being explicit avoids ambiguity in non-standard network
+    // topologies such as Docker Desktop for Mac's port-forwarding layer.
+    credentials: "include",
+    ...init,
+    method,
+    headers,
+  });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
