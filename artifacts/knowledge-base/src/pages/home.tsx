@@ -282,8 +282,8 @@ export default function Home() {
     setLocation(todayEntry ? `/wiki/${todayEntry.slug}/edit` : "/wiki/new?log=1");
   };
 
-  const activeTasks = dashboard?.activeTasks ?? [];
-  const upcomingCards = dashboard?.upcomingCards ?? [];
+  const activeTasks = (dashboard?.activeTasks ?? []).slice(0, 5);
+  const upcomingCards = (dashboard?.upcomingCards ?? []).slice(0, 5);
 
   return (
     <div className="space-y-8 max-w-5xl">
@@ -540,7 +540,7 @@ export default function Home() {
               loading={statsLoading}
               empty={!statsLoading && (stats?.recentlyUpdated ?? []).length === 0}
             >
-              {(stats?.recentlyUpdated ?? []).map((a) => (
+              {(stats?.recentlyUpdated ?? []).slice(0, 5).map((a) => (
                 <ArticleRow key={a.id} article={a} />
               ))}
             </SectionShell>
@@ -553,7 +553,7 @@ export default function Home() {
               loading={statsLoading}
               empty={!statsLoading && (stats?.oldestUpdated ?? []).length === 0}
             >
-              {(stats?.oldestUpdated ?? []).map((a) => (
+              {(stats?.oldestUpdated ?? []).slice(0, 5).map((a) => (
                 <ArticleRow key={a.id} article={a} accent />
               ))}
             </SectionShell>
