@@ -357,6 +357,26 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     res.status(400).json({ error: "Title required" });
     return;
   }
+
+  // Validate groupIds before creating the article so we don't leave orphaned records.
+  if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
+    const existingGroups = await db.select({ id: groupsTable.id }).from(groupsTable).where(inArray(groupsTable.id, groupIds));
+    const existingGroupIdSet = new Set(existingGroups.map((g) => g.id));
+    if (groupIds.some((gid: number) => !existingGroupIdSet.has(gid))) {
+      res.status(400).json({ error: "One or more group IDs do not exist" });
+      return;
+    }
+    // Non-admins can only assign articles to groups they belong to.
+    if (req.session.userRole !== "admin") {
+      const userGroupIds = await getUserGroupIds(req.session.userId);
+      const userGroupIdSet = new Set(userGroupIds);
+      if (groupIds.some((gid: number) => !userGroupIdSet.has(gid))) {
+        res.status(403).json({ error: "You can only assign articles to groups you are a member of" });
+        return;
+      }
+    }
+  }
+
   let slug = slugify(title);
   const existing = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (existing.length > 0) {
@@ -840,6 +860,14 @@ router.get("/articles/:slug/lock", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Article not found" });
     return;
   }
+  // Apply the same access check as the article read endpoint — lock holder
+  // details should not leak to users who cannot access the article.
+  const articleGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
+  const userGroupIds = await getUserGroupIds(req.session.userId);
+  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
   const lock = await getActiveLock(article.id);
   res.json({
     articleId: article.id,
@@ -853,6 +881,14 @@ router.put("/articles/:slug/lock", requireAuth, requireRole("admin", "editor"), 
   const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
+    return;
+  }
+
+  // Only users who can access the article may acquire a lock on it.
+  const articleGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
+  const userGroupIds = await getUserGroupIds(req.session.userId);
+  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+    res.status(403).json({ error: "Access denied" });
     return;
   }
 
@@ -892,6 +928,14 @@ router.delete("/articles/:slug/lock", requireAuth, async (req, res) => {
     return;
   }
 
+  // Only users who can access the article may release its lock.
+  const articleGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
+  const userGroupIds = await getUserGroupIds(req.session.userId);
+  if (!canAccessArticle(articleGroupIds, userGroupIds, userRole)) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
   const lock = await getActiveLock(article.id);
   if (!lock) {
     res.json({ message: "No active lock" });
@@ -912,6 +956,19 @@ router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), as
   const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Article not found" });
+    return;
+  }
+  // Mirror PATCH's two-level authorization check:
+  // 1. Log entries can only be deleted by their creator or an admin.
+  if (existing.isLogEntry && req.session.userRole !== "admin" && existing.createdById !== req.session.userId) {
+    res.status(403).json({ error: "You can only delete your own log entries" });
+    return;
+  }
+  // 2. Editors must be members of at least one of the article's groups (admins bypass).
+  const articleGroupIds = (await getArticleGroups(existing.id)).map((g) => g.id);
+  const userGroupIds = await getUserGroupIds(req.session.userId);
+  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+    res.status(403).json({ error: "You do not have permission to delete this article" });
     return;
   }
   await db.delete(articlesTable).where(eq(articlesTable.slug, slug));
@@ -961,6 +1018,22 @@ router.put("/articles/:slug/groups", requireAuth, requireRole("admin", "editor")
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
+  }
+  // Only users who can already access this article (or admins) may change its groups.
+  const currentGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
+  const userGroupIds = await getUserGroupIds(req.session.userId);
+  if (!canAccessArticle(currentGroupIds, userGroupIds, req.session.userRole)) {
+    res.status(403).json({ error: "You do not have permission to modify this article's groups" });
+    return;
+  }
+  // Validate that the new groupIds all exist.
+  if (Array.isArray(groupIds) && groupIds.length > 0) {
+    const existingGroups = await db.select({ id: groupsTable.id }).from(groupsTable).where(inArray(groupsTable.id, groupIds));
+    const existingGroupIdSet = new Set(existingGroups.map((g) => g.id));
+    if (groupIds.some((gid: number) => !existingGroupIdSet.has(gid))) {
+      res.status(400).json({ error: "One or more group IDs do not exist" });
+      return;
+    }
   }
   await db.delete(articleGroupsTable).where(eq(articleGroupsTable.articleId, article.id));
   if (Array.isArray(groupIds) && groupIds.length > 0) {
