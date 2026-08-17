@@ -148,7 +148,31 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
     .set({ passwordHash })
     .where(eq(usersTable.id, user.id));
 
-  res.json({ message: "Password changed successfully" });
+  // Rotate the session ID after a password change so that any stolen session
+  // cookie from before the change can no longer be used.  Fail closed: if
+  // rotation or save fails, destroy the existing session so the pre-change
+  // cookie cannot be reused.  The user must log in again.
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
+      req.session.destroy(() => {
+        res.status(500).json({ error: "Password changed but session rotation failed. Please log in again." });
+      });
+      return;
+    }
+    req.session.userId = user.id;
+    req.session.userRole = user.role;
+    req.session.userEmail = user.email;
+    req.session.userName = user.name;
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        req.session.destroy(() => {
+          res.status(500).json({ error: "Password changed but session save failed. Please log in again." });
+        });
+        return;
+      }
+      res.json({ message: "Password changed successfully" });
+    });
+  });
 });
 
 export default router;

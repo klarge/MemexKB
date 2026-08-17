@@ -8,7 +8,33 @@ import { requireRole } from "../lib/auth";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-const ALLOWED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"]);
+// SVG is intentionally excluded: inline scripts in SVG execute when the file is
+// served with its own content type, making it an XSS vector.
+const ALLOWED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * Validate image magic bytes to confirm the file content matches its declared
+ * MIME type.  Rejects files that claim to be images but are not.
+ */
+function validateImageMagicBytes(buf: Buffer, mimetype: string): boolean {
+  if (buf.length < 12) return false;
+  switch (mimetype) {
+    case "image/jpeg":
+      return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+    case "image/png":
+      return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+    case "image/gif":
+      return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46;
+    case "image/webp":
+      // RIFF....WEBP
+      return (
+        buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+        buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+      );
+    default:
+      return false;
+  }
+}
 
 async function getSetting(key: string): Promise<string | null> {
   const [row] = await db
@@ -135,7 +161,11 @@ router.post("/admin/settings/logo", requireRole("admin"), upload.single("logo"),
   }
   const { mimetype, buffer } = req.file;
   if (!ALLOWED_LOGO_TYPES.has(mimetype)) {
-    res.status(400).json({ error: "Unsupported file type. Use JPEG, PNG, GIF, WebP, or SVG." });
+    res.status(400).json({ error: "Unsupported file type. Use JPEG, PNG, GIF, or WebP." });
+    return;
+  }
+  if (!validateImageMagicBytes(buffer, mimetype)) {
+    res.status(400).json({ error: "File content does not match the declared image type." });
     return;
   }
   await Promise.all([

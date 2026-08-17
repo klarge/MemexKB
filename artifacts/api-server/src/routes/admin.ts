@@ -16,7 +16,7 @@ import {
   boardCardsTable,
   boardCardMembersTable,
 } from "@workspace/db";
-import { eq, inArray, asc, desc, ne } from "drizzle-orm";
+import { eq, inArray, asc, desc, ne, count } from "drizzle-orm";
 import { createRequire } from "node:module";
 import multer from "multer";
 const _require = createRequire(import.meta.url);
@@ -29,7 +29,72 @@ import TurndownService from "turndown";
 import { articleLinksTable } from "@workspace/db";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+// 20 MB compressed per-file cap; 50-file count cap prevents multipart abuse.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 50 } });
+
+// Import safety limits
+// Entry cap: EXPORT_ARTICLE_LIMIT articles × 3 files each (html+md+json)
+// + up to EXPORT_ARTICLE_LIMIT images + metadata headroom.
+const EXPORT_ARTICLE_LIMIT   = 5000;
+const MAX_ZIP_ENTRIES        = EXPORT_ARTICLE_LIMIT * 4 + 50; // 20,050
+const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024; // 200 MB aggregate (all entries)
+const MAX_ENTRY_BYTES        = 10 * 1024 * 1024;   // 10 MB per individual entry
+
+type ZipEntry = { stream: () => NodeJS.ReadableStream; uncompressedSize?: number };
+
+/**
+ * Read a ZIP entry as a Buffer while enforcing per-entry AND aggregate byte
+ * ceilings.  Protects against ZIP bombs even when central-directory metadata
+ * is forged or missing:
+ *  1. Pre-flights the declared uncompressedSize (if available) against both caps.
+ *  2. Streams decompressed output and aborts early if actual bytes exceed either cap.
+ *  3. Updates agg.bytesRead only on a successful read (so a failed read does not
+ *     eat into the aggregate budget).
+ * Returns null when either cap is exceeded.
+ */
+function readEntryBounded(
+  file: ZipEntry,
+  maxEntryBytes: number,
+  agg: { bytesRead: number; limit: number },
+): Promise<Buffer | null> {
+  const declared = file.uncompressedSize ?? 0;
+  if (declared > maxEntryBytes) return Promise.resolve(null);
+  if (agg.bytesRead + declared > agg.limit) return Promise.resolve(null);
+
+  return new Promise((resolve, reject) => {
+    const stream = file.stream();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+
+    const abort = () => {
+      settled = true;
+      (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+      resolve(null);
+    };
+
+    stream.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      total += chunk.length;
+      // Charge bytes to the aggregate as they arrive — including for entries that
+      // ultimately fail.  This is the critical invariant: the aggregate ceiling
+      // limits total decompression work even when entries are aborted mid-stream
+      // (e.g. forged/absent declared sizes cannot bypass the budget).
+      agg.bytesRead += chunk.length;
+      if (total > maxEntryBytes || agg.bytesRead > agg.limit) { abort(); return; }
+      chunks.push(chunk);
+    });
+    stream.on("end", () => {
+      if (!settled) { settled = true; resolve(Buffer.concat(chunks)); }
+    });
+    stream.on("close", () => {
+      if (!settled) { settled = true; resolve(null); }
+    });
+    stream.on("error", (err) => {
+      if (!settled) { settled = true; reject(err); }
+    });
+  });
+}
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -167,6 +232,15 @@ const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fen
 // ─── Export ──────────────────────────────────────────────────────────────────
 
 router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res) => {
+  // Guard against loading unbounded data into memory on large instances.
+  const [{ articleCount }] = await db.select({ articleCount: count() }).from(articlesTable);
+  if (Number(articleCount) > EXPORT_ARTICLE_LIMIT) {
+    res.status(413).json({
+      error: `Export contains ${articleCount} articles which exceeds the ${EXPORT_ARTICLE_LIMIT}-article limit. Use a direct database backup instead.`,
+    });
+    return;
+  }
+
   const articles = await db.select().from(articlesTable);
   const allGroups = await db.select().from(articleGroupsTable);
   const groups = await db.select().from(groupsTable);
@@ -329,6 +403,21 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
   const unzipper = await import("unzipper");
   const directory = await unzipper.Open.buffer(zipFile.buffer);
 
+  // ── Entry-count guard (quick; does not trust decompressed-size metadata) ─
+  if (directory.files.length > MAX_ZIP_ENTRIES) {
+    res.status(413).json({
+      error: `Archive contains ${directory.files.length} entries (limit: ${MAX_ZIP_ENTRIES})`,
+      imported: 0,
+      skipped: 0,
+      errors: [],
+    });
+    return;
+  }
+
+  // Shared aggregate byte counter — enforced while streaming every entry so
+  // forged/absent central-directory metadata cannot bypass the 200 MB cap.
+  const agg = { bytesRead: 0, limit: MAX_DECOMPRESSED_BYTES };
+
   // ── Pass 0: import images ────────────────────────────────────────────────
   // Build a map from exported path (e.g. "42-photo.jpg") → new DB id
   const imagePathMap = new Map<string, number>();
@@ -342,7 +431,11 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       if (!filename) continue;
       const originalFilename = filename.replace(/^\d+-/, "") || filename;
       const mimeType = mimeFromExt(filename);
-      const buf = await file.buffer();
+      const buf = await readEntryBounded(file as ZipEntry, MAX_ENTRY_BYTES, agg);
+      if (buf === null) {
+        errors.push(`Skipped oversized image ${file.path} (limit: ${MAX_ENTRY_BYTES / 1024 / 1024} MB or aggregate 200 MB exceeded)`);
+        continue;
+      }
       const data = buf.toString("base64");
       const [inserted] = await db
         .insert(articleImagesTable)
@@ -368,7 +461,11 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
   const tagsJsonFile = directory.files.find((f) => f.path === "tags.json");
   if (tagsJsonFile) {
     try {
-      const tagsJson = JSON.parse((await tagsJsonFile.buffer()).toString("utf-8")) as Array<{
+      const tagsJsonBuf = await readEntryBounded(tagsJsonFile as ZipEntry, MAX_ENTRY_BYTES, agg);
+      if (!tagsJsonBuf) {
+        errors.push("Skipped tags.json: entry too large or aggregate limit exceeded");
+      } else {
+      const tagsJson = JSON.parse(tagsJsonBuf.toString("utf-8")) as Array<{
         name: string;
         color?: string;
       }>;
@@ -384,6 +481,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
           if (inserted) tagsByName.set(key, inserted.id);
         }
       }
+      } // end if tagsJsonBuf
     } catch (err) {
       errors.push(`Failed to process tags.json: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -397,8 +495,12 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
 
   for (const file of metaFiles) {
     try {
-      const content = await file.buffer();
-      const meta = JSON.parse(content.toString("utf-8")) as {
+      const metaBuf = await readEntryBounded(file as ZipEntry, MAX_ENTRY_BYTES, agg);
+      if (!metaBuf) {
+        errors.push(`Skipped ${file.path}: entry too large or aggregate limit exceeded`);
+        continue;
+      }
+      const meta = JSON.parse(metaBuf.toString("utf-8")) as {
         slug: string;
         title: string;
         groups?: string[];
@@ -423,14 +525,22 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
 
       if (htmlFile) {
         // Lossless restore: raw HTML preserves infoboxes, custom tables, etc.
-        const rawHtml = (await htmlFile.buffer()).toString("utf-8");
-        const rewrittenHtml = rewriteImageRefs(rawHtml, imagePathMap);
+        const htmlBuf = await readEntryBounded(htmlFile as ZipEntry, MAX_ENTRY_BYTES, agg);
+        if (!htmlBuf) {
+          errors.push(`Skipped ${htmlFile.path}: entry too large or aggregate limit exceeded`);
+          continue;
+        }
+        const rewrittenHtml = rewriteImageRefs(htmlBuf.toString("utf-8"), imagePathMap);
         articleContent = sanitizeArticleHtml(rewrittenHtml);
         wikilinksPass1 = extractWikilinks(rewrittenHtml);
       } else if (mdFile) {
         // Fallback: Markdown round-trip (third-party imports or older exports)
-        const rawMd = (await mdFile.buffer()).toString("utf-8");
-        const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n/, ""), imagePathMap);
+        const mdBuf = await readEntryBounded(mdFile as ZipEntry, MAX_ENTRY_BYTES, agg);
+        if (!mdBuf) {
+          errors.push(`Skipped ${mdFile.path}: entry too large or aggregate limit exceeded`);
+          continue;
+        }
+        const bodyMd = rewriteImageRefs(mdBuf.toString("utf-8").replace(/^# .+\n\n/, ""), imagePathMap);
         wikilinksPass1 = extractWikilinks(bodyMd);
         articleContent = sanitizeArticleHtml(await marked.parse(bodyMd));
       }
@@ -547,13 +657,22 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       let title: string;
 
       if (htmlCompanion) {
-        const rawHtml = (await htmlCompanion.buffer()).toString("utf-8");
-        const rewrittenHtml = rewriteImageRefs(rawHtml, imagePathMap);
+        const htmlBuf = await readEntryBounded(htmlCompanion as ZipEntry, MAX_ENTRY_BYTES, agg);
+        if (!htmlBuf) {
+          errors.push(`Skipped ${htmlCompanion.path}: entry too large or aggregate limit exceeded`);
+          continue;
+        }
+        const rewrittenHtml = rewriteImageRefs(htmlBuf.toString("utf-8"), imagePathMap);
         articleContent = sanitizeArticleHtml(rewrittenHtml);
         wikilinksPass2 = extractWikilinks(rewrittenHtml);
         title = titleFromSlug(slug);
       } else {
-        const rawMd = (await file.buffer()).toString("utf-8");
+        const mdBuf = await readEntryBounded(file as ZipEntry, MAX_ENTRY_BYTES, agg);
+        if (!mdBuf) {
+          errors.push(`Skipped ${file.path}: entry too large or aggregate limit exceeded`);
+          continue;
+        }
+        const rawMd = mdBuf.toString("utf-8");
         const h1 = extractH1(rawMd);
         title = h1 ?? titleFromSlug(slug);
         const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n?/, ""), imagePathMap);
