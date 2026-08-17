@@ -38,17 +38,24 @@ router.post("/auth/setup", async (req, res) => {
     .values({ name: name.trim(), email: email.trim().toLowerCase(), passwordHash, role: "admin" })
     .returning();
 
-  req.session.userId = user.id;
-  req.session.userRole = user.role;
-  req.session.userEmail = user.email;
-  req.session.userName = user.name;
-
-  req.session.save((err) => {
-    if (err) {
+  // Regenerate the session ID before writing identity to prevent session fixation.
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
       res.status(500).json({ error: "Failed to create session" });
       return;
     }
-    res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    req.session.userId = user.id;
+    req.session.userRole = user.role;
+    req.session.userEmail = user.email;
+    req.session.userName = user.name;
+
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        res.status(500).json({ error: "Failed to create session" });
+        return;
+      }
+      res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    });
   });
 });
 
@@ -72,17 +79,24 @@ router.post("/auth/login", async (req, res) => {
     return;
   }
 
-  req.session.userId = user.id;
-  req.session.userRole = user.role;
-  req.session.userEmail = user.email;
-  req.session.userName = user.name;
-
-  req.session.save((err) => {
-    if (err) {
+  // Regenerate the session ID before writing identity to prevent session fixation.
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
       res.status(500).json({ error: "Failed to create session" });
       return;
     }
-    res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    req.session.userId = user.id;
+    req.session.userRole = user.role;
+    req.session.userEmail = user.email;
+    req.session.userName = user.name;
+
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        res.status(500).json({ error: "Failed to create session" });
+        return;
+      }
+      res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    });
   });
 });
 

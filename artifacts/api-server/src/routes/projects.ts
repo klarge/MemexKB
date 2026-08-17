@@ -372,6 +372,36 @@ router.patch("/boards/:boardId/cards/reorder", requireAuth, async (req, res) => 
   const { columns } = req.body as { columns: { columnId: number; cardIds: number[] }[] };
   if (!Array.isArray(columns)) { res.status(400).json({ error: "columns array required" }); return; }
 
+  // Ownership validation: reject any columnId or cardId that does not belong to
+  // this board. Without this check a client could reposition cards from boards
+  // they cannot access (IDOR).
+  const boardColumns = await db
+    .select({ id: boardColumnsTable.id })
+    .from(boardColumnsTable)
+    .where(eq(boardColumnsTable.boardId, boardId));
+  const validColumnIds = new Set(boardColumns.map((c) => c.id));
+
+  const submittedColumnIds = columns.map((c) => c.columnId);
+  if (submittedColumnIds.some((id) => !validColumnIds.has(id))) {
+    res.status(400).json({ error: "One or more columns do not belong to this board" });
+    return;
+  }
+
+  // Validate cards: each cardId must belong to one of the board's columns.
+  const allSubmittedCardIds = columns.flatMap((c) => c.cardIds);
+  if (allSubmittedCardIds.length > 0) {
+    const validCards = await db
+      .select({ id: boardCardsTable.id })
+      .from(boardCardsTable)
+      .where(inArray(boardCardsTable.columnId, [...validColumnIds]));
+    const validCardIds = new Set(validCards.map((c) => c.id));
+
+    if (allSubmittedCardIds.some((id) => !validCardIds.has(id))) {
+      res.status(400).json({ error: "One or more cards do not belong to this board" });
+      return;
+    }
+  }
+
   await Promise.all(
     columns.flatMap(({ columnId, cardIds }) =>
       cardIds.map((cardId, idx) =>
