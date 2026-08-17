@@ -51,7 +51,7 @@ router.get("/settings", async (_req, res) => {
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
     navLinks: parseNavLinks(map.get("nav_links")),
-    logEntriesEnabled: map.get("log_entries_enabled") === "true",
+    logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
     projectsEnabled: map.get("projects_enabled") !== "false",
   });
@@ -87,7 +87,7 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
     navLinks: parseNavLinks(map.get("nav_links")),
-    logEntriesEnabled: map.get("log_entries_enabled") === "true",
+    logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
     projectsEnabled: map.get("projects_enabled") !== "false",
   });

@@ -539,7 +539,7 @@ async function isLogEntriesEnabled(): Promise<boolean> {
     .from(siteSettingsTable)
     .where(eq(siteSettingsTable.key, "log_entries_enabled"))
     .limit(1);
-  return row?.value === "true";
+  return row?.value !== "false";
 }
 
 router.get("/log", requireAuth, async (req, res) => {
