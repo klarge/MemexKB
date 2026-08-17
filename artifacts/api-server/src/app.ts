@@ -19,11 +19,24 @@ const PgSession = connectPgSimple(session);
 
 const app: Express = express();
 
-// Trust the first proxy hop so that req.secure and the rate-limiter's IP
-// detection reflect the real client connection rather than the proxy's.
-// This is required when the app runs behind nginx, Caddy, Traefik, etc.
-// so that express-session correctly sets Secure cookies on HTTPS requests.
-app.set("trust proxy", 1);
+// Trust proxy configuration.
+// Set TRUST_PROXY=1 (or any truthy number) when running behind a reverse proxy
+// (nginx, Caddy, Traefik, AWS ALB, etc.) so that req.ip and req.secure reflect
+// the real client rather than the proxy's address.
+//
+// Set TRUST_PROXY=0 or leave unset for direct Docker deployments where the
+// container is exposed on the host without an intervening proxy.  Docker Desktop
+// for Mac adds its own forwarding headers that can confuse express-session when
+// trust proxy is enabled — if login redirects back to the login page immediately
+// after a successful auth response, try TRUST_PROXY=0.
+const rawTrustProxy = process.env.TRUST_PROXY;
+const trustProxy =
+  rawTrustProxy === undefined
+    ? 1               // default: trust one hop (common reverse-proxy setups)
+    : Number(rawTrustProxy);  // 0 = disabled, 1+ = number of hops to trust
+if (trustProxy > 0) {
+  app.set("trust proxy", trustProxy);
+}
 
 // Security headers — set before any route handlers.
 // CSP is intentionally relaxed for the Swagger UI and the embedded editor;
@@ -81,9 +94,17 @@ if (!sessionSecret) {
   logger.warn("SESSION_SECRET is not set — using insecure default. Set SESSION_SECRET in production.");
 }
 
+const pgSessionStore = new PgSession({
+  pool: pool as unknown as PgPool,
+  tableName: "user_sessions",
+  // Surface store errors in the server log so silent session failures are
+  // visible (e.g. missing user_sessions table, pool exhaustion, etc.).
+  errorLog: (...args: unknown[]) => logger.error({ err: args[0] }, "Session store error"),
+});
+
 app.use(
   session({
-    store: new PgSession({ pool: pool as unknown as PgPool, tableName: "user_sessions" }),
+    store: pgSessionStore,
     secret: sessionSecret ?? "kb-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
