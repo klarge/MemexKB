@@ -330,11 +330,18 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       setTitle(article.title);
       setSelectedGroups(article.groups?.map((g) => g.id) || []);
       setSelectedTags(article.tags?.map((t) => t.id) || []);
-      if (editor && editor.getHTML() !== article.content) {
-        editor.commands.setContent(article.content);
+      if (editor) {
+        if (editor.getHTML() !== article.content) {
+          // Pass false as emitUpdate so this programmatic load does NOT fire
+          // the editor's "update" event and accidentally schedule an autosave.
+          editor.commands.setContent(article.content, false);
+        }
+        // Seed lastSavedRef with the *normalized* HTML that Tiptap produces,
+        // not the raw string from the server — they can differ in whitespace /
+        // attribute ordering, which would cause the diff check to think content
+        // changed and trigger a spurious save on first open.
+        lastSavedRef.current = { title: article.title, content: editor.getHTML() };
       }
-      // Seed lastSavedRef with what's on the server
-      lastSavedRef.current = { title: article.title, content: article.content };
     }
   }, [article, isNew, editor]);
 
