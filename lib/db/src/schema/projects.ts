@@ -16,6 +16,7 @@ export const projectsTable = pgTable("projects", {
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -40,6 +41,7 @@ export const boardsTable = pgTable("boards", {
     .references(() => projectsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   position: integer("position").notNull().default(0),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

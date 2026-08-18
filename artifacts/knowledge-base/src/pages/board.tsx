@@ -17,6 +17,7 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
   useSortable,
   arrayMove,
 } from "@dnd-kit/sortable";
@@ -56,6 +57,8 @@ type ProjectMember = { id: number; name: string; email: string };
 
 const colKey = (id: number) => `col-${id}`;
 const colId = (key: string) => parseInt(key.replace("col-", ""));
+const isColKey = (id: string | number): id is string =>
+  typeof id === "string" && id.startsWith("col-");
 
 // ─── Card chip (used in both board and drag overlay) ─────────────────────────
 
@@ -147,6 +150,7 @@ function KanbanColumn({
   onAddCard,
   onDeleteColumn,
   onRenameColumn,
+  isDraggingColumn,
 }: {
   column: Column;
   cardIds: number[];
@@ -155,8 +159,21 @@ function KanbanColumn({
   onAddCard: (columnId: number, title: string) => void;
   onDeleteColumn: (id: number) => void;
   onRenameColumn: (id: number, name: string) => void;
+  isDraggingColumn: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: colKey(column.id) });
+  // Sortable for the column itself (drag to reorder columns)
+  const {
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging: isColDragging,
+    attributes,
+    listeners,
+  } = useSortable({ id: colKey(column.id) });
+
+  // Droppable for card drop targets inside the column
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({ id: colKey(column.id) });
+
   const [addingCard, setAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState("");
   const [editing, setEditing] = useState(false);
@@ -168,7 +185,6 @@ function KanbanColumn({
     if (!t) return;
     onAddCard(column.id, t);
     setNewCardTitle("");
-    // Stay open for rapid entry — Escape closes
     setTimeout(() => addCardRef.current?.focus(), 0);
   };
 
@@ -180,9 +196,25 @@ function KanbanColumn({
   };
 
   return (
-    <div className="w-72 shrink-0 flex flex-col rounded-xl border bg-muted/30 shadow-sm overflow-hidden">
+    <div
+      ref={setSortableRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`group/kanban-col w-72 shrink-0 flex flex-col rounded-xl border bg-muted/30 shadow-sm overflow-hidden transition-opacity ${isColDragging ? "opacity-40" : ""}`}
+      {...attributes}
+    >
       {/* Header */}
-      <div className="flex items-center gap-1.5 px-3 py-2.5 border-b bg-muted/50">
+      <div className="flex items-center gap-1 px-2 py-2.5 border-b bg-muted/50">
+        {/* Column drag handle */}
+        <button
+          type="button"
+          className="shrink-0 p-0.5 rounded text-muted-foreground/30 group-hover/kanban-col:text-muted-foreground/50 hover:!text-muted-foreground cursor-grab active:cursor-grabbing transition-colors"
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+          title="Drag to reorder column"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+
         {editing ? (
           <>
             <input
@@ -229,8 +261,8 @@ function KanbanColumn({
       {/* Cards */}
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
         <div
-          ref={setNodeRef}
-          className={`flex-1 min-h-[60px] flex flex-col gap-2 p-2 transition-colors ${isOver ? "bg-primary/5" : ""}`}
+          ref={setDroppableRef}
+          className={`flex-1 min-h-[60px] flex flex-col gap-2 p-2 transition-colors ${isOver && !isDraggingColumn ? "bg-primary/5" : ""}`}
         >
           {cardIds.map((id) =>
             cardMap[id] ? (
@@ -404,7 +436,6 @@ function CardDetailPanel({
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const memberIds = new Set(card.members.map((m) => m.id));
 
-  // Sync when card prop changes (e.g., after refetch)
   useEffect(() => {
     setTitle(card.title);
     setDescription(card.description);
@@ -557,7 +588,6 @@ function CardDetailPanel({
               )}
               {comments.map((c) => (
                 <div key={c.id} className="group flex gap-2.5">
-                  {/* Avatar */}
                   <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-semibold uppercase">
                     {c.userName ? c.userName.slice(0, 2) : "?"}
                   </div>
@@ -570,7 +600,6 @@ function CardDetailPanel({
                     </div>
                     <p className="text-sm leading-snug whitespace-pre-wrap break-words">{c.content}</p>
                   </div>
-                  {/* Delete — own comments or admin */}
                   {(c.userId === user?.id || user?.role === "admin") && (
                     <button
                       type="button"
@@ -640,20 +669,20 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   const [items, setItems] = useState<Record<string, number[]>>({});
   const [columnOrder, setColumnOrder] = useState<number[]>([]);
   const [activeCardId, setActiveCardId] = useState<number | null>(null);
+  const [activeColumnKey, setActiveColumnKey] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
+
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
+  const columnOrderRef = useRef(columnOrder);
+  useEffect(() => { columnOrderRef.current = columnOrder; }, [columnOrder]);
 
   // When true, the next boardData-triggered sync is skipped once.
-  // This prevents the drop from snapping back: onDragEnd sets the flag before
-  // clearing activeCardId, so the effect that fires on that state change is
-  // suppressed. The *next* run — after persistReorder invalidates the query
-  // and boardData actually reflects the new layout — proceeds normally.
   const skipNextSyncRef = useRef(false);
 
   // Sync from server data — skipped while dragging, and once after each drop.
   useEffect(() => {
-    if (activeCardId !== null || !boardData) return;
+    if (activeCardId !== null || activeColumnKey !== null || !boardData) return;
     if (skipNextSyncRef.current) {
       skipNextSyncRef.current = false;
       return;
@@ -665,12 +694,12 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
         .map((c) => c.id);
     }
     setItems(newItems);
-    setColumnOrder(boardData.columns.map((c) => c.id).sort((a, b) => {
-      const ca = boardData.columns.find((c) => c.id === a);
-      const cb = boardData.columns.find((c) => c.id === b);
-      return (ca?.position ?? 0) - (cb?.position ?? 0);
-    }));
-  }, [boardData, activeCardId]);
+    setColumnOrder(
+      [...boardData.columns]
+        .sort((a, b) => a.position - b.position)
+        .map((c) => c.id),
+    );
+  }, [boardData, activeCardId, activeColumnKey]);
 
   // Card map for fast lookup
   const cardMap = useMemo<Record<number, Card>>(() => {
@@ -705,13 +734,21 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   );
 
   function onDragStart({ active }: DragStartEvent) {
-    setActiveCardId(active.id as number);
+    const id = active.id;
+    if (isColKey(id)) {
+      setActiveColumnKey(id);
+    } else {
+      setActiveCardId(id as number);
+    }
   }
 
   function onDragOver({ active, over }: DragOverEvent) {
+    // Column reordering is handled entirely in onDragEnd
+    if (isColKey(active.id)) return;
+
     if (!over) return;
     const ac = findContainer(active.id as number);
-    const oc = findContainer(over.id as number | string) ?? (String(over.id).startsWith("col-") ? String(over.id) : null);
+    const oc = findContainer(over.id as number | string) ?? (isColKey(over.id) ? String(over.id) : null);
     if (!ac || !oc || ac === oc) return;
 
     setItems((prev) => {
@@ -728,14 +765,30 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   }
 
   function onDragEnd({ active, over }: DragEndEvent) {
-    // Skip the sync that fires when activeCardId flips to null — boardData is
-    // still stale at that point. The next sync after persistReorder refreshes
-    // boardData will pick up the authoritative order.
     skipNextSyncRef.current = true;
+
+    // ── Column reorder ──
+    if (isColKey(active.id)) {
+      setActiveColumnKey(null);
+      if (!over || active.id === over.id) return;
+      const oldIdx = columnOrderRef.current.indexOf(colId(active.id));
+      const newIdx = isColKey(over.id)
+        ? columnOrderRef.current.indexOf(colId(over.id))
+        : -1;
+      if (oldIdx !== -1 && newIdx !== -1) {
+        const newOrder = arrayMove(columnOrderRef.current, oldIdx, newIdx);
+        setColumnOrder(newOrder);
+        columnOrderRef.current = newOrder;
+      }
+      setTimeout(() => persistColumnOrder(), 0);
+      return;
+    }
+
+    // ── Card reorder / move ──
     setActiveCardId(null);
     if (!over) return;
     const ac = findContainer(active.id as number);
-    const oc = findContainer(over.id as number | string) ?? (String(over.id).startsWith("col-") ? String(over.id) : null);
+    const oc = findContainer(over.id as number | string) ?? (isColKey(over.id) ? String(over.id) : null);
     if (!ac || !oc) return;
 
     if (ac === oc) {
@@ -760,6 +813,14 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ columns: cols }),
+    }).then(() => qc.invalidateQueries({ queryKey: ["board", boardId] }));
+  }, [boardId, qc]);
+
+  const persistColumnOrder = useCallback(() => {
+    fetch(`/api/boards/${boardId}/columns/reorder`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ columnIds: columnOrderRef.current }),
     }).then(() => qc.invalidateQueries({ queryKey: ["board", boardId] }));
   }, [boardId, qc]);
 
@@ -853,6 +914,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
 
   if (!boardData) return <div className="text-center py-20 text-muted-foreground">Board not found.</div>;
 
+  const isDraggingColumn = activeColumnKey !== null;
+
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       {/* Board toolbar */}
@@ -884,59 +947,78 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
         >
-          <div className="flex gap-4 items-start h-full p-6">
-            {columnOrder.map((cId) => {
-              const col = columnMap[cId];
-              if (!col) return null;
-              return (
-                <KanbanColumn
-                  key={cId}
-                  column={col}
-                  cardIds={items[colKey(cId)] ?? []}
-                  cardMap={cardMap}
-                  onOpenCard={setSelectedCardId}
-                  onAddCard={(colId, title) => addCard.mutate({ columnId: colId, title })}
-                  onDeleteColumn={(id) => deleteColumn.mutate(id)}
-                  onRenameColumn={(id, name) => renameColumn.mutate({ id, name })}
-                />
-              );
-            })}
+          {/* Outer SortableContext for column order */}
+          <SortableContext items={columnOrder.map(colKey)} strategy={horizontalListSortingStrategy}>
+            <div className="flex gap-4 items-start h-full p-6">
+              {columnOrder.map((cId) => {
+                const col = columnMap[cId];
+                if (!col) return null;
+                return (
+                  <KanbanColumn
+                    key={cId}
+                    column={col}
+                    cardIds={items[colKey(cId)] ?? []}
+                    cardMap={cardMap}
+                    onOpenCard={setSelectedCardId}
+                    onAddCard={(colId, title) => addCard.mutate({ columnId: colId, title })}
+                    onDeleteColumn={(id) => deleteColumn.mutate(id)}
+                    onRenameColumn={(id, name) => renameColumn.mutate({ id, name })}
+                    isDraggingColumn={isDraggingColumn}
+                  />
+                );
+              })}
 
-            {/* Add column */}
-            {showAddCol ? (
-              <div className="w-72 shrink-0 rounded-xl border bg-muted/30 p-3 space-y-2 shadow-sm">
-                <Input
-                  autoFocus
-                  placeholder="Column name…"
-                  value={newColName}
-                  onChange={(e) => setNewColName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitAddCol();
-                    if (e.key === "Escape") { setShowAddCol(false); setNewColName(""); }
-                  }}
-                />
-                <div className="flex gap-1.5">
-                  <Button size="sm" onClick={submitAddCol} disabled={!newColName.trim()}>Add Column</Button>
-                  <Button size="sm" variant="ghost" onClick={() => { setShowAddCol(false); setNewColName(""); }}>
-                    <X className="h-4 w-4" />
-                  </Button>
+              {/* Add column */}
+              {showAddCol ? (
+                <div className="w-72 shrink-0 rounded-xl border bg-muted/30 p-3 space-y-2 shadow-sm">
+                  <Input
+                    autoFocus
+                    placeholder="Column name…"
+                    value={newColName}
+                    onChange={(e) => setNewColName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitAddCol();
+                      if (e.key === "Escape") { setShowAddCol(false); setNewColName(""); }
+                    }}
+                  />
+                  <div className="flex gap-1.5">
+                    <Button size="sm" onClick={submitAddCol} disabled={!newColName.trim()}>Add Column</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setShowAddCol(false); setNewColName(""); }}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowAddCol(true)}
-                className="w-72 shrink-0 flex items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 py-4 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-              >
-                <Plus className="h-4 w-4" /> Add Column
-              </button>
-            )}
-          </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAddCol(true)}
+                  className="w-72 shrink-0 flex items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 py-4 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <Plus className="h-4 w-4" /> Add Column
+                </button>
+              )}
+            </div>
+          </SortableContext>
 
           <DragOverlay>
             {activeCardId && cardMap[activeCardId] ? (
               <div className="w-64 rotate-1 shadow-xl opacity-95">
                 <CardChip card={cardMap[activeCardId]} />
+              </div>
+            ) : activeColumnKey ? (
+              <div className="w-72 rounded-xl border bg-muted/30 shadow-2xl opacity-95 overflow-hidden rotate-1">
+                <div className="flex items-center gap-1 px-2 py-2.5 border-b bg-muted/50">
+                  <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                  <span className="text-sm font-semibold flex-1 truncate">
+                    {columnMap[colId(activeColumnKey)]?.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {(items[activeColumnKey] ?? []).length}
+                  </span>
+                </div>
+                <div className="px-3 py-2 text-xs text-muted-foreground italic">
+                  Drop to reorder…
+                </div>
               </div>
             ) : null}
           </DragOverlay>

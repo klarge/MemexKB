@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FolderKanban, Loader2, X, LayoutGrid } from "lucide-react";
+import { Plus, FolderKanban, Loader2, X, LayoutGrid, Archive, ArchiveRestore, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 
 type Project = {
@@ -12,6 +12,7 @@ type Project = {
   description: string;
   createdById: number | null;
   boardCount: number;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -21,13 +22,22 @@ export default function ProjectsPage() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const { data: projectsData, isLoading } = useQuery<{ projects: Project[]; truncated: boolean }>({
     queryKey: ["projects"],
     queryFn: () => fetch("/api/projects").then((r) => r.json()),
   });
+
+  const { data: archivedData } = useQuery<{ projects: Project[]; truncated: boolean }>({
+    queryKey: ["projects-archived"],
+    queryFn: () => fetch("/api/projects?archived=true").then((r) => r.json()),
+    enabled: showArchived,
+  });
+
   const projects = projectsData?.projects ?? [];
   const projectsTruncated = projectsData?.truncated ?? false;
+  const archivedProjects = archivedData?.projects ?? [];
 
   const createProject = useMutation({
     mutationFn: () =>
@@ -38,9 +48,20 @@ export default function ProjectsPage() {
       }).then((r) => r.json()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
-      setName("");
-      setDescription("");
-      setShowForm(false);
+      setName(""); setDescription(""); setShowForm(false);
+    },
+  });
+
+  const archiveProject = useMutation({
+    mutationFn: ({ id, archived }: { id: number; archived: boolean }) =>
+      fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["projects-archived"] });
     },
   });
 
@@ -97,11 +118,11 @@ export default function ProjectsPage() {
       {projectsTruncated && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
           <span className="font-medium">Showing first 100 projects.</span>{" "}
-          <span className="text-amber-700 dark:text-amber-400">Delete unused projects to see all items, or use search to find specific ones.</span>
+          <span className="text-amber-700 dark:text-amber-400">Delete unused projects to see all items.</span>
         </div>
       )}
 
-      {/* Project list */}
+      {/* Active project list */}
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -115,31 +136,112 @@ export default function ProjectsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <Link key={project.id} href={`/projects/${project.id}`}>
-              <div className="group rounded-xl border bg-card p-5 hover:shadow-md transition-all cursor-pointer hover:border-primary/30 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-base group-hover:text-primary transition-colors leading-snug">
-                    {project.name}
-                  </h3>
-                  <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                </div>
-                {project.description && (
-                  <p className="text-sm text-muted-foreground line-clamp-2">{project.description}</p>
-                )}
-                <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1 border-t border-border/50">
-                  <span className="flex items-center gap-1">
-                    <LayoutGrid className="h-3 w-3" />
-                    {project.boardCount} {project.boardCount === 1 ? "board" : "boards"}
-                  </span>
-                  <span className="ml-auto">
-                    Updated {format(new Date(project.updatedAt), "MMM d")}
-                  </span>
-                </div>
-              </div>
-            </Link>
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onArchive={(id) => archiveProject.mutate({ id, archived: true })}
+            />
           ))}
         </div>
       )}
+
+      {/* Archived section */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowArchived((v) => !v)}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+        >
+          {showArchived ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <Archive className="h-3.5 w-3.5" />
+          Archived projects
+          {archivedProjects.length > 0 && (
+            <span className="text-xs bg-muted rounded-full px-2 py-0.5">{archivedProjects.length}</span>
+          )}
+        </button>
+
+        {showArchived && (
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {archivedProjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground col-span-full py-4 text-center">No archived projects.</p>
+            ) : (
+              archivedProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onUnarchive={(id) => archiveProject.mutate({ id, archived: false })}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectCard({
+  project,
+  onArchive,
+  onUnarchive,
+}: {
+  project: Project;
+  onArchive?: (id: number) => void;
+  onUnarchive?: (id: number) => void;
+}) {
+  const isArchived = !!project.archivedAt;
+
+  return (
+    <div className={`group relative rounded-xl border bg-card p-5 hover:shadow-md transition-all hover:border-primary/30 space-y-3 ${isArchived ? "opacity-70" : ""}`}>
+      <Link href={`/projects/${project.id}`}>
+        <div className="cursor-pointer">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-semibold text-base group-hover:text-primary transition-colors leading-snug">
+              {project.name}
+            </h3>
+            <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          </div>
+          {project.description && (
+            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{project.description}</p>
+          )}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-3 border-t border-border/50 mt-3">
+            <span className="flex items-center gap-1">
+              <LayoutGrid className="h-3 w-3" />
+              {project.boardCount} {project.boardCount === 1 ? "board" : "boards"}
+            </span>
+            {isArchived ? (
+              <span className="ml-auto flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <Archive className="h-3 w-3" /> Archived
+              </span>
+            ) : (
+              <span className="ml-auto">Updated {format(new Date(project.updatedAt), "MMM d")}</span>
+            )}
+          </div>
+        </div>
+      </Link>
+
+      {/* Archive / unarchive button */}
+      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isArchived && onUnarchive ? (
+          <button
+            type="button"
+            title="Restore project"
+            onClick={(e) => { e.preventDefault(); onUnarchive(project.id); }}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ArchiveRestore className="h-3.5 w-3.5" />
+          </button>
+        ) : !isArchived && onArchive ? (
+          <button
+            type="button"
+            title="Archive project"
+            onClick={(e) => { e.preventDefault(); onArchive(project.id); }}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Archive className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

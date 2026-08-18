@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import {
   Plus, Trash2, LayoutGrid, ArrowLeft, Loader2, X, Users, Shield, FolderKanban,
+  Archive, ArchiveRestore, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
 
-type Board = { id: number; name: string; position: number; createdAt: string };
+type Board = { id: number; name: string; position: number; archivedAt: string | null; createdAt: string };
 type Group = { id: number; name: string };
 type ProjectDetail = {
   id: number;
@@ -31,6 +32,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
   const [showBoardForm, setShowBoardForm] = useState(false);
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | "">("");
+  const [showArchivedBoards, setShowArchivedBoards] = useState(false);
 
   const { data: project, isLoading } = useQuery<ProjectDetail>({
     queryKey: ["project", projectId],
@@ -58,6 +60,16 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
   const deleteProject = useMutation({
     mutationFn: () => fetch(`/api/projects/${projectId}`, { method: "DELETE" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["projects"] }); setLocation("/projects"); },
+  });
+
+  const archiveBoard = useMutation({
+    mutationFn: ({ id, archived }: { id: number; archived: boolean }) =>
+      fetch(`/api/boards/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      }),
+    onSuccess: invalidate,
   });
 
   const addGroup = useMutation({
@@ -95,6 +107,8 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
 
   const sharedGroupIds = new Set(project.groups.map((g) => g.id));
   const availableGroups = allGroups.filter((g) => !sharedGroupIds.has(g.id));
+  const activeBoards = project.boards.filter((b) => !b.archivedAt);
+  const archivedBoards = project.boards.filter((b) => !!b.archivedAt);
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -167,34 +181,58 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           </div>
         )}
 
-        {project.boards.length === 0 ? (
+        {activeBoards.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-muted/20 py-12 text-center text-muted-foreground">
             <LayoutGrid className="mx-auto h-8 w-8 opacity-20 mb-2" />
             <p className="text-sm">No boards yet. Create one to start organizing work.</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {project.boards.map((board) => (
-              <div key={board.id} className="group relative rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-primary/30">
-                <Link href={`/projects/${projectId}/boards/${board.id}`}>
-                  <div className="cursor-pointer">
-                    <h3 className="font-semibold group-hover:text-primary transition-colors">{board.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Created {format(new Date(board.createdAt), "MMM d, yyyy")}
-                    </p>
-                  </div>
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`Delete board "${board.name}"?`)) deleteBoard.mutate(board.id);
-                  }}
-                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            {activeBoards.map((board) => (
+              <BoardCard
+                key={board.id}
+                board={board}
+                projectId={projectId}
+                onArchive={(id) => archiveBoard.mutate({ id, archived: true })}
+                onDelete={(id) => {
+                  if (confirm(`Delete board "${board.name}"?`)) deleteBoard.mutate(id);
+                }}
+              />
             ))}
+          </div>
+        )}
+
+        {/* Archived boards */}
+        {(archivedBoards.length > 0 || showArchivedBoards) && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowArchivedBoards((v) => !v)}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+            >
+              {showArchivedBoards ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              <Archive className="h-3 w-3" />
+              Archived boards
+              {archivedBoards.length > 0 && (
+                <span className="text-xs bg-muted rounded-full px-2 py-0.5">{archivedBoards.length}</span>
+              )}
+            </button>
+
+            {showArchivedBoards && (
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                {archivedBoards.map((board) => (
+                  <BoardCard
+                    key={board.id}
+                    board={board}
+                    projectId={projectId}
+                    onUnarchive={(id) => archiveBoard.mutate({ id, archived: false })}
+                    onDelete={(id) => {
+                      if (confirm(`Delete board "${board.name}"?`)) deleteBoard.mutate(id);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -260,6 +298,68 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           )}
         </section>
       )}
+    </div>
+  );
+}
+
+function BoardCard({
+  board,
+  projectId,
+  onArchive,
+  onUnarchive,
+  onDelete,
+}: {
+  board: Board;
+  projectId: number;
+  onArchive?: (id: number) => void;
+  onUnarchive?: (id: number) => void;
+  onDelete: (id: number) => void;
+}) {
+  const isArchived = !!board.archivedAt;
+
+  return (
+    <div className={`group relative rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-primary/30 ${isArchived ? "opacity-70" : ""}`}>
+      <Link href={`/projects/${projectId}/boards/${board.id}`}>
+        <div className="cursor-pointer">
+          <h3 className="font-semibold group-hover:text-primary transition-colors pr-16">{board.name}</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            {isArchived
+              ? `Archived ${format(new Date(board.archivedAt!), "MMM d, yyyy")}`
+              : `Created ${format(new Date(board.createdAt), "MMM d, yyyy")}`}
+          </p>
+        </div>
+      </Link>
+
+      {/* Action buttons */}
+      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isArchived && onUnarchive ? (
+          <button
+            type="button"
+            title="Restore board"
+            onClick={() => onUnarchive(board.id)}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ArchiveRestore className="h-3.5 w-3.5" />
+          </button>
+        ) : !isArchived && onArchive ? (
+          <button
+            type="button"
+            title="Archive board"
+            onClick={() => onArchive(board.id)}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Archive className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          title="Delete board"
+          onClick={() => onDelete(board.id)}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

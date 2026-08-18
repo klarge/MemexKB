@@ -13,7 +13,7 @@ import {
   usersTable,
   siteSettingsTable,
 } from "@workspace/db";
-import { eq, and, inArray, asc, desc, count, max, or, sql } from "drizzle-orm";
+import { eq, and, inArray, asc, desc, count, max, or, sql, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -55,6 +55,7 @@ async function checkProjectAccess(
   if (!userId) return { canAccess: false, isOwner: false, project };
   const isOwner = project.createdById === userId || userRole === "admin";
   if (isOwner) return { canAccess: true, isOwner, project };
+
   const userGroupIds = await getUserGroupIds(userId);
   if (userGroupIds.length > 0) {
     const pg = await db
@@ -78,7 +79,6 @@ async function getProjectIdForColumn(columnId: number): Promise<number | null> {
     .from(boardColumnsTable)
     .where(eq(boardColumnsTable.id, columnId))
     .limit(1);
-  if (!col) return null;
   return getProjectIdForBoard(col.boardId);
 }
 
@@ -88,11 +88,8 @@ async function getProjectIdForCard(cardId: number): Promise<number | null> {
     .from(boardCardsTable)
     .where(eq(boardCardsTable.id, cardId))
     .limit(1);
-  if (!card) return null;
   return getProjectIdForColumn(card.columnId);
 }
-
-// ─── Projects ─────────────────────────────────────────────────────────────────
 
 // Safety cap: return at most this many projects per request.
 const PROJECTS_CAP = 100;
@@ -100,68 +97,66 @@ const PROJECTS_CAP = 100;
 router.get("/projects", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const userRole = req.session.userRole;
+  const showArchived = req.query.archived === "true";
 
-  // Fetch CAP+1 rows to detect true truncation without a separate count query.
-  // rawRows.length > PROJECTS_CAP means there are more rows than we'll return.
-  let rawRows: { id: number }[];
+  let accessibleIds: number[];
   if (userRole === "admin") {
-    rawRows = await db.select({ id: projectsTable.id }).from(projectsTable)
+    const rawRows = await db.select({ id: projectsTable.id }).from(projectsTable)
+      .where(showArchived ? isNotNull(projectsTable.archivedAt) : isNull(projectsTable.archivedAt))
       .orderBy(desc(projectsTable.updatedAt), asc(projectsTable.id))
       .limit(PROJECTS_CAP + 1);
+    accessibleIds = rawRows.map((r) => r.id);
   } else {
     // Single access-filtered query: owned OR group-shared projects, globally
-    // ordered by (updated_at DESC, id ASC). Prevents unbounded scans and gives
-    // a stable, deterministic result regardless of owned vs. shared ratio.
     const userGroupIds = await getUserGroupIds(userId);
     const groupAccessClause = userGroupIds.length > 0
       ? sql`EXISTS (
           SELECT 1 FROM project_groups pg
           WHERE pg.project_id = ${projectsTable.id}
-            AND pg.group_id = ANY(ARRAY[${sql.join(userGroupIds.map((id) => sql`${id}`), sql`, `)}]::int[])
+          AND pg.group_id IN ${sql.raw("(" + userGroupIds.join(",") + ")")}
         )`
-      : sql`FALSE`;
+      : sql`false`;
     const accessFilter = or(eq(projectsTable.createdById, userId), groupAccessClause)!;
     // No DISTINCT needed: the correlated EXISTS cannot produce duplicate project rows,
-    // and SELECT DISTINCT would require updated_at in the select list for ORDER BY.
-    rawRows = await db
+    const rawRows = await db
       .select({ id: projectsTable.id })
       .from(projectsTable)
-      .where(accessFilter)
+      .where(and(accessFilter, showArchived ? isNotNull(projectsTable.archivedAt) : isNull(projectsTable.archivedAt)))
       .orderBy(desc(projectsTable.updatedAt), asc(projectsTable.id))
       .limit(PROJECTS_CAP + 1);
+    accessibleIds = rawRows.map((r) => r.id);
   }
 
-  const truncated = rawRows.length > PROJECTS_CAP;
-  const accessibleIds = rawRows.slice(0, PROJECTS_CAP).map((r) => r.id);
+  const truncated = accessibleIds.length > PROJECTS_CAP;
+  if (truncated) accessibleIds = accessibleIds.slice(0, PROJECTS_CAP);
 
   if (accessibleIds.length === 0) { res.json({ projects: [], truncated: false }); return; }
 
   const [projects, boardCounts] = await Promise.all([
     db.select().from(projectsTable)
       .where(inArray(projectsTable.id, accessibleIds))
-      // id tie-breaker preserves the same deterministic order as the access query
       .orderBy(desc(projectsTable.updatedAt), asc(projectsTable.id)),
     db.select({ projectId: boardsTable.projectId, count: count() })
       .from(boardsTable)
-      .where(inArray(boardsTable.projectId, accessibleIds))
+      .where(and(inArray(boardsTable.projectId, accessibleIds), isNull(boardsTable.archivedAt)))
       .groupBy(boardsTable.projectId),
   ]);
 
   res.json({
+    truncated,
     projects: projects.map((p) => ({
       ...p,
       boardCount: Number(boardCounts.find((bc) => bc.projectId === p.id)?.count ?? 0),
     })),
-    truncated,
   });
 });
 
 router.post("/projects", requireAuth, async (req, res) => {
-  const { name, description = "" } = req.body as { name?: string; description?: string };
+  const { name, description } = req.body as { name?: string; description?: string };
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
   const [project] = await db
     .insert(projectsTable)
-    .values({ name: name.trim(), description: description.trim(), createdById: req.session.userId! })
+    .values({ name: name.trim(), description: description?.trim() ?? "", createdById: req.session.userId! })
     .returning();
   res.status(201).json(project);
 });
@@ -173,6 +168,7 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const [boards, projectGroupRows] = await Promise.all([
+    // Return all boards (active + archived); the frontend separates them
     db.select().from(boardsTable).where(eq(boardsTable.projectId, projectId)).orderBy(asc(boardsTable.position)),
     db.select({ groupId: projectGroupsTable.groupId }).from(projectGroupsTable).where(eq(projectGroupsTable.projectId, projectId)),
   ]);
@@ -184,7 +180,6 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
       .from(groupsTable)
       .where(inArray(groupsTable.id, projectGroupRows.map((r) => r.groupId)));
   }
-
   res.json({ ...project, boards, groups, isOwner });
 });
 
@@ -193,10 +188,11 @@ router.patch("/projects/:projectId", requireAuth, async (req, res) => {
   const { canAccess, isOwner } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
   if (!isOwner) { res.status(403).json({ error: "Only the project owner can edit project settings" }); return; }
-  const { name, description } = req.body as { name?: string; description?: string };
+  const { name, description, archived } = req.body as { name?: string; description?: string; archived?: boolean };
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name.trim();
   if (description !== undefined) updates.description = description.trim();
+  if (archived !== undefined) updates.archivedAt = archived ? new Date() : null;
   const [updated] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, projectId)).returning();
   res.json(updated);
 });
@@ -287,9 +283,6 @@ router.get("/boards/:boardId", requireAuth, async (req, res) => {
 
   if (columns.length > 0) {
     const colIds = columns.map((c) => c.id);
-    // Order by id ASC (insertion order) for stable, fair board-wide truncation:
-    // position is column-local so ordering by it would unfairly omit entire columns.
-    // Fetch one extra to detect truncation without a separate count query.
     const fetched = await db
       .select()
       .from(boardCardsTable)
@@ -314,8 +307,6 @@ router.get("/boards/:boardId", requireAuth, async (req, res) => {
       cardsTruncated: fetched.length > CARDS_CAP,
       columns: columns.map((col) => ({
         ...col,
-        // Sort the retained cards by (position, id) per column so the kanban
-        // ordering is correct even though the DB fetch used id ASC for capping.
         cards: cards
           .filter((c) => c.columnId === col.id)
           .sort((a, b) => a.position - b.position || a.id - b.id)
@@ -329,14 +320,7 @@ router.get("/boards/:boardId", requireAuth, async (req, res) => {
     return;
   }
 
-  const result = {
-    ...board,
-    projectId,
-    cardsTruncated: false,
-    columns: [],
-  };
-
-  res.json(result);
+  res.json({ ...board, projectId, cardsTruncated: false, columns: [] });
 });
 
 router.patch("/boards/:boardId", requireAuth, async (req, res) => {
@@ -345,9 +329,15 @@ router.patch("/boards/:boardId", requireAuth, async (req, res) => {
   if (!projectId) { res.status(404).json({ error: "Board not found" }); return; }
   const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
-  const { name } = req.body as { name?: string };
-  if (!name?.trim()) { res.status(400).json({ error: "Name required" }); return; }
-  const [updated] = await db.update(boardsTable).set({ name: name.trim() }).where(eq(boardsTable.id, boardId)).returning();
+  const { name, archived } = req.body as { name?: string; archived?: boolean };
+  const updates: Record<string, unknown> = {};
+  if (name !== undefined) {
+    if (!name.trim()) { res.status(400).json({ error: "Name required" }); return; }
+    updates.name = name.trim();
+  }
+  if (archived !== undefined) updates.archivedAt = archived ? new Date() : null;
+  if (Object.keys(updates).length === 0) { res.status(400).json({ error: "Nothing to update" }); return; }
+  const [updated] = await db.update(boardsTable).set(updates).where(eq(boardsTable.id, boardId)).returning();
   res.json(updated);
 });
 
@@ -372,9 +362,6 @@ router.patch("/boards/:boardId/cards/reorder", requireAuth, async (req, res) => 
   const { columns } = req.body as { columns: { columnId: number; cardIds: number[] }[] };
   if (!Array.isArray(columns)) { res.status(400).json({ error: "columns array required" }); return; }
 
-  // Ownership validation: reject any columnId or cardId that does not belong to
-  // this board. Without this check a client could reposition cards from boards
-  // they cannot access (IDOR).
   const boardColumns = await db
     .select({ id: boardColumnsTable.id })
     .from(boardColumnsTable)
@@ -387,7 +374,6 @@ router.patch("/boards/:boardId/cards/reorder", requireAuth, async (req, res) => 
     return;
   }
 
-  // Validate cards: each cardId must belong to one of the board's columns.
   const allSubmittedCardIds = columns.flatMap((c) => c.cardIds);
   if (allSubmittedCardIds.length > 0) {
     const validCards = await db
@@ -409,6 +395,39 @@ router.patch("/boards/:boardId/cards/reorder", requireAuth, async (req, res) => 
           .set({ columnId, position: (idx + 1) * 1000, updatedAt: new Date() })
           .where(eq(boardCardsTable.id, cardId)),
       ),
+    ),
+  );
+
+  res.json({ ok: true });
+});
+
+// Reorder columns within a board
+router.patch("/boards/:boardId/columns/reorder", requireAuth, async (req, res) => {
+  const boardId = Number(req.params.boardId);
+  const projectId = await getProjectIdForBoard(boardId);
+  if (!projectId) { res.status(404).json({ error: "Board not found" }); return; }
+  const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+
+  const { columnIds } = req.body as { columnIds?: number[] };
+  if (!Array.isArray(columnIds)) { res.status(400).json({ error: "columnIds array required" }); return; }
+
+  // Validate all IDs belong to this board
+  const boardColumns = await db
+    .select({ id: boardColumnsTable.id })
+    .from(boardColumnsTable)
+    .where(eq(boardColumnsTable.boardId, boardId));
+  const validIds = new Set(boardColumns.map((c) => c.id));
+  if (columnIds.some((id) => !validIds.has(id))) {
+    res.status(400).json({ error: "One or more columns do not belong to this board" });
+    return;
+  }
+
+  await Promise.all(
+    columnIds.map((columnId, idx) =>
+      db.update(boardColumnsTable)
+        .set({ position: (idx + 1) * 1000 })
+        .where(eq(boardColumnsTable.id, columnId)),
     ),
   );
 
