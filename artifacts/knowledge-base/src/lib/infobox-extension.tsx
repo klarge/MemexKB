@@ -1,5 +1,11 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Node, mergeAttributes } from "@tiptap/core";
+import {
+  useWikilinkAutocomplete,
+  insertWikilink,
+  getWikilinkQueryAtCursor,
+  type WikilinkSuggestion,
+} from "./use-wikilink-autocomplete";
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { Trash2, Plus, Loader2, X, Image as ImageIcon } from "lucide-react";
 
@@ -24,6 +30,110 @@ async function uploadImageFile(file: File): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * A controlled text input that shows a [[wikilink]] autocomplete dropdown
+ * when the user types [[ followed by a search query.
+ */
+interface WikilinkValueInputProps {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+}
+
+function WikilinkValueInput({ value, onChange, className, placeholder }: WikilinkValueInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pendingCursor, setPendingCursor] = useState<number | null>(null);
+  const { isOpen, items, selectedIndex, onInputChange, handleKeyDown: acKeyDown, dismiss } =
+    useWikilinkAutocomplete();
+
+  // After a wikilink is inserted, move the cursor to just after the ]] — this
+  // must happen after React has re-rendered with the new value, so we defer it.
+  useEffect(() => {
+    if (pendingCursor === null || !inputRef.current) return;
+    inputRef.current.setSelectionRange(pendingCursor, pendingCursor);
+    setPendingCursor(null);
+  }, [pendingCursor, value]);
+
+  const doInsert = useCallback(
+    (item: WikilinkSuggestion) => {
+      const cursor = inputRef.current?.selectionStart ?? value.length;
+      // Guard: only insert if there is still an unclosed [[ at the cursor. A
+      // stale async response may have kept the dropdown open after the user
+      // already closed the fragment (typed ]]) or moved the cursor elsewhere.
+      if (getWikilinkQueryAtCursor(value, cursor) === null) {
+        dismiss();
+        return;
+      }
+      const { newValue, newCursor } = insertWikilink(value, cursor, item.title);
+      onChange(newValue);
+      setPendingCursor(newCursor);
+      dismiss();
+      // Restore focus so the user can keep typing
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    [value, onChange, dismiss],
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value);
+    onInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter with an open dropdown: insert the selected suggestion
+    if (e.key === "Enter" && isOpen && items.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = items[selectedIndex];
+      if (item) doInsert(item);
+      return;
+    }
+    // Arrow keys / Escape: delegate to the autocomplete hook
+    acKeyDown(e);
+  };
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <input
+        ref={inputRef}
+        className={className}
+        placeholder={placeholder}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onBlur={() => {
+          // Small delay so a click on a dropdown item fires before the blur closes it
+          setTimeout(dismiss, 150);
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      {isOpen && items.length > 0 && (
+        <div
+          className="absolute left-0 top-full z-50 mt-1 bg-popover border border-border rounded-md shadow-lg overflow-hidden min-w-[180px] max-w-[260px] max-h-[200px] overflow-y-auto"
+          // Prevent the input from losing focus when clicking inside the dropdown
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {items.map((item, idx) => (
+            <button
+              key={item.slug}
+              type="button"
+              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                idx === selectedIndex
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/50"
+              }`}
+              onClick={() => doInsert(item)}
+            >
+              {item.title}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewProps) {
@@ -162,12 +272,11 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
                 </th>
                 <td className="px-2 py-1.5 align-top">
                   <div className="flex items-start gap-1">
-                    <input
-                      className="min-w-0 flex-1 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
+                    <WikilinkValueInput
+                      className="w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
                       placeholder="Value"
                       value={row.value}
-                      onChange={(e) => updateRow(i, "value", e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
+                      onChange={(v) => updateRow(i, "value", v)}
                     />
                     <button
                       onMouseDown={(e) => { e.preventDefault(); removeRow(i); }}
