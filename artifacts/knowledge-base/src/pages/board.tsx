@@ -854,7 +854,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   if (!boardData) return <div className="text-center py-20 text-muted-foreground">Board not found.</div>;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden -m-6">
+    <div className="absolute inset-0 flex flex-col overflow-hidden">
       {/* Board toolbar */}
       <div className="flex items-center gap-3 px-6 py-3 border-b bg-background shrink-0">
         <Link href={`/projects/${projectId}`}>
