@@ -211,13 +211,13 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
               Uploading…
             </div>
           ) : image ? (
-            <div className="relative group/img">
+            <div className="relative group/img flex justify-center">
               <img
                 src={image}
                 alt=""
                 draggable={false}
-                className="w-full object-contain"
-                style={{ maxHeight: "160px" }}
+                className="object-contain"
+                style={{ maxHeight: "160px", maxWidth: "100%" }}
               />
               <button
                 onMouseDown={(e) => { e.preventDefault(); setImage(""); }}
