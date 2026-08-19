@@ -1,2 +1,3 @@
 - [Mobile auth cookie extraction](mobile-auth.md) — session cookie must be manually extracted from Set-Cookie response header; fetch does not send cookies automatically in RN.
 - [Netinfo version in Expo](netinfo-expo.md) — @react-native-community/netinfo@12.x works with expo 54 despite a version-mismatch warning; 11.4.1 causes Metro ENOENT crash on pnpm due to _tmp dir cleanup race.
+- [Drizzle migration journal](drizzle-migration-journal.md) — Docker migrations only run SQL files listed in the journal; add an entry whenever a migration is added manually.

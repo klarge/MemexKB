@@ -24,14 +24,34 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [showArchived, setShowArchived] = useState(false);
 
-  const { data: projectsData, isLoading } = useQuery<{ projects: Project[]; truncated: boolean }>({
+  const {
+    data: projectsData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<{ projects: Project[]; truncated: boolean }>({
     queryKey: ["projects"],
-    queryFn: () => fetch("/api/projects").then((r) => r.json()),
+    queryFn: async () => {
+      const response = await fetch("/api/projects");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? "Unable to load projects.");
+      }
+      return response.json();
+    },
   });
 
   const { data: archivedData } = useQuery<{ projects: Project[]; truncated: boolean }>({
     queryKey: ["projects-archived"],
-    queryFn: () => fetch("/api/projects?archived=true").then((r) => r.json()),
+    queryFn: async () => {
+      const response = await fetch("/api/projects?archived=true");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? "Unable to load archived projects.");
+      }
+      return response.json();
+    },
     enabled: showArchived,
   });
 
@@ -126,6 +146,16 @@ export default function ProjectsPage() {
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : isError ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
+          <p className="font-medium text-destructive">Couldn’t load projects</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : "Please try again."}
+          </p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+            Try again
+          </Button>
         </div>
       ) : projects.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
