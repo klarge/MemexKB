@@ -80,7 +80,11 @@ export function MainLayout({ children }: { children: ReactNode }) {
       <div className="flex h-screen w-full overflow-hidden bg-background">
         <Sidebar className="border-r border-border bg-sidebar">
           <SidebarHeader className="p-4">
-            <div className="flex items-center gap-2 mb-4">
+            <Link
+              href="/"
+              aria-label={`Go to ${siteName} home`}
+              className="flex items-center gap-2 mb-4 rounded-md transition-opacity hover:opacity-80"
+            >
               <div className="h-8 w-8 rounded overflow-hidden flex items-center justify-center shrink-0">
                 {hasLogo ? (
                   <img
@@ -95,7 +99,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
                 )}
               </div>
               <span className="font-semibold text-lg tracking-tight">{siteName}</span>
-            </div>
+            </Link>
           </SidebarHeader>
 
           <SidebarContent>
@@ -339,7 +343,11 @@ export function MainLayout({ children }: { children: ReactNode }) {
           {/* Mobile-only top bar */}
           <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-background shrink-0">
             <SidebarTrigger className="h-8 w-8" />
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Link
+              href="/"
+              aria-label={`Go to ${siteName} home`}
+              className="flex items-center gap-2 flex-1 min-w-0 rounded-md transition-opacity hover:opacity-80"
+            >
               <div className="h-6 w-6 rounded overflow-hidden flex items-center justify-center shrink-0">
                 {hasLogo ? (
                   <img
@@ -354,7 +362,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
                 )}
               </div>
               <span className="font-semibold truncate">{siteName}</span>
-            </div>
+            </Link>
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
