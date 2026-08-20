@@ -119,11 +119,49 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const processContent = (html: string) => {
-    const withLinks = html.replace(/\[\[([^\]]+)\]\]/g, (_match, title: string) => {
-      const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      return `<a href="/wiki/${linkSlug}" class="text-primary hover:underline font-medium" data-wikilink="true">${title}</a>`;
-    });
-    return DOMPurify.sanitize(withLinks, { USE_PROFILES: { html: true } });
+    const template = document.createElement("template");
+    template.innerHTML = html;
+
+    // Replace wikilinks only in visible text nodes. Replacing against the raw
+    // HTML string can inject anchor markup into infobox data attributes such
+    // as data-rows and corrupt the rest of the article markup.
+    const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    let currentNode: Node | null;
+    while ((currentNode = walker.nextNode())) {
+      textNodes.push(currentNode as Text);
+    }
+
+    for (const textNode of textNodes) {
+      if (textNode.parentElement?.closest("a, script, style, textarea")) continue;
+
+      const text = textNode.nodeValue ?? "";
+      const wikilinkPattern = /\[\[([^\]]+)\]\]/g;
+      if (!wikilinkPattern.test(text)) continue;
+      wikilinkPattern.lastIndex = 0;
+
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = wikilinkPattern.exec(text))) {
+        const title = match[1];
+        fragment.append(document.createTextNode(text.slice(lastIndex, match.index)));
+
+        const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const link = document.createElement("a");
+        link.href = `/wiki/${linkSlug}`;
+        link.className = "text-primary hover:underline font-medium";
+        link.dataset.wikilink = "true";
+        link.textContent = title;
+        fragment.append(link);
+
+        lastIndex = wikilinkPattern.lastIndex;
+      }
+      fragment.append(document.createTextNode(text.slice(lastIndex)));
+      textNode.parentNode?.replaceChild(fragment, textNode);
+    }
+
+    return DOMPurify.sanitize(template.innerHTML, { USE_PROFILES: { html: true } });
   };
 
   useEffect(() => {
