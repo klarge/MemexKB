@@ -342,6 +342,14 @@ table.infobox td {
   word-break: break-word;
 }
 
+/* Image rows span the full infobox width and keep the image centered. */
+table.infobox td[colspan="2"] {
+  text-align: center;
+}
+table.infobox td[colspan="2"] img {
+  display: inline-block;
+}
+
 /* Override prose table styles that would conflict */
 .prose table.infobox {
   display: table;
