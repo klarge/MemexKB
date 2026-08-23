@@ -120,6 +120,67 @@ docker pull ghcr.io/<your-org>/memex:latest   # amd64 + arm64
 
 ---
 
+## API basics
+
+The API is served under `/api`. Create an API token in **Settings → API Keys**, then use it as a bearer token. The examples below assume:
+
+```bash
+export MEMEX_URL="http://localhost:3000"
+export MEMEX_TOKEN="replace-with-your-api-token"
+```
+
+All write operations require an authenticated user. Article creation and edits require an `admin` or `editor` role; actions explicitly marked admin-only require an `admin` token.
+
+**Example — verify your token:**
+
+```bash
+curl --fail-with-body \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  "$MEMEX_URL/api/auth/me"
+```
+
+---
+
+## Articles
+
+Articles use HTML for `content`. You can link to another article with `[[Article title]]`. An article URL is generated from its title when it is created and stays stable when the title changes. An admin can explicitly change a URL; Memex updates inbound wikilinks and keeps their labels intact.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/articles` | List articles. Supports `search`, `sort` (`title`, `updated_at`, `created_at`), `order`, `limit`, `offset`, and `tagId`. |
+| `POST` | `/api/articles` | Create an article (admin/editor) — body: `{ title, content, groupIds?, tagIds? }`. Returns `409` if the generated URL is already used. |
+| `GET` | `/api/articles/maintenance` | List articles ordered by oldest update first; supports `limit` and `offset`. |
+| `GET` | `/api/articles/stats` | Get knowledge-base counts and recently/least recently updated articles. |
+| `GET` | `/api/articles/:slug` | Get one article, including tags and backlinks. Restricted articles return metadata with `canAccess: false` and empty content when access is denied. |
+| `PATCH` | `/api/articles/:slug` | Update an article (admin/editor) — body: `{ title?, content?, groupIds?, tagIds? }`. Changing a title does not change its URL. |
+| `DELETE` | `/api/articles/:slug` | Delete an article (admin/editor). |
+| `PATCH` | `/api/articles/:slug/slug` | Change an article URL (admin only) — body: `{ slug }`. Rewrites incoming wikilinks and returns `{ slug, rewrittenArticles }`. |
+| `GET` | `/api/articles/:slug/backlinks` | List articles that link to this article. |
+| `GET` | `/api/articles/:slug/export/md` | Download the article as Markdown. |
+| `GET` | `/api/articles/:slug/export/pdf` | Download the article as a PDF. |
+| `PUT` | `/api/articles/:slug/groups` | Set access groups (admin/editor) — body: `{ groupIds }`. Editors may only use groups they belong to. |
+| `POST` | `/api/articles/images` | Upload an article image (admin/editor) as `multipart/form-data` with a `file` field. |
+
+**Example — create an article:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/articles" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"title":"Working agreements","content":"<p>Start here: [[Getting Started]]</p>","tagIds":[1]}'
+```
+
+**Example — change an article URL as an admin:**
+
+```bash
+curl --fail-with-body -X PATCH "$MEMEX_URL/api/articles/working-agreements/slug" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"slug":"team-working-agreements"}'
+```
+
+---
+
 ## Tasks
 
 Personal to-do lists, visible only to the user who created them. Each user can create multiple named lists and add any number of tasks to each.
@@ -137,9 +198,18 @@ Personal to-do lists, visible only to the user who created them. Each user can c
 | `POST` | `/api/tasks/lists` | Create a list — body: `{ name }` |
 | `PATCH` | `/api/tasks/lists/:id` | Rename a list — body: `{ name }` |
 | `DELETE` | `/api/tasks/lists/:id` | Delete a list and all its tasks |
-| `POST` | `/api/tasks/:listId` | Add a task — body: `{ title }` |
+| `POST` | `/api/tasks` | Add a task — body: `{ listId, title }` |
 | `PATCH` | `/api/tasks/:taskId/toggle` | Toggle a task's completed state |
 | `DELETE` | `/api/tasks/:taskId` | Delete a task |
+
+**Example — create a task list:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/tasks/lists" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"This week"}'
+```
 
 ---
 
@@ -166,6 +236,15 @@ Collaborative Kanban workspaces. A **Project** contains one or more **Boards**; 
 | `POST` | `/api/projects/:id/groups` | Share project with a group — body: `{ groupId }` |
 | `DELETE` | `/api/projects/:id/groups/:groupId` | Remove group access |
 
+**Example — create a project:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/projects" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"Website refresh","description":"Content and launch work"}'
+```
+
 ### Boards API
 
 | Method | Path | Description |
@@ -176,6 +255,15 @@ Collaborative Kanban workspaces. A **Project** contains one or more **Boards**; 
 | `DELETE` | `/api/boards/:boardId` | Delete board and all columns/cards |
 | `PATCH` | `/api/boards/:boardId/cards/reorder` | Bulk reorder / move cards across columns — body: `{ columns: [{ columnId, cardIds[] }] }` |
 
+**Example — add a board to project `42`:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/projects/42/boards" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"Launch plan"}'
+```
+
 ### Columns API
 
 | Method | Path | Description |
@@ -183,6 +271,15 @@ Collaborative Kanban workspaces. A **Project** contains one or more **Boards**; 
 | `POST` | `/api/boards/:boardId/columns` | Create a column — body: `{ name }` |
 | `PATCH` | `/api/columns/:columnId` | Rename column — body: `{ name }` |
 | `DELETE` | `/api/columns/:columnId` | Delete column and all its cards |
+
+**Example — add a column to board `7`:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/boards/7/columns" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"In progress"}'
+```
 
 ### Cards API
 
@@ -193,6 +290,15 @@ Collaborative Kanban workspaces. A **Project** contains one or more **Boards**; 
 | `DELETE` | `/api/cards/:cardId` | Delete card |
 | `POST` | `/api/cards/:cardId/members` | Assign a user — body: `{ userId }` |
 | `DELETE` | `/api/cards/:cardId/members/:userId` | Unassign a user |
+
+**Example — add a card to column `9`:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/columns/9/cards" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"title":"Publish release notes"}'
+```
 
 ---
 
@@ -211,6 +317,15 @@ An optional daily journal, separate from the main knowledge base. When enabled, 
 | `GET` | `/api/log` | List log entries for the current user (newest first) |
 | `POST` | `/api/articles` | Create a log entry — include `isLogEntry: true` in the body |
 
+**Example — create a log entry:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/articles" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"title":"2026-08-23","content":"<p>Shipped API documentation.</p>","isLogEntry":true}'
+```
+
 ---
 
 ## Admin Feature Toggles
@@ -219,22 +334,17 @@ Admins can enable or disable the Log, Tasks, and Projects features from **Admin 
 
 **API:**
 
-```http
-PATCH /api/admin/settings
-Content-Type: application/json
-
-{
-  "logEntriesEnabled": true,
-  "tasksEnabled": true,
-  "projectsEnabled": false
-}
+```bash
+curl --fail-with-body -X PATCH "$MEMEX_URL/api/admin/settings" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"logEntriesEnabled":true,"tasksEnabled":true,"projectsEnabled":false}'
 ```
 
 **Read current settings (public):**
 
-```http
-GET /api/settings
-→ { siteName, hasLogo, navLinks, logEntriesEnabled, tasksEnabled, projectsEnabled }
+```bash
+curl --fail-with-body "$MEMEX_URL/api/settings"
 ```
 
 ---
@@ -290,6 +400,15 @@ Tags are managed by admins (Admin → Tags) and applied to articles by editors. 
 - Tags are included on every article list and article detail response as `tags[]`
 - `GET /api/articles?tagId=N` — filter article list by tag
 
+**Example — create a tag as an admin:**
+
+```bash
+curl --fail-with-body -X POST "$MEMEX_URL/api/tags" \
+  -H "Authorization: Bearer $MEMEX_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"Documentation","color":"#2563eb"}'
+```
+
 ---
 
 ## Edit Locking
@@ -300,6 +419,13 @@ When an editor opens an article for editing, Memex acquires a 2-minute TTL lock.
 - `GET /api/articles/:slug/lock` — check lock state
 - `PUT /api/articles/:slug/lock` — acquire or refresh (returns `409` if locked by someone else)
 - `DELETE /api/articles/:slug/lock` — release a lock
+
+**Example — acquire or refresh an edit lock:**
+
+```bash
+curl --fail-with-body -X PUT "$MEMEX_URL/api/articles/getting-started/lock" \
+  -H "Authorization: Bearer $MEMEX_TOKEN"
+```
 
 ---
 
