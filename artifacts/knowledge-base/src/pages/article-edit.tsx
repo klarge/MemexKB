@@ -6,6 +6,7 @@ import {
   getGetArticleQueryKey,
   useCreateArticle,
   useUpdateArticle,
+  useUpdateArticleSlug,
   useListGroups,
   useListArticles,
   useListTags,
@@ -23,7 +24,7 @@ import {
   Check, CloudOff, RotateCcw, X,
 } from "lucide-react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -105,12 +106,15 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [title, setTitle] = useState(prefillTitle);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [isLogSaving, setIsLogSaving] = useState(false);
+  const [slugDialogOpen, setSlugDialogOpen] = useState(false);
+  const [slugDraft, setSlugDraft] = useState("");
 
   // ── Autosave state ──────────────────────────────────────────────────────────
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("idle");
@@ -154,6 +158,51 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
+  const updateSlugMutation = useUpdateArticleSlug();
+
+  const openSlugDialog = () => {
+    setSlugDraft(article?.slug ?? slug ?? "");
+    setSlugDialogOpen(true);
+  };
+
+  const saveSlug = () => {
+    if (!slug) return;
+    const nextSlug = slugDraft.trim();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nextSlug) || nextSlug.length > 100) {
+      toast({
+        title: "Invalid URL",
+        description: "Use lowercase letters, numbers, and single hyphens only.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    updateSlugMutation.mutate(
+      { slug, data: { slug: nextSlug } },
+      {
+        onSuccess: async (data) => {
+          await releaseLock();
+          queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
+          queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(data.slug) });
+          toast({
+            title: "Article URL updated",
+            description: data.rewrittenArticles
+              ? `Updated links in ${data.rewrittenArticles} article${data.rewrittenArticles === 1 ? "" : "s"}.`
+              : "No internal links needed updating.",
+          });
+          setSlugDialogOpen(false);
+          setLocation(`/wiki/${data.slug}`);
+        },
+        onError: (err) => {
+          toast({
+            title: "Could not update URL",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
 
   // ─── Edit lock ────────────────────────────────────────────────────────────────
   const [lockConflict, setLockConflict] = useState<{ userName: string } | null>(null);
@@ -614,7 +663,14 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="flex-1 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title" className="text-base">Article Title</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="title" className="text-base">Article Title</Label>
+              {!isNew && user?.role === "admin" && (
+                <Button type="button" variant="outline" size="sm" onClick={openSlugDialog}>
+                  Edit URL
+                </Button>
+              )}
+            </div>
             <Input
               id="title"
               value={title}
@@ -623,7 +679,49 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
               className="text-lg font-medium py-6"
               data-testid="input-article-title"
             />
+            {!isNew && (
+              <p className="text-xs text-muted-foreground">
+                URL: <span className="font-mono">/wiki/{article?.slug ?? slug}</span>
+              </p>
+            )}
           </div>
+
+          <Dialog open={slugDialogOpen} onOpenChange={setSlugDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit article URL</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <DialogDescription>
+                  This updates all internal bracket links that point to this article. The old URL will stop working.
+                </DialogDescription>
+                <div className="space-y-2">
+                  <Label htmlFor="article-slug">URL ending</Label>
+                  <div className="flex items-center rounded-md border border-input bg-muted/40 px-3">
+                    <span className="text-sm text-muted-foreground">/wiki/</span>
+                    <Input
+                      id="article-slug"
+                      value={slugDraft}
+                      onChange={(event) => setSlugDraft(event.target.value)}
+                      className="border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Lowercase letters, numbers, and hyphens only.</p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setSlugDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="button" onClick={saveSlug} disabled={updateSlugMutation.isPending}>
+                    {updateSlugMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Update URL
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           <div className="space-y-2">
             <Label className="text-base">Content</Label>

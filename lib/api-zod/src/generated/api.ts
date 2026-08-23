@@ -388,6 +388,75 @@ export const DeleteArticleResponse = zod.object({
 
 
 /**
+ * @summary Change an article URL and update inbound wikilinks
+ */
+export const UpdateArticleSlugParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const updateArticleSlugBodySlugMax = 100;
+
+
+export const updateArticleSlugBodySlugRegExp = new RegExp('^[a-z0-9]+(-[a-z0-9]+){0,99}$');
+
+
+export const UpdateArticleSlugBody = zod.object({
+  "slug": zod.string().max(updateArticleSlugBodySlugMax).regex(updateArticleSlugBodySlugRegExp)
+})
+
+export const UpdateArticleSlugResponse = zod.object({
+  "slug": zod.string(),
+  "rewrittenArticles": zod.number()
+})
+
+
+/**
+ * @summary Get the current edit lock status for an article
+ */
+export const GetArticleLockParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const GetArticleLockResponse = zod.object({
+  "articleId": zod.number(),
+  "lockedBy": zod.union([zod.null(),zod.object({
+  "userId": zod.number(),
+  "userName": zod.string(),
+  "lockedAt": zod.coerce.date()
+})])
+})
+
+
+/**
+ * @summary Acquire or refresh an edit lock for an article
+ */
+export const AcquireArticleLockParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const AcquireArticleLockResponse = zod.object({
+  "articleId": zod.number(),
+  "lockedBy": zod.union([zod.null(),zod.object({
+  "userId": zod.number(),
+  "userName": zod.string(),
+  "lockedAt": zod.coerce.date()
+})])
+})
+
+
+/**
+ * @summary Release an edit lock (own lock only; admins can release any)
+ */
+export const ReleaseArticleLockParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const ReleaseArticleLockResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary Get all articles that link to this article
  */
 export const GetArticleBacklinksParams = zod.object({

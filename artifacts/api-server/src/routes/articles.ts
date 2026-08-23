@@ -25,13 +25,14 @@ import {
 import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
-import { slugify, extractWikilinks } from "../lib/slugify";
+import { slugify, extractWikilinks, rewriteWikilinksForSlug } from "../lib/slugify";
 import TurndownService from "turndown";
 
 const _require = createRequire(import.meta.url);
 const PDFDocument = _require("pdfkit") as typeof import("pdfkit");
 
 const router = Router();
+const WIKILINK_MUTATION_LOCK = 824199;
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
@@ -377,10 +378,15 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     }
   }
 
-  let slug = slugify(title);
+  const slug = slugify(title);
+  if (!slug) {
+    res.status(400).json({ error: "Title must contain at least one letter or number" });
+    return;
+  }
   const existing = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (existing.length > 0) {
-    slug = `${slug}-${Date.now()}`;
+    res.status(409).json({ error: "An article already uses this URL. Choose a more specific title." });
+    return;
   }
 
   if (isLogEntry && !(await isLogEntriesEnabled())) {
@@ -389,10 +395,35 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
   }
 
   const sanitizedContent = sanitizeArticleHtml(content ?? "");
-  const [article] = await db
-    .insert(articlesTable)
-    .values({ slug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
-    .returning();
+  const article = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
+    const [createdArticle] = await tx
+      .insert(articlesTable)
+      .values({ slug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
+      .returning();
+
+    const wikilinks = extractWikilinks(content ?? "");
+    if (wikilinks.length > 0) {
+      await tx
+        .insert(articleLinksTable)
+        .values(wikilinks.map((target) => ({ fromArticleId: createdArticle.id, toSlug: slugify(target) })))
+        .onConflictDoNothing();
+    }
+
+    const imgIds = [...(content ?? "").matchAll(/\/api\/articles\/images\/(\d+)/g)].map((m) => parseInt(m[1])).filter((n) => !isNaN(n));
+    if (imgIds.length > 0) {
+      await tx.update(articleImagesTable).set({ articleId: createdArticle.id }).where(inArray(articleImagesTable.id, imgIds));
+    }
+
+    await tx.insert(articleVersionsTable).values({
+      articleId: createdArticle.id,
+      versionNumber: 1,
+      title: createdArticle.title,
+      content: createdArticle.content,
+      createdById: req.session.userId ?? null,
+    });
+    return createdArticle;
+  });
 
   if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
     await db.insert(articleGroupsTable).values(groupIds.map((gid: number) => ({ articleId: article.id, groupId: gid })));
@@ -401,26 +432,6 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
   if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
     await db.insert(articleTagsTable).values(tagIds.map((tid: number) => ({ articleId: article.id, tagId: tid }))).onConflictDoNothing();
   }
-
-  const wikilinks = extractWikilinks(content ?? "");
-  if (wikilinks.length > 0) {
-    await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) }))).onConflictDoNothing();
-  }
-
-  // Associate any images embedded in this article's content with the article record
-  const imgIds = [...(content ?? "").matchAll(/\/api\/articles\/images\/(\d+)/g)].map((m) => parseInt(m[1])).filter((n) => !isNaN(n));
-  if (imgIds.length > 0) {
-    await db.update(articleImagesTable).set({ articleId: article.id }).where(inArray(articleImagesTable.id, imgIds));
-  }
-
-  // Snapshot initial version
-  await db.insert(articleVersionsTable).values({
-    articleId: article.id,
-    versionNumber: 1,
-    title: article.title,
-    content: article.content,
-    createdById: req.session.userId ?? null,
-  });
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
@@ -478,6 +489,126 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: true, groups, tags, backlinks });
 });
 
+router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (req, res) => {
+  const currentSlug = String(req.params.slug);
+  const nextSlug = typeof req.body?.slug === "string" ? req.body.slug.trim() : "";
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nextSlug) || nextSlug.length > 100) {
+    res.status(400).json({ error: "URL must use lowercase letters, numbers, and single hyphens only" });
+    return;
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
+      const [existing] = await tx
+        .select()
+        .from(articlesTable)
+        .where(eq(articlesTable.slug, currentSlug))
+        .limit(1)
+        .for("update");
+      if (!existing) return { status: "not_found" as const };
+      if (currentSlug === nextSlug) return { status: "unchanged" as const };
+
+      const [conflictingArticle] = await tx
+        .select({ id: articlesTable.id })
+        .from(articlesTable)
+        .where(eq(articlesTable.slug, nextSlug))
+        .limit(1)
+        .for("update");
+      if (conflictingArticle) return { status: "conflict" as const };
+
+      const inboundRows = await tx
+        .select({ fromArticleId: articleLinksTable.fromArticleId })
+        .from(articleLinksTable)
+        .where(eq(articleLinksTable.toSlug, currentSlug));
+      const inboundIds = [...new Set(inboundRows.map((row) => row.fromArticleId))];
+      const inboundArticles = inboundIds.length > 0
+        ? await tx.select().from(articlesTable).where(inArray(articlesTable.id, inboundIds)).for("update")
+        : [];
+
+      const rewrittenContent = new Map<number, string>();
+      for (const article of inboundArticles) {
+        const content = rewriteWikilinksForSlug(article.content, currentSlug, nextSlug);
+        if (content !== article.content) rewrittenContent.set(article.id, content);
+      }
+
+      const targetContent = rewrittenContent.get(existing.id) ?? existing.content;
+      const [renamedArticle] = await tx
+        .update(articlesTable)
+        .set({
+          slug: nextSlug,
+          content: targetContent,
+          updatedAt: new Date(),
+          updatedById: req.session.userId ?? null,
+        })
+        .where(eq(articlesTable.id, existing.id))
+        .returning();
+
+      for (const article of inboundArticles) {
+        if (article.id === existing.id) continue;
+        const content = rewrittenContent.get(article.id);
+        if (!content) continue;
+        await tx
+          .update(articlesTable)
+          .set({ content, updatedAt: new Date(), updatedById: req.session.userId ?? null })
+          .where(eq(articlesTable.id, article.id));
+      }
+
+      const rewrittenIds = [...rewrittenContent.keys()];
+      if (rewrittenIds.length > 0) {
+        await tx.delete(articleLinksTable).where(inArray(articleLinksTable.fromArticleId, rewrittenIds));
+        const refreshedLinks = [...rewrittenContent.entries()].flatMap(([fromArticleId, content]) =>
+          extractWikilinks(content).map((target) => ({ fromArticleId, toSlug: slugify(target) })),
+        );
+        if (refreshedLinks.length > 0) {
+          await tx.insert(articleLinksTable).values(refreshedLinks).onConflictDoNothing();
+        }
+      }
+
+      const versionArticles = [
+        renamedArticle,
+        ...inboundArticles
+          .filter((article) => article.id !== existing.id && rewrittenContent.has(article.id))
+          .map((article) => ({ ...article, content: rewrittenContent.get(article.id)! })),
+      ];
+      for (const article of versionArticles) {
+        const [versionCount] = await tx
+          .select({ c: count() })
+          .from(articleVersionsTable)
+          .where(eq(articleVersionsTable.articleId, article.id));
+        await tx.insert(articleVersionsTable).values({
+          articleId: article.id,
+          versionNumber: Number(versionCount?.c ?? 0) + 1,
+          title: article.title,
+          content: article.content,
+          createdById: req.session.userId ?? null,
+        });
+      }
+
+      return { status: "updated" as const, rewrittenArticles: rewrittenContent.size };
+    });
+    if (result.status === "not_found") {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+    if (result.status === "conflict") {
+      res.status(409).json({ error: "An article already uses this URL" });
+      return;
+    }
+    if (result.status === "unchanged") {
+      res.json({ slug: currentSlug, rewrittenArticles: 0 });
+      return;
+    }
+    res.json({ slug: nextSlug, rewrittenArticles: result.rewrittenArticles });
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      res.status(409).json({ error: "An article already uses this URL" });
+      return;
+    }
+    throw error;
+  }
+});
+
 router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const slug = String(req.params.slug);
   const { title, content, groupIds, tagIds } = req.body;
@@ -505,7 +636,57 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
   const updates: Record<string, unknown> = { updatedAt: new Date(), updatedById: req.session.userId ?? null };
   if (title !== undefined) updates.title = title;
   if (content !== undefined) updates.content = sanitizeArticleHtml(content);
-  const [article] = await db.update(articlesTable).set(updates).where(eq(articlesTable.slug, slug)).returning();
+  let article;
+  let versionCreated = false;
+  if (content !== undefined) {
+    article = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
+      const [updatedArticle] = await tx
+        .update(articlesTable)
+        .set(updates)
+        .where(eq(articlesTable.slug, slug))
+        .returning();
+      if (!updatedArticle) return null;
+
+      await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, updatedArticle.id));
+      const wikilinks = extractWikilinks(content);
+      if (wikilinks.length > 0) {
+        await tx
+          .insert(articleLinksTable)
+          .values(wikilinks.map((target) => ({ fromArticleId: updatedArticle.id, toSlug: slugify(target) })))
+          .onConflictDoNothing();
+      }
+
+      const imgIds = [...content.matchAll(/\/api\/articles\/images\/(\d+)/g)].map((m) => parseInt(m[1])).filter((n) => !isNaN(n));
+      if (imgIds.length > 0) {
+        await tx.update(articleImagesTable).set({ articleId: updatedArticle.id }).where(inArray(articleImagesTable.id, imgIds));
+      }
+
+      const [versionCount] = await tx
+        .select({ c: count() })
+        .from(articleVersionsTable)
+        .where(eq(articleVersionsTable.articleId, updatedArticle.id));
+      await tx.insert(articleVersionsTable).values({
+        articleId: updatedArticle.id,
+        versionNumber: Number(versionCount?.c ?? 0) + 1,
+        title: updatedArticle.title,
+        content: updatedArticle.content,
+        createdById: req.session.userId ?? null,
+      });
+      return updatedArticle;
+    });
+    versionCreated = article !== null;
+    if (!article) {
+      res.status(409).json({ error: "This article's URL changed while it was being saved. Reload and try again." });
+      return;
+    }
+  } else {
+    [article] = await db.update(articlesTable).set(updates).where(eq(articlesTable.slug, slug)).returning();
+  }
+  if (!article) {
+    res.status(409).json({ error: "This article's URL changed while it was being saved. Reload and try again." });
+    return;
+  }
 
   if (groupIds !== undefined && Array.isArray(groupIds)) {
     await db.delete(articleGroupsTable).where(eq(articleGroupsTable.articleId, article.id));
@@ -518,33 +699,21 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
     await setArticleTags(article.id, tagIds);
   }
 
-  if (content !== undefined) {
-    await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, article.id));
-    const wikilinks = extractWikilinks(content);
-    if (wikilinks.length > 0) {
-      await db.insert(articleLinksTable).values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) }))).onConflictDoNothing();
-    }
-
-    // Re-associate any images embedded in the updated content with this article
-    const imgIds = [...content.matchAll(/\/api\/articles\/images\/(\d+)/g)].map((m) => parseInt(m[1])).filter((n) => !isNaN(n));
-    if (imgIds.length > 0) {
-      await db.update(articleImagesTable).set({ articleId: article.id }).where(inArray(articleImagesTable.id, imgIds));
-    }
-  }
-
   // Snapshot new version
-  const [versionCount] = await db
-    .select({ c: count() })
-    .from(articleVersionsTable)
-    .where(eq(articleVersionsTable.articleId, article.id));
-  const nextVersionNumber = Number(versionCount?.c ?? 0) + 1;
-  await db.insert(articleVersionsTable).values({
-    articleId: article.id,
-    versionNumber: nextVersionNumber,
-    title: article.title,
-    content: article.content,
-    createdById: req.session.userId ?? null,
-  });
+  if (!versionCreated) {
+    const [versionCount] = await db
+      .select({ c: count() })
+      .from(articleVersionsTable)
+      .where(eq(articleVersionsTable.articleId, article.id));
+    const nextVersionNumber = Number(versionCount?.c ?? 0) + 1;
+    await db.insert(articleVersionsTable).values({
+      articleId: article.id,
+      versionNumber: nextVersionNumber,
+      title: article.title,
+      content: article.content,
+      createdById: req.session.userId ?? null,
+    });
+  }
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
@@ -1333,34 +1502,63 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, requireR
     .limit(1);
   if (!version) { res.status(404).json({ error: "Version not found" }); return; }
 
-  // Apply the old content as an update
-  const [updated] = await db
-    .update(articlesTable)
-    .set({ title: version.title, content: version.content, updatedAt: new Date(), updatedById: req.session.userId ?? null })
-    .where(eq(articlesTable.id, article.id))
-    .returning();
+  const restoreResult = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
+    const [currentArticle] = await tx
+      .select()
+      .from(articlesTable)
+      .where(eq(articlesTable.slug, slug))
+      .limit(1)
+      .for("update");
+    if (!currentArticle) return { status: "stale" as const };
 
-  // Refresh wikilinks
-  await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, article.id));
-  const wikilinks = extractWikilinks(version.content);
-  if (wikilinks.length > 0) {
-    await db.insert(articleLinksTable)
-      .values(wikilinks.map((s) => ({ fromArticleId: article.id, toSlug: slugify(s) })))
-      .onConflictDoNothing();
-  }
+    const [currentVersion] = await tx
+      .select()
+      .from(articleVersionsTable)
+      .where(and(
+        eq(articleVersionsTable.id, versionId),
+        eq(articleVersionsTable.articleId, currentArticle.id),
+      ))
+      .limit(1);
+    if (!currentVersion) return { status: "version_missing" as const };
 
-  // Snapshot the restore as a new version
-  const [versionCount] = await db
-    .select({ c: count() })
-    .from(articleVersionsTable)
-    .where(eq(articleVersionsTable.articleId, article.id));
-  await db.insert(articleVersionsTable).values({
-    articleId: article.id,
-    versionNumber: Number(versionCount?.c ?? 0) + 1,
-    title: updated.title,
-    content: updated.content,
-    createdById: req.session.userId ?? null,
+    const [updatedArticle] = await tx
+      .update(articlesTable)
+      .set({ title: currentVersion.title, content: currentVersion.content, updatedAt: new Date(), updatedById: req.session.userId ?? null })
+      .where(and(eq(articlesTable.id, currentArticle.id), eq(articlesTable.slug, slug)))
+      .returning();
+
+    await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, currentArticle.id));
+    const wikilinks = extractWikilinks(currentVersion.content);
+    if (wikilinks.length > 0) {
+      await tx
+        .insert(articleLinksTable)
+        .values(wikilinks.map((target) => ({ fromArticleId: currentArticle.id, toSlug: slugify(target) })))
+        .onConflictDoNothing();
+    }
+
+    const [versionCount] = await tx
+      .select({ c: count() })
+      .from(articleVersionsTable)
+      .where(eq(articleVersionsTable.articleId, currentArticle.id));
+    await tx.insert(articleVersionsTable).values({
+      articleId: currentArticle.id,
+      versionNumber: Number(versionCount?.c ?? 0) + 1,
+      title: updatedArticle.title,
+      content: updatedArticle.content,
+      createdById: req.session.userId ?? null,
+    });
+    return { status: "updated" as const, article: updatedArticle };
   });
+  if (restoreResult.status === "stale") {
+    res.status(409).json({ error: "This article's URL changed while the version was being restored. Reload and try again." });
+    return;
+  }
+  if (restoreResult.status === "version_missing") {
+    res.status(404).json({ error: "Version not found" });
+    return;
+  }
+  const updated = restoreResult.article;
 
   res.json({ message: "Restored", slug: updated.slug });
 });

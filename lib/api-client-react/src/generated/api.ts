@@ -29,11 +29,14 @@ import type {
   ArticleGroupsInput,
   ArticleInput,
   ArticleListResponse,
+  ArticleSlugUpdate,
+  ArticleSlugUpdateResult,
   ArticleStats,
   ArticleSummary,
   ArticleUpdate,
   AuthUser,
   ChangePasswordInput,
+  EditLockStatus,
   ErrorResponse,
   Group,
   GroupDetail,
@@ -1185,6 +1188,295 @@ export const useDeleteArticle = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getDeleteArticleMutationOptions(options));
+    }
+
+export const getUpdateArticleSlugUrl = (slug: string,) => {
+
+
+
+
+  return `/api/articles/${slug}/slug`
+}
+
+/**
+ * @summary Change an article URL and update inbound wikilinks
+ */
+export const updateArticleSlug = async (slug: string,
+    articleSlugUpdate: ArticleSlugUpdate, options?: RequestInit): Promise<ArticleSlugUpdateResult> => {
+
+  return customFetch<ArticleSlugUpdateResult>(getUpdateArticleSlugUrl(slug),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      articleSlugUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateArticleSlugMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateArticleSlug>>, TError,{slug: string;data: BodyType<ArticleSlugUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateArticleSlug>>, TError,{slug: string;data: BodyType<ArticleSlugUpdate>}, TContext> => {
+
+const mutationKey = ['updateArticleSlug'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateArticleSlug>>, {slug: string;data: BodyType<ArticleSlugUpdate>}> = (props) => {
+          const {slug,data} = props ?? {};
+
+          return  updateArticleSlug(slug,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateArticleSlugMutationResult = NonNullable<Awaited<ReturnType<typeof updateArticleSlug>>>
+    export type UpdateArticleSlugMutationBody = BodyType<ArticleSlugUpdate>
+    export type UpdateArticleSlugMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Change an article URL and update inbound wikilinks
+ */
+export const useUpdateArticleSlug = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateArticleSlug>>, TError,{slug: string;data: BodyType<ArticleSlugUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateArticleSlug>>,
+        TError,
+        {slug: string;data: BodyType<ArticleSlugUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateArticleSlugMutationOptions(options));
+    }
+
+export const getGetArticleLockUrl = (slug: string,) => {
+
+
+
+
+  return `/api/articles/${slug}/lock`
+}
+
+/**
+ * @summary Get the current edit lock status for an article
+ */
+export const getArticleLock = async (slug: string, options?: RequestInit): Promise<EditLockStatus> => {
+
+  return customFetch<EditLockStatus>(getGetArticleLockUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetArticleLockQueryKey = (slug: string,) => {
+    return [
+    `/api/articles/${slug}/lock`
+    ] as const;
+    }
+
+
+export const getGetArticleLockQueryOptions = <TData = Awaited<ReturnType<typeof getArticleLock>>, TError = ErrorType<ErrorResponse>>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getArticleLock>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetArticleLockQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getArticleLock>>> = ({ signal }) => getArticleLock(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(slug), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getArticleLock>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetArticleLockQueryResult = NonNullable<Awaited<ReturnType<typeof getArticleLock>>>
+export type GetArticleLockQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the current edit lock status for an article
+ */
+
+export function useGetArticleLock<TData = Awaited<ReturnType<typeof getArticleLock>>, TError = ErrorType<ErrorResponse>>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getArticleLock>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetArticleLockQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAcquireArticleLockUrl = (slug: string,) => {
+
+
+
+
+  return `/api/articles/${slug}/lock`
+}
+
+/**
+ * @summary Acquire or refresh an edit lock for an article
+ */
+export const acquireArticleLock = async (slug: string, options?: RequestInit): Promise<EditLockStatus> => {
+
+  return customFetch<EditLockStatus>(getAcquireArticleLockUrl(slug),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+export const getAcquireArticleLockMutationOptions = <TError = ErrorType<ErrorResponse | EditLockStatus>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acquireArticleLock>>, TError,{slug: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acquireArticleLock>>, TError,{slug: string}, TContext> => {
+
+const mutationKey = ['acquireArticleLock'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acquireArticleLock>>, {slug: string}> = (props) => {
+          const {slug} = props ?? {};
+
+          return  acquireArticleLock(slug,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcquireArticleLockMutationResult = NonNullable<Awaited<ReturnType<typeof acquireArticleLock>>>
+
+    export type AcquireArticleLockMutationError = ErrorType<ErrorResponse | EditLockStatus>
+
+    /**
+ * @summary Acquire or refresh an edit lock for an article
+ */
+export const useAcquireArticleLock = <TError = ErrorType<ErrorResponse | EditLockStatus>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acquireArticleLock>>, TError,{slug: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acquireArticleLock>>,
+        TError,
+        {slug: string},
+        TContext
+      > => {
+      return useMutation(getAcquireArticleLockMutationOptions(options));
+    }
+
+export const getReleaseArticleLockUrl = (slug: string,) => {
+
+
+
+
+  return `/api/articles/${slug}/lock`
+}
+
+/**
+ * @summary Release an edit lock (own lock only; admins can release any)
+ */
+export const releaseArticleLock = async (slug: string, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getReleaseArticleLockUrl(slug),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getReleaseArticleLockMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseArticleLock>>, TError,{slug: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof releaseArticleLock>>, TError,{slug: string}, TContext> => {
+
+const mutationKey = ['releaseArticleLock'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof releaseArticleLock>>, {slug: string}> = (props) => {
+          const {slug} = props ?? {};
+
+          return  releaseArticleLock(slug,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReleaseArticleLockMutationResult = NonNullable<Awaited<ReturnType<typeof releaseArticleLock>>>
+
+    export type ReleaseArticleLockMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Release an edit lock (own lock only; admins can release any)
+ */
+export const useReleaseArticleLock = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseArticleLock>>, TError,{slug: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof releaseArticleLock>>,
+        TError,
+        {slug: string},
+        TContext
+      > => {
+      return useMutation(getReleaseArticleLockMutationOptions(options));
     }
 
 export const getGetArticleBacklinksUrl = (slug: string,) => {

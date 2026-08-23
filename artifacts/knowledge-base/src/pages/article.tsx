@@ -144,15 +144,18 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
       let lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = wikilinkPattern.exec(text))) {
-        const title = match[1];
+        const rawLink = match[1];
+        const divider = rawLink.indexOf("|");
+        const target = (divider === -1 ? rawLink : rawLink.slice(0, divider)).trim();
+        const label = (divider === -1 ? rawLink : rawLink.slice(divider + 1)).trim();
         fragment.append(document.createTextNode(text.slice(lastIndex, match.index)));
 
-        const linkSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const linkSlug = target.toLowerCase().replace(/[^a-z0-9]+/g, "-");
         const link = document.createElement("a");
         link.href = `/wiki/${linkSlug}`;
         link.className = "text-primary hover:underline font-medium";
         link.dataset.wikilink = "true";
-        link.textContent = title;
+        link.textContent = label || target;
         fragment.append(link);
 
         lastIndex = wikilinkPattern.lastIndex;

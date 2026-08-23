@@ -404,6 +404,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /articles/{slug}/slug:
+    patch:
+      operationId: updateArticleSlug
+      tags: [articles]
+      summary: Change an article URL and update inbound wikilinks
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleSlugUpdate"
+      responses:
+        "200":
+          description: Article URL updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleSlugUpdateResult"
+        "400":
+          description: Invalid URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: URL already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /articles/{slug}/lock:
     get:
       operationId: getArticleLock
@@ -1218,6 +1267,24 @@ components:
           type: array
           items:
             type: integer
+
+    ArticleSlugUpdate:
+      type: object
+      required: [slug]
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(-[a-z0-9]+){0,99}$"
+          maxLength: 100
+
+    ArticleSlugUpdateResult:
+      type: object
+      required: [slug, rewrittenArticles]
+      properties:
+        slug:
+          type: string
+        rewrittenArticles:
+          type: integer
 
     ArticleGroupsInput:
       type: object

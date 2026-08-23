@@ -126,6 +126,19 @@ export interface ArticleUpdate {
   tagIds?: number[];
 }
 
+export interface ArticleSlugUpdate {
+  /**
+     * @maxLength 100
+     * @pattern ^[a-z0-9]+(-[a-z0-9]+){0,99}$
+     */
+  slug: string;
+}
+
+export interface ArticleSlugUpdateResult {
+  slug: string;
+  rewrittenArticles: number;
+}
+
 export interface ArticleGroupsInput {
   groupIds: number[];
 }
@@ -137,6 +150,17 @@ export interface ArticleStats {
   totalUsers: number;
   recentlyUpdated: ArticleSummary[];
   oldestUpdated?: ArticleSummary[];
+}
+
+export type EditLockStatusLockedBy = null | {
+  userId: number;
+  userName: string;
+  lockedAt: string;
+};
+
+export interface EditLockStatus {
+  articleId: number;
+  lockedBy: EditLockStatusLockedBy;
 }
 
 export interface ImageUploadInput {
