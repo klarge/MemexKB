@@ -68,7 +68,7 @@ export default function AdminDashboard() {
               {stats?.recentlyUpdated?.map(article => (
                 <div key={article.id} className="flex items-start justify-between border-b pb-4 last:border-0 last:pb-0">
                   <div>
-                    <Link href={`/wiki/${article.slug}`} className="font-medium hover:text-primary transition-colors flex items-center gap-2">
+                    <Link href={`/knowledge/${article.slug}`} className="font-medium hover:text-primary transition-colors flex items-center gap-2">
                       {article.title}
                       {article.isRestricted && <Lock className="h-3 w-3 text-muted-foreground" />}
                     </Link>
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
               {stats?.oldestUpdated?.map(article => (
                 <div key={article.id} className="flex items-start justify-between border-b pb-4 last:border-0 last:pb-0">
                   <div>
-                    <Link href={`/wiki/${article.slug}`} className="font-medium hover:text-primary transition-colors flex items-center gap-2">
+                    <Link href={`/knowledge/${article.slug}`} className="font-medium hover:text-primary transition-colors flex items-center gap-2">
                       {article.title}
                     </Link>
                     <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">

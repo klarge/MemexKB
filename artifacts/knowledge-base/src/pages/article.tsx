@@ -65,7 +65,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   const displayedIsLoading = isLogRoute ? isLoadingLog : isLoading;
   const displayedIsError = isLogRoute ? isLogError : isError;
   const apiSlug = displayedArticle?.slug ?? actualSlug;
-  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/wiki/${actualSlug}`;
+  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/knowledge/${actualSlug}`;
 
   // ─── Edit lock status ─────────────────────────────────────────────────────
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
@@ -168,7 +168,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
 
         const linkSlug = target.toLowerCase().replace(/[^a-z0-9]+/g, "-");
         const link = document.createElement("a");
-        link.href = `/wiki/${linkSlug}`;
+        link.href = `/knowledge/${linkSlug}`;
         link.className = "text-primary hover:underline font-medium";
         link.dataset.wikilink = "true";
         link.textContent = label || target;
@@ -262,7 +262,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
           {canEdit && (
             <Button
               onClick={() =>
-                setLocation(`/wiki/new/edit?title=${encodeURIComponent(displayTitle)}`)
+                setLocation(`/knowledge/new/edit?title=${encodeURIComponent(displayTitle)}`)
               }
               data-testid="button-create-from-wikilink"
             >
@@ -366,7 +366,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(isLogRoute ? `${articlePath}/edit` : `/wiki/${actualSlug}/edit`)}
+                onClick={() => setLocation(isLogRoute ? `${articlePath}/edit` : `/knowledge/${actualSlug}/edit`)}
                 data-testid="button-edit-article"
               >
                 <Edit className="mr-2 h-4 w-4" /> Edit Article
@@ -374,7 +374,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(isLogRoute ? `${articlePath}/history` : `/wiki/${actualSlug}/history`)}
+                onClick={() => setLocation(isLogRoute ? `${articlePath}/history` : `/knowledge/${actualSlug}/history`)}
               >
                 <Clock className="mr-2 h-4 w-4" /> Version History
               </Button>
@@ -437,7 +437,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
                 {backlinks.map((link) => (
                   <li key={link.id}>
                     <Link
-                      href={link.logOwnerId && link.logSlug ? `/logs/${link.logOwnerId}/${link.logSlug}` : `/wiki/${link.slug}`}
+                      href={link.logOwnerId && link.logSlug ? `/logs/${link.logOwnerId}/${link.logSlug}` : `/knowledge/${link.slug}`}
                       className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
                     >
                       <FileText className="h-3 w-3" />

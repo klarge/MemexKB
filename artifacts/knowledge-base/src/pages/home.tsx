@@ -110,7 +110,7 @@ type DashboardData = {
 
 function ArticleRow({ article, accent }: { article: ArticleSummary; accent?: boolean }) {
   return (
-    <Link href={`/wiki/${article.slug}`}>
+    <Link href={`/knowledge/${article.slug}`}>
       <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
         <FileText className={`h-4 w-4 shrink-0 ${accent ? "text-amber-500" : "text-muted-foreground"}`} />
         <div className="flex-1 min-w-0">
@@ -177,7 +177,7 @@ function SectionShell({
 
 function SearchResultRow({ result, icon }: { result: SearchResult; icon: React.ReactNode }) {
   return (
-    <Link href={`/wiki/${result.slug}`}>
+    <Link href={`/knowledge/${result.slug}`}>
       <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
         <div className="shrink-0 text-muted-foreground">{icon}</div>
         <div className="flex-1 min-w-0">
@@ -193,7 +193,7 @@ function SearchResultRow({ result, icon }: { result: SearchResult; icon: React.R
 }
 
 function logHref(result: { logOwnerId?: number | null; logSlug?: string | null; slug: string }) {
-  return result.logOwnerId && result.logSlug ? `/logs/${result.logOwnerId}/${result.logSlug}` : `/wiki/${result.slug}`;
+  return result.logOwnerId && result.logSlug ? `/logs/${result.logOwnerId}/${result.logSlug}` : `/knowledge/${result.slug}`;
 }
 
 function DueDateBadge({ dueDate }: { dueDate: string }) {
@@ -285,7 +285,7 @@ export default function Home() {
   const todayEntry = (logData?.entries ?? []).find((e) => e.title === todayTitle);
 
   const handleTodayLog = () => {
-    setLocation(todayEntry ? `${logHref(todayEntry)}/edit` : "/wiki/new?log=1");
+    setLocation(todayEntry ? `${logHref(todayEntry)}/edit` : "/knowledge/new?log=1");
   };
 
   const activeTasks = (dashboard?.activeTasks ?? []).slice(0, 5);

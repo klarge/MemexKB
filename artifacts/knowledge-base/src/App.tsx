@@ -95,6 +95,16 @@ function PublicLayout({ children }: { children: ReactNode }) {
   return <MainLayout>{children}</MainLayout>;
 }
 
+function LegacyWikiRedirect({ to }: { to: string }) {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation(`${to}${window.location.search}${window.location.hash}`, { replace: true });
+  }, [setLocation, to]);
+
+  return null;
+}
+
 function Router() {
   return (
     <SetupGuard>
@@ -114,13 +124,13 @@ function Router() {
         </AuthRoute>
       </Route>
 
-      <Route path="/wiki/new">
+      <Route path="/knowledge/new">
         <AuthRoute editorOnly>
           <ArticleEdit />
         </AuthRoute>
       </Route>
 
-      <Route path="/wiki/new/edit">
+      <Route path="/knowledge/new/edit">
         <AuthRoute editorOnly>
           <ArticleEdit />
         </AuthRoute>
@@ -150,7 +160,7 @@ function Router() {
         )}
       </Route>
 
-      <Route path="/wiki/:slug/edit">
+      <Route path="/knowledge/:slug/edit">
         {(params: Record<string, string>) => (
           <AuthRoute editorOnly>
             <ArticleEdit params={params} />
@@ -158,7 +168,15 @@ function Router() {
         )}
       </Route>
 
-      <Route path="/wiki/:slug">
+      <Route path="/knowledge/:slug/history">
+        {(params: Record<string, string>) => (
+          <AuthRoute editorOnly>
+            <ArticleHistory params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/knowledge/:slug">
         {(params: Record<string, string>) => (
           <PublicLayout>
             <ArticleView params={params} />
@@ -214,12 +232,16 @@ function Router() {
         </AuthRoute>
       </Route>
 
+      <Route path="/wiki/new/edit"><LegacyWikiRedirect to="/knowledge/new/edit" /></Route>
+      <Route path="/wiki/new"><LegacyWikiRedirect to="/knowledge/new" /></Route>
       <Route path="/wiki/:slug/history">
-        {(params: Record<string, string>) => (
-          <AuthRoute editorOnly>
-            <ArticleHistory params={params} />
-          </AuthRoute>
-        )}
+        {(params: Record<string, string>) => <LegacyWikiRedirect to={`/knowledge/${params.slug}/history`} />}
+      </Route>
+      <Route path="/wiki/:slug/edit">
+        {(params: Record<string, string>) => <LegacyWikiRedirect to={`/knowledge/${params.slug}/edit`} />}
+      </Route>
+      <Route path="/wiki/:slug">
+        {(params: Record<string, string>) => <LegacyWikiRedirect to={`/knowledge/${params.slug}`} />}
       </Route>
 
       <Route path="/knowledge">

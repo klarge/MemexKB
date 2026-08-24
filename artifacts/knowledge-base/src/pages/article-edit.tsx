@@ -164,7 +164,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   });
   const article = isLogRoute ? logArticle : regularArticle;
   const articleSlug = article?.slug ?? slug;
-  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/wiki/${articleSlug}`;
+  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/knowledge/${articleSlug}`;
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
@@ -201,7 +201,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
               : "No internal links needed updating.",
           });
           setSlugDialogOpen(false);
-          setLocation(`/wiki/${data.slug}`);
+          setLocation(`/knowledge/${data.slug}`);
         },
         onError: (err) => {
           toast({
@@ -574,7 +574,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
           onSuccess: (data) => {
             localStorage.removeItem(draftKey);
             toast({ title: "Article created" });
-            setLocation(`/wiki/${data.slug}`);
+            setLocation(`/knowledge/${data.slug}`);
           },
           onError: (err) => {
             toast({ title: "Failed to create", description: err.message, variant: "destructive" });
@@ -591,7 +591,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
             toast({ title: "Article updated" });
             await releaseLock();
-            setLocation(isLogRoute ? articlePath : `/wiki/${data.slug}`);
+            setLocation(isLogRoute ? articlePath : `/knowledge/${data.slug}`);
           },
           onError: (err) => {
             toast({ title: "Failed to update", description: err.message, variant: "destructive" });
@@ -691,7 +691,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             />
             {!isNew && (
               <p className="text-xs text-muted-foreground">
-                URL: <span className="font-mono">{isLogRoute ? articlePath : `/wiki/${article?.slug ?? slug}`}</span>
+                URL: <span className="font-mono">{isLogRoute ? articlePath : `/knowledge/${article?.slug ?? slug}`}</span>
               </p>
             )}
           </div>
@@ -708,7 +708,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                 <div className="space-y-2">
                   <Label htmlFor="article-slug">URL ending</Label>
                   <div className="flex items-center rounded-md border border-input bg-muted/40 px-3">
-                    <span className="text-sm text-muted-foreground">/wiki/</span>
+                    <span className="text-sm text-muted-foreground">/knowledge/</span>
                     <Input
                       id="article-slug"
                       value={slugDraft}

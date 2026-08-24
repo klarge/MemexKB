@@ -104,7 +104,7 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
     retry: false,
   });
   const slug = isLogRoute ? (logArticle?.slug ?? "") : (params?.slug ?? "");
-  const articlePath = isLogRoute ? `/logs/${userId}/${logSlug}` : `/wiki/${slug}`;
+  const articlePath = isLogRoute ? `/logs/${userId}/${logSlug}` : `/knowledge/${slug}`;
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();

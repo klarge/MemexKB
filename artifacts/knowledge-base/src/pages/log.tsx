@@ -74,7 +74,7 @@ export default function LogPage() {
     if (todayEntry) {
       setLocation(`/logs/${todayEntry.logOwnerId}/${todayEntry.logSlug}/edit`);
     } else {
-      setLocation("/wiki/new?log=1");
+      setLocation("/knowledge/new?log=1");
     }
   };
 

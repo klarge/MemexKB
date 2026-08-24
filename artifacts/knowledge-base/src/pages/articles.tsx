@@ -63,7 +63,7 @@ export default function Articles() {
           <p className="text-muted-foreground mt-1">Browse and search all knowledge base articles.</p>
         </div>
         {(user?.role === "admin" || user?.role === "editor") && (
-          <Button onClick={() => setLocation("/wiki/new")} data-testid="button-new-article">
+          <Button onClick={() => setLocation("/knowledge/new")} data-testid="button-new-article">
             <Plus className="mr-2 h-4 w-4" />
             New Article
           </Button>
@@ -156,7 +156,7 @@ export default function Articles() {
       ) : (
         <div className="grid gap-3" data-testid="list-articles">
           {data?.articles.map((article) => (
-            <Link key={article.id} href={`/wiki/${article.slug}`}>
+            <Link key={article.id} href={`/knowledge/${article.slug}`}>
               <Card className="hover-elevate cursor-pointer transition-colors group">
                 <CardContent className="p-5 flex items-center justify-between">
                   <div className="flex items-center gap-4 min-w-0">
