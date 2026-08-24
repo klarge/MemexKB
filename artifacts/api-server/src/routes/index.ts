@@ -16,6 +16,7 @@ import ssoAuthRouter from "./sso-auth";
 import devScreenshotRouter from "./dev-screenshot";
 import settingsRouter from "./settings";
 import tagsRouter from "./tags";
+import fullBackupRouter from "./admin-full-backup";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use(tagsRouter);
 router.use(usersRouter);
 router.use(groupsRouter);
 router.use(adminRouter);
+  router.use(fullBackupRouter);
 router.use(imagesRouter);
 router.use(templatesRouter);
 router.use(tasksRouter);

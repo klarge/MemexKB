@@ -1,8 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { usersTable, passwordResetTokensTable } from "@workspace/db";
+import { eq, count, and, gt, isNull } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -78,6 +79,10 @@ router.post("/auth/login", async (req, res) => {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
+  if (user.mustResetPassword) {
+    res.status(403).json({ error: "This account needs a password reset. Use the recovery link supplied by an administrator." });
+    return;
+  }
 
   // Regenerate the session ID before writing identity to prevent session fixation.
   req.session.regenerate((regenErr) => {
@@ -104,6 +109,38 @@ router.post("/auth/logout", (req, res) => {
   req.session.destroy(() => {
     res.json({ message: "Logged out" });
   });
+});
+
+router.post("/auth/recovery/reset", async (req, res): Promise<void> => {
+  const { token, newPassword } = req.body as { token?: unknown; newPassword?: unknown };
+  if (typeof token !== "string" || typeof newPassword !== "string" || newPassword.length < 8) {
+    res.status(400).json({ error: "A valid recovery token and a password of at least 8 characters are required." });
+    return;
+  }
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const reset = await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(passwordResetTokensTable)
+      .set({ usedAt: new Date() })
+      .where(and(
+        eq(passwordResetTokensTable.tokenHash, tokenHash),
+        isNull(passwordResetTokensTable.usedAt),
+        gt(passwordResetTokensTable.expiresAt, new Date()),
+      ))
+      .returning();
+    if (!claimed) return null;
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await tx
+      .update(usersTable)
+      .set({ passwordHash, mustResetPassword: false, updatedAt: new Date() })
+      .where(eq(usersTable.id, claimed.userId));
+    return claimed;
+  });
+  if (!reset) {
+    res.status(400).json({ error: "This recovery link is invalid, expired, or has already been used." });
+    return;
+  }
+  res.json({ message: "Password set. You can now sign in." });
 });
 
 router.get("/auth/me", requireAuth, async (req, res) => {

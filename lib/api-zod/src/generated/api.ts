@@ -70,6 +70,23 @@ export const ChangePasswordResponse = zod.object({
 
 
 /**
+ * @summary Set a new password with a one-time recovery link
+ */
+export const resetRecoveredPasswordBodyNewPasswordMin = 8;
+
+
+
+export const ResetRecoveredPasswordBody = zod.object({
+  "token": zod.string(),
+  "newPassword": zod.string().min(resetRecoveredPasswordBodyNewPasswordMin)
+})
+
+export const ResetRecoveredPasswordResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List API tokens for the current user
  */
 export const ListApiTokensResponseItem = zod.object({
@@ -1005,6 +1022,70 @@ export const RestoreAdminBackupResponse = zod.object({
 }),
   "skipped": zod.number(),
   "warnings": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Download an encrypted full environment backup
+ */
+export const exportFullEnvironmentBackupBodyPassphraseMin = 12;
+
+
+
+export const ExportFullEnvironmentBackupBody = zod.object({
+  "passphrase": zod.string().min(exportFullEnvironmentBackupBodyPassphraseMin)
+})
+
+
+/**
+ * @summary Decrypt and preview a full environment backup
+ */
+export const previewFullEnvironmentRestoreBodyPassphraseMin = 12;
+
+
+
+export const PreviewFullEnvironmentRestoreBody = zod.object({
+  "file": zod.instanceof(File),
+  "passphrase": zod.string().min(previewFullEnvironmentRestoreBodyPassphraseMin),
+  "mode": zod.enum(['empty', 'replace']).optional(),
+  "confirmation": zod.string().optional()
+})
+
+export const PreviewFullEnvironmentRestoreResponse = zod.object({
+  "exportedAt": zod.coerce.date(),
+  "sections": zod.record(zod.string(), zod.object({
+  "count": zod.number(),
+  "checksum": zod.string()
+})),
+  "excluded": zod.array(zod.string()),
+  "destinationHasData": zod.boolean(),
+  "warning": zod.string()
+})
+
+
+/**
+ * @summary Replace an environment with an encrypted full backup
+ */
+export const restoreFullEnvironmentBackupBodyPassphraseMin = 12;
+
+
+
+export const RestoreFullEnvironmentBackupBody = zod.object({
+  "file": zod.instanceof(File),
+  "passphrase": zod.string().min(restoreFullEnvironmentBackupBodyPassphraseMin),
+  "mode": zod.enum(['empty', 'replace']).optional(),
+  "confirmation": zod.string().optional()
+})
+
+export const RestoreFullEnvironmentBackupResponse = zod.object({
+  "restored": zod.record(zod.string(), zod.number()),
+  "recoveryLinks": zod.array(zod.object({
+  "userId": zod.number(),
+  "name": zod.string().optional(),
+  "email": zod.string().email().optional(),
+  "recoveryUrl": zod.string()
+})),
+  "warning": zod.string()
 })
 
 

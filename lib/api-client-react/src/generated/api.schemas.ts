@@ -5,6 +5,63 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface PasswordRecoveryInput {
+  token: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
+export interface FullBackupPassphraseInput {
+  /** @minLength 12 */
+  passphrase: string;
+}
+
+export type FullBackupRestoreInputMode = typeof FullBackupRestoreInputMode[keyof typeof FullBackupRestoreInputMode];
+
+
+export const FullBackupRestoreInputMode = {
+  empty: 'empty',
+  replace: 'replace',
+} as const;
+
+export interface FullBackupRestoreInput {
+  file: Blob;
+  /** @minLength 12 */
+  passphrase: string;
+  mode?: FullBackupRestoreInputMode;
+  confirmation?: string;
+}
+
+export interface FullBackupSection {
+  count: number;
+  checksum: string;
+}
+
+export type FullBackupPreviewSections = {[key: string]: FullBackupSection};
+
+export interface FullBackupPreview {
+  exportedAt: string;
+  sections: FullBackupPreviewSections;
+  excluded: string[];
+  destinationHasData: boolean;
+  warning: string;
+}
+
+export interface FullBackupRecoveryLink {
+  userId: number;
+  name?: string;
+  email?: string;
+  recoveryUrl: string;
+}
+
+export type FullBackupRestoreResultRestored = {[key: string]: number};
+
+export interface FullBackupRestoreResult {
+  restored: FullBackupRestoreResultRestored;
+  recoveryLinks: FullBackupRecoveryLink[];
+  warning: string;
+}
+
 export interface AdminRestorePreviewInput {
   file: Blob;
 }

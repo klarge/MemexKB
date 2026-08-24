@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Loader2, UploadCloud, Download, FileArchive, FolderOpen, BookOpen, ListTodo, FolderKanban, RotateCcw, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +24,18 @@ type RestoreResult = {
   imported: { logs: number; taskLists: number; tasks: number; projects: number; boards: number; columns: number; cards: number };
   skipped: number;
   warnings: string[];
+};
+type FullBackupPreview = {
+  exportedAt: string;
+  sections: Record<string, { count: number; checksum: string }>;
+  excluded: string[];
+  destinationHasData: boolean;
+  warning: string;
+};
+type FullBackupResult = {
+  restored: Record<string, number>;
+  recoveryLinks: Array<{ userId: number; recoveryUrl: string; email?: string; name?: string }>;
+  warning: string;
 };
 
 function useExportDownload(endpoint: string, filename: string) {
@@ -78,11 +91,107 @@ export default function AdminImport() {
   const [isPreviewingRestore, setIsPreviewingRestore] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
+  const fullBackupInputRef = useRef<HTMLInputElement>(null);
+  const [fullBackupPassphrase, setFullBackupPassphrase] = useState("");
+  const [isCreatingFullBackup, setIsCreatingFullBackup] = useState(false);
+  const [fullRestoreFile, setFullRestoreFile] = useState<File | null>(null);
+  const [fullRestorePassphrase, setFullRestorePassphrase] = useState("");
+  const [fullBackupPreview, setFullBackupPreview] = useState<FullBackupPreview | null>(null);
+  const [fullRestoreAcknowledged, setFullRestoreAcknowledged] = useState(false);
+  const [fullRestoreConfirmation, setFullRestoreConfirmation] = useState("");
+  const [isPreviewingFullBackup, setIsPreviewingFullBackup] = useState(false);
+  const [isRestoringFullBackup, setIsRestoringFullBackup] = useState(false);
+  const [fullBackupResult, setFullBackupResult] = useState<FullBackupResult | null>(null);
 
   const kbExport = useExportDownload("/api/admin/export", "knowledge-base-export.zip");
   const logsExport = useExportDownload("/api/admin/export/logs", "logs-export.json");
   const tasksExport = useExportDownload("/api/admin/export/tasks", "tasks-export.json");
   const projectsExport = useExportDownload("/api/admin/export/projects", "projects-export.json");
+
+  const createFullBackup = async () => {
+    if (fullBackupPassphrase.length < 12) {
+      toast({ title: "Choose a longer passphrase", description: "Use at least 12 characters to protect this backup.", variant: "destructive" });
+      return;
+    }
+    setIsCreatingFullBackup(true);
+    try {
+      const response = await fetch("/api/admin/full-backup/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ passphrase: fullBackupPassphrase }),
+      });
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error ?? "Could not create full backup.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "memex-environment-backup.mex";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setFullBackupPassphrase("");
+      toast({ title: "Encrypted backup downloaded", description: "Store the file and passphrase separately. The passphrase cannot be recovered." });
+    } catch (error) {
+      toast({ title: "Full backup could not be created", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    } finally {
+      setIsCreatingFullBackup(false);
+    }
+  };
+
+  const chooseFullRestoreFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFullRestoreFile(event.target.files?.[0] ?? null);
+    setFullBackupPreview(null);
+    setFullRestoreAcknowledged(false);
+    setFullRestoreConfirmation("");
+    setFullBackupResult(null);
+  };
+
+  const previewFullRestore = async () => {
+    if (!fullRestoreFile || fullRestorePassphrase.length < 12) return;
+    setIsPreviewingFullBackup(true);
+    setFullBackupPreview(null);
+    setFullBackupResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", fullRestoreFile);
+      formData.append("passphrase", fullRestorePassphrase);
+      const response = await fetch("/api/admin/full-backup/preview", { method: "POST", body: formData, credentials: "include" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not preview backup.");
+      setFullBackupPreview(result);
+    } catch (error) {
+      toast({ title: "Full backup could not be previewed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    } finally {
+      setIsPreviewingFullBackup(false);
+    }
+  };
+
+  const restoreFullBackup = async () => {
+    if (!fullRestoreFile || !fullBackupPreview) return;
+    setIsRestoringFullBackup(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", fullRestoreFile);
+      formData.append("passphrase", fullRestorePassphrase);
+      formData.append("mode", fullBackupPreview.destinationHasData ? "replace" : "empty");
+      formData.append("confirmation", fullRestoreConfirmation);
+      const response = await fetch("/api/admin/full-backup/restore", { method: "POST", body: formData, credentials: "include" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not restore full backup.");
+      setFullBackupResult(result);
+      setFullRestoreAcknowledged(false);
+      toast({ title: "Environment restored", description: "Everyone has been signed out. Copy and distribute the one-time recovery links below." });
+    } catch (error) {
+      toast({ title: "Full restore failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    } finally {
+      setIsRestoringFullBackup(false);
+    }
+  };
 
   const handleZipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -215,6 +324,106 @@ export default function AdminImport() {
         <h1 className="text-3xl font-bold tracking-tight text-primary">Import &amp; Export</h1>
         <p className="text-muted-foreground mt-1">Backup your knowledge base or import articles.</p>
       </div>
+
+      {/* ── Exports ── */}
+      <Card className="border-primary/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" />
+            Full environment backup
+          </CardTitle>
+          <CardDescription>
+            Create one encrypted recovery archive for users, groups, articles, private logs, tasks, projects, templates, settings, and customization. Passwords, sessions, tokens, and secret configuration are never included.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="full-backup-passphrase">New backup passphrase</Label>
+              <Input id="full-backup-passphrase" type="password" minLength={12} value={fullBackupPassphrase} onChange={(event) => setFullBackupPassphrase(event.target.value)} placeholder="At least 12 characters" />
+              <p className="text-xs text-muted-foreground">Keep the passphrase separately from the archive. It cannot be recovered.</p>
+            </div>
+            <Button className="self-end" type="button" disabled={isCreatingFullBackup || fullBackupPassphrase.length < 12} onClick={createFullBackup}>
+              {isCreatingFullBackup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              {isCreatingFullBackup ? "Encrypting…" : "Download encrypted backup"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <RotateCcw className="h-5 w-5" />
+            Restore full environment
+          </CardTitle>
+          <CardDescription>
+            Decrypt and inspect a full backup before restoring it. On a populated environment this replaces supported data, signs out all users, and creates one-time password recovery links.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <input ref={fullBackupInputRef} className="sr-only" type="file" accept=".mex,application/octet-stream" onChange={chooseFullRestoreFile} />
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Encrypted backup file</Label>
+              <Button type="button" variant="outline" onClick={() => fullBackupInputRef.current?.click()}><UploadCloud className="mr-2 h-4 w-4" />Choose environment backup</Button>
+              <p className="text-xs text-muted-foreground">{fullRestoreFile ? `${fullRestoreFile.name} (${Math.ceil(fullRestoreFile.size / 1024)} KB)` : "No backup selected"}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="full-restore-passphrase">Backup passphrase</Label>
+              <Input id="full-restore-passphrase" type="password" minLength={12} value={fullRestorePassphrase} onChange={(event) => setFullRestorePassphrase(event.target.value)} />
+            </div>
+          </div>
+          <Button type="button" onClick={previewFullRestore} disabled={!fullRestoreFile || fullRestorePassphrase.length < 12 || isPreviewingFullBackup}>
+            {isPreviewingFullBackup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+            {isPreviewingFullBackup ? "Decrypting…" : "Preview full restore"}
+          </Button>
+
+          {fullBackupPreview && (
+            <div className="space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4" aria-live="polite">
+              <div>
+                <h3 className="font-semibold">Full restore preview</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Backup created {new Date(fullBackupPreview.exportedAt).toLocaleString()}. It contains {Object.values(fullBackupPreview.sections).reduce((total, section) => total + section.count, 0)} records across {Object.keys(fullBackupPreview.sections).length} data sections.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground sm:grid-cols-3">
+                {Object.entries(fullBackupPreview.sections).filter(([, section]) => section.count > 0).map(([name, section]) => <span key={name}>{section.count} {name}</span>)}
+              </div>
+              <p className="rounded-md bg-background/60 p-3 text-sm font-medium text-destructive">{fullBackupPreview.warning}</p>
+              {fullBackupPreview.destinationHasData && (
+                <div className="space-y-2">
+                  <Label htmlFor="full-restore-confirmation">Type RESTORE to replace the current environment</Label>
+                  <Input id="full-restore-confirmation" value={fullRestoreConfirmation} onChange={(event) => setFullRestoreConfirmation(event.target.value)} placeholder="RESTORE" />
+                </div>
+              )}
+              <div className="flex items-start gap-2">
+                <Checkbox id="confirm-full-restore" checked={fullRestoreAcknowledged} onCheckedChange={(checked) => setFullRestoreAcknowledged(checked === true)} />
+                <Label htmlFor="confirm-full-restore" className="text-sm font-normal leading-5">I understand that this will sign out every user, revoke API tokens, disable restored SSO providers, and require each restored user to choose a new password.</Label>
+              </div>
+              <Button type="button" variant="destructive" onClick={restoreFullBackup} disabled={!fullRestoreAcknowledged || (fullBackupPreview.destinationHasData && fullRestoreConfirmation !== "RESTORE") || isRestoringFullBackup}>
+                {isRestoringFullBackup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+                {isRestoringFullBackup ? "Restoring environment…" : "Restore environment"}
+              </Button>
+            </div>
+          )}
+
+          {fullBackupResult && (
+            <div className="space-y-3 rounded-md border bg-muted/40 p-4 text-sm" role="status">
+              <div className="font-semibold">Environment restored</div>
+              <p className="text-muted-foreground">{fullBackupResult.warning}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground sm:grid-cols-4">
+                {Object.entries(fullBackupResult.restored).filter(([, total]) => total > 0).map(([name, total]) => <span key={name}>{total} {name}</span>)}
+              </div>
+              <div>
+                <div className="font-medium">One-time password recovery links</div>
+                <p className="mt-1 text-xs text-muted-foreground">Copy these now and distribute them securely. They expire after 7 days and are shown only once.</p>
+                <ul className="mt-2 space-y-1 break-all text-xs">
+                  {fullBackupResult.recoveryLinks.map((link) => <li key={link.userId}><a className="text-primary underline" href={link.recoveryUrl}>{window.location.origin}{link.recoveryUrl}</a></li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Exports ── */}
       <div>

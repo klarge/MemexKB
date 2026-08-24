@@ -119,6 +119,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/recovery/reset:
+    post:
+      operationId: resetRecoveredPassword
+      tags: [auth]
+      summary: Set a new password with a one-time recovery link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordRecoveryInput"
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid or expired recovery link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/tokens:
     get:
       operationId: listApiTokens
@@ -1132,8 +1157,157 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/full-backup/export:
+    post:
+      operationId: exportFullEnvironmentBackup
+      tags: [admin]
+      summary: Download an encrypted full environment backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FullBackupPassphraseInput"
+      responses:
+        "200":
+          description: Encrypted full environment backup
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /admin/full-backup/preview:
+    post:
+      operationId: previewFullEnvironmentRestore
+      tags: [admin]
+      summary: Decrypt and preview a full environment backup
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FullBackupRestoreInput"
+      responses:
+        "200":
+          description: Full environment restore preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FullBackupPreview"
+        "400":
+          description: Invalid archive or passphrase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/full-backup/restore:
+    post:
+      operationId: restoreFullEnvironmentBackup
+      tags: [admin]
+      summary: Replace an environment with an encrypted full backup
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FullBackupRestoreInput"
+      responses:
+        "200":
+          description: Full environment restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FullBackupRestoreResult"
+        "400":
+          description: Invalid archive, passphrase, or confirmation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Destination must be explicitly replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
+    PasswordRecoveryInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 8 }
+
+    FullBackupPassphraseInput:
+      type: object
+      required: [passphrase]
+      properties:
+        passphrase: { type: string, minLength: 12 }
+
+    FullBackupRestoreInput:
+      type: object
+      required: [file, passphrase]
+      properties:
+        file:
+          type: string
+          format: binary
+        passphrase:
+          type: string
+          minLength: 12
+        mode:
+          type: string
+          enum: [empty, replace]
+        confirmation:
+          type: string
+
+    FullBackupSection:
+      type: object
+      required: [count, checksum]
+      properties:
+        count: { type: integer }
+        checksum: { type: string }
+
+    FullBackupPreview:
+      type: object
+      required: [exportedAt, sections, excluded, destinationHasData, warning]
+      properties:
+        exportedAt: { type: string, format: date-time }
+        sections:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/FullBackupSection"
+        excluded:
+          type: array
+          items: { type: string }
+        destinationHasData: { type: boolean }
+        warning: { type: string }
+
+    FullBackupRecoveryLink:
+      type: object
+      required: [userId, recoveryUrl]
+      properties:
+        userId: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        recoveryUrl: { type: string }
+
+    FullBackupRestoreResult:
+      type: object
+      required: [restored, recoveryLinks, warning]
+      properties:
+        restored:
+          type: object
+          additionalProperties: { type: integer }
+        recoveryLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/FullBackupRecoveryLink"
+        warning: { type: string }
+
     # ─── Admin restore ──────────────────────────────────────────────────────────
     AdminRestorePreviewInput:
       type: object

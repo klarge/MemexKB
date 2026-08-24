@@ -32,6 +32,7 @@ import ProjectsPage from "@/pages/projects";
 import ProjectPage from "@/pages/project";
 import BoardPage from "@/pages/board";
 import Knowledge from "@/pages/articles";
+import ResetPassword from "@/pages/reset-password";
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,7 @@ function Router() {
     <Switch>
       <Route path="/setup" component={Setup} />
       <Route path="/login" component={Login} />
+      <Route path="/reset-password" component={ResetPassword} />
 
       <Route path="/">
         <AuthRoute>

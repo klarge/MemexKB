@@ -42,6 +42,10 @@ import type {
   ChangePasswordInput,
   EditLockStatus,
   ErrorResponse,
+  FullBackupPassphraseInput,
+  FullBackupPreview,
+  FullBackupRestoreInput,
+  FullBackupRestoreResult,
   Group,
   GroupDetail,
   GroupInput,
@@ -54,6 +58,7 @@ import type {
   ListArticlesParams,
   LoginInput,
   MessageResponse,
+  PasswordRecoveryInput,
   Tag,
   TagInput,
   TagUpdate,
@@ -439,6 +444,77 @@ export const useChangePassword = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getChangePasswordMutationOptions(options));
+    }
+
+export const getResetRecoveredPasswordUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/reset`
+}
+
+/**
+ * @summary Set a new password with a one-time recovery link
+ */
+export const resetRecoveredPassword = async (passwordRecoveryInput: PasswordRecoveryInput, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getResetRecoveredPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      passwordRecoveryInput,)
+  }
+);}
+
+
+
+
+export const getResetRecoveredPasswordMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetRecoveredPassword>>, TError,{data: BodyType<PasswordRecoveryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetRecoveredPassword>>, TError,{data: BodyType<PasswordRecoveryInput>}, TContext> => {
+
+const mutationKey = ['resetRecoveredPassword'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetRecoveredPassword>>, {data: BodyType<PasswordRecoveryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetRecoveredPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetRecoveredPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof resetRecoveredPassword>>>
+    export type ResetRecoveredPasswordMutationBody = BodyType<PasswordRecoveryInput>
+    export type ResetRecoveredPasswordMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Set a new password with a one-time recovery link
+ */
+export const useResetRecoveredPassword = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetRecoveredPassword>>, TError,{data: BodyType<PasswordRecoveryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetRecoveredPassword>>,
+        TError,
+        {data: BodyType<PasswordRecoveryInput>},
+        TContext
+      > => {
+      return useMutation(getResetRecoveredPasswordMutationOptions(options));
     }
 
 export const getListApiTokensUrl = () => {
@@ -3489,5 +3565,236 @@ export const useRestoreAdminBackup = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getRestoreAdminBackupMutationOptions(options));
+    }
+
+export const getExportFullEnvironmentBackupUrl = () => {
+
+
+
+
+  return `/api/admin/full-backup/export`
+}
+
+/**
+ * @summary Download an encrypted full environment backup
+ */
+export const exportFullEnvironmentBackup = async (fullBackupPassphraseInput: FullBackupPassphraseInput, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getExportFullEnvironmentBackupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      fullBackupPassphraseInput,)
+  }
+);}
+
+
+
+
+export const getExportFullEnvironmentBackupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportFullEnvironmentBackup>>, TError,{data: BodyType<FullBackupPassphraseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportFullEnvironmentBackup>>, TError,{data: BodyType<FullBackupPassphraseInput>}, TContext> => {
+
+const mutationKey = ['exportFullEnvironmentBackup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportFullEnvironmentBackup>>, {data: BodyType<FullBackupPassphraseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportFullEnvironmentBackup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportFullEnvironmentBackupMutationResult = NonNullable<Awaited<ReturnType<typeof exportFullEnvironmentBackup>>>
+    export type ExportFullEnvironmentBackupMutationBody = BodyType<FullBackupPassphraseInput>
+    export type ExportFullEnvironmentBackupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Download an encrypted full environment backup
+ */
+export const useExportFullEnvironmentBackup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportFullEnvironmentBackup>>, TError,{data: BodyType<FullBackupPassphraseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exportFullEnvironmentBackup>>,
+        TError,
+        {data: BodyType<FullBackupPassphraseInput>},
+        TContext
+      > => {
+      return useMutation(getExportFullEnvironmentBackupMutationOptions(options));
+    }
+
+export const getPreviewFullEnvironmentRestoreUrl = () => {
+
+
+
+
+  return `/api/admin/full-backup/preview`
+}
+
+/**
+ * @summary Decrypt and preview a full environment backup
+ */
+export const previewFullEnvironmentRestore = async (fullBackupRestoreInput: FullBackupRestoreInput, options?: RequestInit): Promise<FullBackupPreview> => {
+    const formData = new FormData();
+formData.append(`file`, fullBackupRestoreInput.file);
+formData.append(`passphrase`, fullBackupRestoreInput.passphrase);
+if(fullBackupRestoreInput.mode !== undefined) {
+ formData.append(`mode`, fullBackupRestoreInput.mode);
+ }
+if(fullBackupRestoreInput.confirmation !== undefined) {
+ formData.append(`confirmation`, fullBackupRestoreInput.confirmation);
+ }
+
+  return customFetch<FullBackupPreview>(getPreviewFullEnvironmentRestoreUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getPreviewFullEnvironmentRestoreMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewFullEnvironmentRestore>>, TError,{data: BodyType<FullBackupRestoreInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewFullEnvironmentRestore>>, TError,{data: BodyType<FullBackupRestoreInput>}, TContext> => {
+
+const mutationKey = ['previewFullEnvironmentRestore'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewFullEnvironmentRestore>>, {data: BodyType<FullBackupRestoreInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewFullEnvironmentRestore(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewFullEnvironmentRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof previewFullEnvironmentRestore>>>
+    export type PreviewFullEnvironmentRestoreMutationBody = BodyType<FullBackupRestoreInput>
+    export type PreviewFullEnvironmentRestoreMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Decrypt and preview a full environment backup
+ */
+export const usePreviewFullEnvironmentRestore = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewFullEnvironmentRestore>>, TError,{data: BodyType<FullBackupRestoreInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewFullEnvironmentRestore>>,
+        TError,
+        {data: BodyType<FullBackupRestoreInput>},
+        TContext
+      > => {
+      return useMutation(getPreviewFullEnvironmentRestoreMutationOptions(options));
+    }
+
+export const getRestoreFullEnvironmentBackupUrl = () => {
+
+
+
+
+  return `/api/admin/full-backup/restore`
+}
+
+/**
+ * @summary Replace an environment with an encrypted full backup
+ */
+export const restoreFullEnvironmentBackup = async (fullBackupRestoreInput: FullBackupRestoreInput, options?: RequestInit): Promise<FullBackupRestoreResult> => {
+    const formData = new FormData();
+formData.append(`file`, fullBackupRestoreInput.file);
+formData.append(`passphrase`, fullBackupRestoreInput.passphrase);
+if(fullBackupRestoreInput.mode !== undefined) {
+ formData.append(`mode`, fullBackupRestoreInput.mode);
+ }
+if(fullBackupRestoreInput.confirmation !== undefined) {
+ formData.append(`confirmation`, fullBackupRestoreInput.confirmation);
+ }
+
+  return customFetch<FullBackupRestoreResult>(getRestoreFullEnvironmentBackupUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getRestoreFullEnvironmentBackupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreFullEnvironmentBackup>>, TError,{data: BodyType<FullBackupRestoreInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreFullEnvironmentBackup>>, TError,{data: BodyType<FullBackupRestoreInput>}, TContext> => {
+
+const mutationKey = ['restoreFullEnvironmentBackup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreFullEnvironmentBackup>>, {data: BodyType<FullBackupRestoreInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  restoreFullEnvironmentBackup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreFullEnvironmentBackupMutationResult = NonNullable<Awaited<ReturnType<typeof restoreFullEnvironmentBackup>>>
+    export type RestoreFullEnvironmentBackupMutationBody = BodyType<FullBackupRestoreInput>
+    export type RestoreFullEnvironmentBackupMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Replace an environment with an encrypted full backup
+ */
+export const useRestoreFullEnvironmentBackup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreFullEnvironmentBackup>>, TError,{data: BodyType<FullBackupRestoreInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreFullEnvironmentBackup>>,
+        TError,
+        {data: BodyType<FullBackupRestoreInput>},
+        TContext
+      > => {
+      return useMutation(getRestoreFullEnvironmentBackupMutationOptions(options));
     }
 
