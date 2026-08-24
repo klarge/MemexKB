@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock, PencilLine,
+  AlertCircle, Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock, PencilLine,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,23 @@ interface LockStatus {
   lockedBy: { userId: number; userName: string; lockedAt: string } | null;
 }
 
+// Keep browser-rendered wikilinks aligned with the API's article slug policy.
+function knowledgeSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 100);
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
 export default function ArticleView({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
   const { slug, userId: userIdParam, logSlug } = params || {};
   const [, setLocation] = useLocation();
@@ -47,7 +64,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   const logOwnerId = Number(userIdParam);
   const isLogRoute = Number.isSafeInteger(logOwnerId) && logOwnerId > 0 && Boolean(logSlug);
 
-  const { data: article, isLoading, isError } = useGetArticle(actualSlug, {
+  const { data: article, isLoading, isError, error: articleError, refetch: refetchArticle } = useGetArticle(actualSlug, {
     query: {
       enabled: !!actualSlug && !isLogRoute,
       queryKey: getGetArticleQueryKey(actualSlug),
@@ -58,12 +75,17 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     data: logArticle,
     isLoading: isLoadingLog,
     isError: isLogError,
+    error: logError,
+    refetch: refetchLogArticle,
   } = useGetLogEntry(logOwnerId, logSlug ?? "", {
     query: { enabled: isLogRoute, retry: false, queryKey: getGetLogEntryQueryKey(logOwnerId, logSlug ?? "") },
   });
   const displayedArticle = isLogRoute ? logArticle : article;
   const displayedIsLoading = isLogRoute ? isLoadingLog : isLoading;
   const displayedIsError = isLogRoute ? isLogError : isError;
+  const displayedError = isLogRoute ? logError : articleError;
+  const displayedRefetch = isLogRoute ? refetchLogArticle : refetchArticle;
+  const articleIsMissing = displayedIsError && errorStatus(displayedError) === 404;
   const apiSlug = displayedArticle?.slug ?? actualSlug;
   const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/knowledge/${actualSlug}`;
 
@@ -166,7 +188,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
         const label = (divider === -1 ? rawLink : rawLink.slice(divider + 1)).trim();
         fragment.append(document.createTextNode(text.slice(lastIndex, match.index)));
 
-        const linkSlug = target.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const linkSlug = knowledgeSlug(target);
         const link = document.createElement("a");
         link.href = `/knowledge/${linkSlug}`;
         link.className = "text-primary hover:underline font-medium";
@@ -237,7 +259,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     );
   }
 
-  if (displayedIsError || !displayedArticle) {
+  if (articleIsMissing) {
     if (isHome) {
       setLocation("/");
       return null;
@@ -270,6 +292,28 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               Create this article
             </Button>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (displayedIsError || !displayedArticle) {
+    const resourceName = isLogRoute ? "log entry" : "article";
+    return (
+      <div className="mx-auto max-w-lg py-20 text-center">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-6 py-10">
+          <AlertCircle className="mx-auto mb-3 h-9 w-9 text-destructive" />
+          <h2 className="text-2xl font-bold">Could not load this {resourceName}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {displayedError instanceof Error
+              ? displayedError.message
+              : "Please try again in a moment."}
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Button onClick={() => displayedRefetch()}>
+              Try again
+            </Button>
+          </div>
         </div>
       </div>
     );
