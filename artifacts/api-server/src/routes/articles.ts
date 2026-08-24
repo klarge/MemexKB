@@ -209,6 +209,29 @@ function logUrlFields(article: { isLogEntry: boolean; logSlug: string | null; cr
   };
 }
 
+let logSlugColumnSupport: Promise<boolean> | undefined;
+
+/**
+ * Older deployments can briefly run application code that expects log_slug before
+ * their database migration has completed. Legacy log slugs were global, but are
+ * still safe as a public segment when paired with their verified owner ID.
+ */
+function hasLogSlugColumn(): Promise<boolean> {
+  logSlugColumnSupport ??= (async () => {
+    const result = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'articles'
+          AND column_name = 'log_slug'
+      ) AS "exists"
+    `);
+    return (result.rows[0] as { exists?: boolean } | undefined)?.exists === true;
+  })();
+  return logSlugColumnSupport;
+}
+
 router.get("/articles", optionalAuth, async (req, res) => {
   const { search, sort = "title", order = "asc", limit = 50, offset = 0, tagId } = req.query;
   const userId = req.session.userId;
@@ -374,6 +397,13 @@ router.post("/articles", requireAuth, requireRole("admin", "editor"), async (req
     return;
   }
 
+  if (isLogEntry && !(await hasLogSlugColumn())) {
+    res.status(503).json({
+      error: "Log storage is updating. Existing logs are available, but new entries can be added after the database migration completes.",
+    });
+    return;
+  }
+
   if (isLogEntry && groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
     res.status(400).json({ error: "Personal log entries cannot be shared with groups" });
     return;
@@ -491,16 +521,21 @@ router.get("/logs/:userId/:logSlug", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Log entry not found" });
     return;
   }
+  const supportsLogSlug = await hasLogSlugColumn();
   const [article] = await db
     .select({
-      id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug,
+      id: articlesTable.id, slug: articlesTable.slug,
       title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry,
       createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt,
       updatedByName: usersTable.name,
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .where(and(eq(articlesTable.isLogEntry, true), eq(articlesTable.createdById, userId), eq(articlesTable.logSlug, logSlug)))
+    .where(and(
+      eq(articlesTable.isLogEntry, true),
+      eq(articlesTable.createdById, userId),
+      supportsLogSlug ? eq(articlesTable.logSlug, logSlug) : eq(articlesTable.slug, logSlug),
+    ))
     .limit(1);
   if (!article) {
     res.status(404).json({ error: "Log entry not found" });
@@ -510,12 +545,66 @@ router.get("/logs/:userId/:logSlug", requireAuth, async (req, res) => {
   res.json({
     id: article.id, slug: article.slug, title: article.title, content: article.content,
     updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null,
-    isRestricted: false, canAccess: true, groups: [], tags, backlinks: [], ...logUrlFields(article),
+    isRestricted: false, canAccess: true, groups: [], tags, backlinks: [],
+    logSlug, logOwnerId: article.createdById,
   });
 });
 
 router.get("/articles/:slug", optionalAuth, async (req, res) => {
   const slug = String(req.params.slug);
+  const supportsLogSlug = await hasLogSlugColumn();
+  if (!supportsLogSlug) {
+    const [legacyArticle] = await db
+      .select({
+        id: articlesTable.id,
+        slug: articlesTable.slug,
+        title: articlesTable.title,
+        content: articlesTable.content,
+        isLogEntry: articlesTable.isLogEntry,
+        createdById: articlesTable.createdById,
+        updatedAt: articlesTable.updatedAt,
+        createdAt: articlesTable.createdAt,
+        updatedByName: usersTable.name,
+      })
+      .from(articlesTable)
+      .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
+      .where(eq(articlesTable.slug, slug))
+      .limit(1);
+    if (!legacyArticle) {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+
+    const userId = req.session.userId;
+    const userRole = req.session.userRole;
+    if (!canAccessPrivateLog(legacyArticle, userId, userRole)) {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+    const userGroupIds = await getUserGroupIds(userId);
+    const groups = await getArticleGroups(legacyArticle.id);
+    const articleGroupIds = groups.map((g) => g.id);
+    const isRestricted = articleGroupIds.length > 0;
+    const canAccess = userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false;
+    const tags = await getArticleTags(legacyArticle.id);
+    res.json({
+      id: legacyArticle.id,
+      slug: legacyArticle.slug,
+      title: legacyArticle.title,
+      content: canAccess ? legacyArticle.content : "",
+      updatedAt: legacyArticle.updatedAt,
+      createdAt: legacyArticle.createdAt,
+      updatedByName: legacyArticle.updatedByName ?? null,
+      isRestricted,
+      canAccess,
+      groups: canAccess ? groups : [],
+      tags,
+      backlinks: [],
+      logSlug: legacyArticle.isLogEntry ? legacyArticle.slug : null,
+      logOwnerId: legacyArticle.isLogEntry ? legacyArticle.createdById : null,
+    });
+    return;
+  }
   const [article] = await db
     .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
     .from(articlesTable)
@@ -575,6 +664,20 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nextSlug) || nextSlug.length > 100) {
     res.status(400).json({ error: "URL must use lowercase letters, numbers, and single hyphens only" });
     return;
+  }
+
+  if (!(await hasLogSlugColumn())) {
+    const [legacyArticle] = await db
+      .select({ isLogEntry: articlesTable.isLogEntry })
+      .from(articlesTable)
+      .where(eq(articlesTable.slug, currentSlug))
+      .limit(1);
+    if (legacyArticle?.isLogEntry) {
+      res.status(503).json({
+        error: "Log storage is updating. Log URLs can be managed after the database migration completes.",
+      });
+      return;
+    }
   }
 
   try {
@@ -697,6 +800,19 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
 router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const slug = String(req.params.slug);
   const { title, content, groupIds, tagIds } = req.body;
+  if (!(await hasLogSlugColumn())) {
+    const [legacyArticle] = await db
+      .select({ isLogEntry: articlesTable.isLogEntry })
+      .from(articlesTable)
+      .where(eq(articlesTable.slug, slug))
+      .limit(1);
+    if (legacyArticle?.isLogEntry) {
+      res.status(503).json({
+        error: "Log storage is updating. Editing log entries will be available after the database migration completes.",
+      });
+      return;
+    }
+  }
   const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Article not found" });
@@ -844,31 +960,38 @@ router.get("/log", requireAuth, async (req, res) => {
     eq(articlesTable.createdById, userId),
   );
 
+  const supportsLogSlug = await hasLogSlugColumn();
+
   // Fetch limit+1 so we can detect hasMore without a separate count query.
   // Ordering by (created_at DESC, id DESC) is deterministic even when timestamps collide.
-  const fetched = await db
-    .select({
-      id: articlesTable.id,
-      slug: articlesTable.slug,
-      logSlug: articlesTable.logSlug,
-      createdById: articlesTable.createdById,
-      title: articlesTable.title,
-      createdAt: articlesTable.createdAt,
-      updatedAt: articlesTable.updatedAt,
-      updatedByName: usersTable.name,
-    })
+  const logListFields = {
+    id: articlesTable.id,
+    slug: articlesTable.slug,
+    createdById: articlesTable.createdById,
+    title: articlesTable.title,
+    createdAt: articlesTable.createdAt,
+    updatedAt: articlesTable.updatedAt,
+    updatedByName: usersTable.name,
+  };
+  const logListQuery = db
+    .select(supportsLogSlug ? { ...logListFields, logSlug: articlesTable.logSlug } : logListFields)
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(logWhere)
     .orderBy(desc(articlesTable.createdAt), desc(articlesTable.id))
     .limit(PAGE_SIZE + 1)
     .offset(offset);
+  const fetched = await logListQuery;
 
   const hasMore = fetched.length > PAGE_SIZE;
   const result = (hasMore ? fetched.slice(0, PAGE_SIZE) : fetched).map((e) => ({
     id: e.id,
     slug: e.slug,
-    logSlug: e.logSlug,
+    // Before 0013, slug was the legacy public URL segment. It is paired with
+    // the owner ID in every route and never used as an unscoped lookup.
+    logSlug: supportsLogSlug
+      ? ((e as typeof e & { logSlug?: string | null }).logSlug ?? e.slug)
+      : e.slug,
     logOwnerId: e.createdById,
     title: e.title,
     createdAt: e.createdAt,
@@ -876,7 +999,7 @@ router.get("/log", requireAuth, async (req, res) => {
     updatedByName: e.updatedByName ?? null,
   }));
 
-  res.json({ entries: result, hasMore });
+  res.json({ entries: result, hasMore, schemaOutOfDate: !supportsLogSlug });
 });
 
 // ─── Unified Search ───────────────────────────────────────────────────────────
@@ -1198,6 +1321,19 @@ router.delete("/articles/:slug/lock", requireAuth, async (req, res) => {
 
 router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const slug = String(req.params.slug);
+  if (!(await hasLogSlugColumn())) {
+    const [legacyArticle] = await db
+      .select({ isLogEntry: articlesTable.isLogEntry })
+      .from(articlesTable)
+      .where(eq(articlesTable.slug, slug))
+      .limit(1);
+    if (legacyArticle?.isLogEntry) {
+      res.status(503).json({
+        error: "Log storage is updating. Deleting log entries will be available after the database migration completes.",
+      });
+      return;
+    }
+  }
   const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Article not found" });
@@ -1222,6 +1358,7 @@ router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), as
 
 router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
   const slug = String(req.params.slug);
+  const supportsLogSlug = await hasLogSlugColumn();
   const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
@@ -1240,8 +1377,18 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
     return;
   }
   const fromIds = [...new Set(backlinkRows.map((b) => b.fromArticleId))];
+  const backlinkFields = {
+    id: articlesTable.id,
+    slug: articlesTable.slug,
+    isLogEntry: articlesTable.isLogEntry,
+    createdById: articlesTable.createdById,
+    title: articlesTable.title,
+    updatedAt: articlesTable.updatedAt,
+    createdAt: articlesTable.createdAt,
+    updatedByName: usersTable.name,
+  };
   const fromArticles = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
+    .select(supportsLogSlug ? { ...backlinkFields, logSlug: articlesTable.logSlug } : backlinkFields)
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(inArray(articlesTable.id, fromIds));
@@ -1255,7 +1402,23 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
     const bGroupIds = bGroups.map((g) => g.id);
     const bIsRestricted = bGroupIds.length > 0;
     const bCanAccess = canAccessArticle(bGroupIds, userGroupIds, userRole);
-    return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bCanAccess ? bGroups : [], ...logUrlFields(a) };
+    return {
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      updatedAt: a.updatedAt,
+      createdAt: a.createdAt,
+      updatedByName: a.updatedByName ?? null,
+      isRestricted: bIsRestricted,
+      canAccess: bCanAccess,
+      groups: bCanAccess ? bGroups : [],
+      logSlug: a.isLogEntry
+        ? (supportsLogSlug
+          ? ((a as typeof a & { logSlug?: string | null }).logSlug ?? a.slug)
+          : a.slug)
+        : null,
+      logOwnerId: a.isLogEntry ? a.createdById : null,
+    };
   }));
   res.json(backlinkResult);
 });
@@ -1263,6 +1426,19 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
 router.put("/articles/:slug/groups", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const { groupIds } = req.body;
   const slug = String(req.params.slug);
+  if (!(await hasLogSlugColumn())) {
+    const [legacyArticle] = await db
+      .select({ isLogEntry: articlesTable.isLogEntry })
+      .from(articlesTable)
+      .where(eq(articlesTable.slug, slug))
+      .limit(1);
+    if (legacyArticle?.isLogEntry) {
+      res.status(503).json({
+        error: "Log storage is updating. Group settings for log entries will be available after the database migration completes.",
+      });
+      return;
+    }
+  }
   const [article] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
@@ -1301,7 +1477,18 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
-  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  const [article] = await db
+    .select({
+      id: articlesTable.id,
+      slug: articlesTable.slug,
+      title: articlesTable.title,
+      content: articlesTable.content,
+      isLogEntry: articlesTable.isLogEntry,
+      createdById: articlesTable.createdById,
+    })
+    .from(articlesTable)
+    .where(eq(articlesTable.slug, slug))
+    .limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -1326,7 +1513,18 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
-  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  const [article] = await db
+    .select({
+      id: articlesTable.id,
+      slug: articlesTable.slug,
+      title: articlesTable.title,
+      content: articlesTable.content,
+      isLogEntry: articlesTable.isLogEntry,
+      createdById: articlesTable.createdById,
+    })
+    .from(articlesTable)
+    .where(eq(articlesTable.slug, slug))
+    .limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -1582,6 +1780,20 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, requireR
   const slug = String(req.params.slug);
   const versionId = parseInt(String(req.params.versionId), 10);
   if (isNaN(versionId)) { res.status(400).json({ error: "Invalid version id" }); return; }
+
+  if (!(await hasLogSlugColumn())) {
+    const [legacyArticle] = await db
+      .select({ isLogEntry: articlesTable.isLogEntry })
+      .from(articlesTable)
+      .where(eq(articlesTable.slug, slug))
+      .limit(1);
+    if (legacyArticle?.isLogEntry) {
+      res.status(503).json({
+        error: "Log storage is updating. Restoring log history will be available after the database migration completes.",
+      });
+      return;
+    }
+  }
 
   const [article] = await db
     .select()
