@@ -8,6 +8,15 @@
 
 export * from './adminImportInput';
 export * from './adminImportResponse';
+export * from './adminRestoreCounts';
+export * from './adminRestoreInput';
+export * from './adminRestoreOwner';
+export * from './adminRestorePreview';
+export * from './adminRestorePreviewInput';
+export * from './adminRestorePreviewKind';
+export * from './adminRestoreResult';
+export * from './adminRestoreResultKind';
+export * from './adminRestoreUser';
 export * from './apiToken';
 export * from './apiTokenCreated';
 export * from './apiTokenInput';

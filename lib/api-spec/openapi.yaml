@@ -1082,8 +1082,151 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminImportResponse"
 
+  /admin/restore/preview:
+    post:
+      operationId: previewAdminRestore
+      tags: [admin]
+      summary: Validate and preview a Logs, Tasks, or Projects JSON backup (admin only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AdminRestorePreviewInput"
+      responses:
+        "200":
+          description: Backup preview and available local account mappings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRestorePreview"
+        "400":
+          description: Invalid backup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/restore:
+    post:
+      operationId: restoreAdminBackup
+      tags: [admin]
+      summary: Restore a validated Logs, Tasks, or Projects JSON backup (admin only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AdminRestoreInput"
+      responses:
+        "200":
+          description: Restore result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRestoreResult"
+        "400":
+          description: Invalid backup or account mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
+    # ─── Admin restore ──────────────────────────────────────────────────────────
+    AdminRestorePreviewInput:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+
+    AdminRestoreInput:
+      type: object
+      required: [file, ownerMappings]
+      properties:
+        file:
+          type: string
+          format: binary
+        ownerMappings:
+          type: string
+          description: JSON object mapping each exported owner key to a local user ID.
+
+    AdminRestoreOwner:
+      type: object
+      required: [key, label, suggestedUserId]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        suggestedUserId:
+          type: ["integer", "null"]
+
+    AdminRestoreUser:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+
+    AdminRestorePreview:
+      type: object
+      required: [kind, total, owners, users, warnings]
+      properties:
+        kind:
+          type: string
+          enum: [logs, tasks, projects]
+        total:
+          type: integer
+        owners:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminRestoreOwner"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminRestoreUser"
+        warnings:
+          type: array
+          items:
+            type: string
+
+    AdminRestoreCounts:
+      type: object
+      required: [logs, taskLists, tasks, projects, boards, columns, cards]
+      properties:
+        logs: { type: integer }
+        taskLists: { type: integer }
+        tasks: { type: integer }
+        projects: { type: integer }
+        boards: { type: integer }
+        columns: { type: integer }
+        cards: { type: integer }
+
+    AdminRestoreResult:
+      type: object
+      required: [kind, imported, skipped, warnings]
+      properties:
+        kind:
+          type: string
+          enum: [logs, tasks, projects]
+        imported:
+          $ref: "#/components/schemas/AdminRestoreCounts"
+        skipped:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+
     # ─── Tags ──────────────────────────────────────────────────────────────────
     Tag:
       type: object

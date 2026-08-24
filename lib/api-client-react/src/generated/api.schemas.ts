@@ -5,6 +5,72 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface AdminRestorePreviewInput {
+  file: Blob;
+}
+
+export interface AdminRestoreInput {
+  file: Blob;
+  /** JSON object mapping each exported owner key to a local user ID. */
+  ownerMappings: string;
+}
+
+export interface AdminRestoreOwner {
+  key: string;
+  label: string;
+  /** @nullable */
+  suggestedUserId: number | null;
+}
+
+export interface AdminRestoreUser {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export type AdminRestorePreviewKind = typeof AdminRestorePreviewKind[keyof typeof AdminRestorePreviewKind];
+
+
+export const AdminRestorePreviewKind = {
+  logs: 'logs',
+  tasks: 'tasks',
+  projects: 'projects',
+} as const;
+
+export interface AdminRestorePreview {
+  kind: AdminRestorePreviewKind;
+  total: number;
+  owners: AdminRestoreOwner[];
+  users: AdminRestoreUser[];
+  warnings: string[];
+}
+
+export interface AdminRestoreCounts {
+  logs: number;
+  taskLists: number;
+  tasks: number;
+  projects: number;
+  boards: number;
+  columns: number;
+  cards: number;
+}
+
+export type AdminRestoreResultKind = typeof AdminRestoreResultKind[keyof typeof AdminRestoreResultKind];
+
+
+export const AdminRestoreResultKind = {
+  logs: 'logs',
+  tasks: 'tasks',
+  projects: 'projects',
+} as const;
+
+export interface AdminRestoreResult {
+  kind: AdminRestoreResultKind;
+  imported: AdminRestoreCounts;
+  skipped: number;
+  warnings: string[];
+}
+
 export interface Tag {
   id: number;
   name: string;

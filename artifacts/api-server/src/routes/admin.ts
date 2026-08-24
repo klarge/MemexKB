@@ -15,9 +15,11 @@ import {
   boardColumnsTable,
   boardCardsTable,
   boardCardMembersTable,
+  projectGroupsTable,
 } from "@workspace/db";
-import { eq, inArray, asc, desc, ne, count } from "drizzle-orm";
+import { eq, and, inArray, asc, desc, ne, count } from "drizzle-orm";
 import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 import multer from "multer";
 const _require = createRequire(import.meta.url);
 const { ZipArchive } = _require("archiver") as typeof import("archiver");
@@ -39,6 +41,7 @@ const EXPORT_ARTICLE_LIMIT   = 5000;
 const MAX_ZIP_ENTRIES        = EXPORT_ARTICLE_LIMIT * 4 + 50; // 20,050
 const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024; // 200 MB aggregate (all entries)
 const MAX_ENTRY_BYTES        = 10 * 1024 * 1024;   // 10 MB per individual entry
+const MAX_RESTORE_RECORDS    = 10_000;
 
 type ZipEntry = { stream: () => NodeJS.ReadableStream; uncompressedSize?: number };
 
@@ -731,17 +734,383 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
   res.json({ imported, skipped, errors });
 });
 
+// ─── Restore Logs, Tasks, and Projects ────────────────────────────────────────
+
+type RestoreKind = "logs" | "tasks" | "projects";
+type RestoreOwner = { key: string; label: string };
+type RestoreLog = {
+  title: string; content: string; slug?: string; logSlug?: string;
+  createdAt?: Date; updatedAt?: Date; owner: RestoreOwner | null;
+};
+type RestoreTask = {
+  title: string; position: number; completedAt: Date | null; createdAt?: Date; updatedAt?: Date;
+};
+type RestoreTaskList = { name: string; owner: RestoreOwner | null; createdAt?: Date; tasks: RestoreTask[] };
+type RestoreCard = {
+  title: string; description: string; dueDate: Date | null; position: number; createdAt?: Date; updatedAt?: Date;
+  members: RestoreOwner[];
+};
+type RestoreColumn = { name: string; position: number; createdAt?: Date; cards: RestoreCard[] };
+type RestoreBoard = { name: string; position: number; archivedAt: Date | null; createdAt?: Date; columns: RestoreColumn[] };
+type RestoreProject = {
+  name: string; description: string; owner: RestoreOwner | null; archivedAt: Date | null; createdAt?: Date; updatedAt?: Date;
+  groupNames: string[]; boards: RestoreBoard[];
+};
+type RestoreBackup =
+  | { kind: "logs"; logs: RestoreLog[]; owners: RestoreOwner[]; warnings: string[] }
+  | { kind: "tasks"; lists: RestoreTaskList[]; owners: RestoreOwner[]; warnings: string[] }
+  | { kind: "projects"; projects: RestoreProject[]; owners: RestoreOwner[]; warnings: string[] };
+
+function restoreRecord(value: unknown, context: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${context} must be an object`);
+  return value as Record<string, unknown>;
+}
+
+function restoreString(value: unknown, context: string, required = true): string | undefined {
+  if (value === undefined || value === null) {
+    if (required) throw new Error(`${context} is required`);
+    return undefined;
+  }
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${context} must be a non-empty string`);
+  return value.trim();
+}
+
+function restoreDate(value: unknown, context: string, nullable = false): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null && nullable) return null;
+  if (typeof value !== "string" && typeof value !== "number") throw new Error(`${context} must be a date`);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`${context} is not a valid date`);
+  return date;
+}
+
+function restorePosition(value: unknown, fallback: number, context: string): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${context} must be a non-negative integer`);
+  }
+  return value;
+}
+
+function restoreOwner(value: unknown, context: string): RestoreOwner | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") {
+    const label = restoreString(value, context)!;
+    return { key: `name:${label.toLocaleLowerCase()}`, label };
+  }
+  const record = restoreRecord(value, context);
+  const email = restoreString(record.email, `${context}.email`, false)?.toLocaleLowerCase();
+  const name = restoreString(record.name, `${context}.name`, false);
+  const sourceId = record.id;
+  if (!email && !name && !(typeof sourceId === "number" && Number.isSafeInteger(sourceId))) {
+    throw new Error(`${context} must include a name, email, or ID`);
+  }
+  const label = name ?? email ?? `Source user ${sourceId}`;
+  return {
+    // Source IDs are not safe cross-instance identities; email is stable when it is available.
+    key: email ? `email:${email}` : typeof sourceId === "number" ? `source:${sourceId}:${label.toLocaleLowerCase()}` : `name:${label.toLocaleLowerCase()}`,
+    label,
+  };
+}
+
+function uniqueRestoreOwners(owners: Array<RestoreOwner | null>): RestoreOwner[] {
+  return [...new Map(owners.filter((owner): owner is RestoreOwner => owner !== null).map((owner) => [owner.key, owner])).values()];
+}
+
+function restoreArray(value: unknown, context: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${context} must be an array`);
+  if (value.length > MAX_RESTORE_RECORDS) throw new Error(`${context} exceeds the ${MAX_RESTORE_RECORDS}-record limit`);
+  return value;
+}
+
+function parseRestoreBackup(value: unknown): RestoreBackup {
+  const payload = restoreRecord(value, "Backup");
+  const hasLogs = Array.isArray(payload.entries);
+  const hasTasks = Array.isArray(payload.lists);
+  const hasProjects = Array.isArray(payload.projects);
+  if (Number(hasLogs) + Number(hasTasks) + Number(hasProjects) !== 1) {
+    throw new Error("Backup must contain exactly one of entries, lists, or projects");
+  }
+
+  if (hasLogs) {
+    const logs = restoreArray(payload.entries, "entries").map((raw, index): RestoreLog => {
+      const entry = restoreRecord(raw, `entries[${index}]`);
+      const owner = restoreOwner(entry.ownerRef ?? entry.owner ?? entry.createdBy ?? entry.createdByName, `entries[${index}].owner`);
+      return {
+        title: restoreString(entry.title, `entries[${index}].title`)!,
+        content: restoreString(entry.content, `entries[${index}].content`, false) ?? "",
+        slug: restoreString(entry.slug, `entries[${index}].slug`, false),
+        logSlug: restoreString(entry.logSlug, `entries[${index}].logSlug`, false),
+        createdAt: restoreDate(entry.createdAt, `entries[${index}].createdAt`) as Date | undefined,
+        updatedAt: restoreDate(entry.updatedAt, `entries[${index}].updatedAt`) as Date | undefined,
+        owner,
+      };
+    });
+    const owners = uniqueRestoreOwners(logs.map((log) => log.owner));
+    const warnings = logs.some((log) => !log.owner)
+      ? ["Logs without an owner cannot be restored because private logs must always belong to an account."]
+      : [];
+    return { kind: "logs", logs, owners, warnings };
+  }
+
+  if (hasTasks) {
+    const lists = restoreArray(payload.lists, "lists").map((raw, listIndex): RestoreTaskList => {
+      const list = restoreRecord(raw, `lists[${listIndex}]`);
+      const tasks = restoreArray(list.tasks ?? [], `lists[${listIndex}].tasks`).map((taskRaw, taskIndex): RestoreTask => {
+        const task = restoreRecord(taskRaw, `lists[${listIndex}].tasks[${taskIndex}]`);
+        const completedAt = restoreDate(task.completedAt, `lists[${listIndex}].tasks[${taskIndex}].completedAt`, true);
+        if (completedAt === undefined && task.completed === true) {
+          throw new Error(`lists[${listIndex}].tasks[${taskIndex}] is marked complete but has no completedAt date`);
+        }
+        return {
+          title: restoreString(task.title, `lists[${listIndex}].tasks[${taskIndex}].title`)!,
+          position: restorePosition(task.position, taskIndex, `lists[${listIndex}].tasks[${taskIndex}].position`),
+          completedAt: (completedAt ?? null) as Date | null,
+          createdAt: restoreDate(task.createdAt, `lists[${listIndex}].tasks[${taskIndex}].createdAt`) as Date | undefined,
+          updatedAt: restoreDate(task.updatedAt, `lists[${listIndex}].tasks[${taskIndex}].updatedAt`) as Date | undefined,
+        };
+      });
+      return {
+        name: restoreString(list.name, `lists[${listIndex}].name`)!,
+        owner: restoreOwner(list.ownerRef ?? list.owner, `lists[${listIndex}].owner`),
+        createdAt: restoreDate(list.createdAt, `lists[${listIndex}].createdAt`) as Date | undefined,
+        tasks,
+      };
+    });
+    const owners = uniqueRestoreOwners(lists.map((list) => list.owner));
+    const warnings = lists.some((list) => !list.owner)
+      ? ["Task lists without an owner cannot be restored because every task list belongs to an account."]
+      : [];
+    return { kind: "tasks", lists, owners, warnings };
+  }
+
+  const projects = restoreArray(payload.projects, "projects").map((raw, projectIndex): RestoreProject => {
+    const project = restoreRecord(raw, `projects[${projectIndex}]`);
+    const boards = restoreArray(project.boards ?? [], `projects[${projectIndex}].boards`).map((boardRaw, boardIndex): RestoreBoard => {
+      const board = restoreRecord(boardRaw, `projects[${projectIndex}].boards[${boardIndex}]`);
+      const columns = restoreArray(board.columns ?? [], `projects[${projectIndex}].boards[${boardIndex}].columns`).map((columnRaw, columnIndex): RestoreColumn => {
+        const column = restoreRecord(columnRaw, `projects[${projectIndex}].boards[${boardIndex}].columns[${columnIndex}]`);
+        const cards = restoreArray(column.cards ?? [], `projects[${projectIndex}].boards[${boardIndex}].columns[${columnIndex}].cards`).map((cardRaw, cardIndex): RestoreCard => {
+          const card = restoreRecord(cardRaw, `projects[${projectIndex}].boards[${boardIndex}].columns[${columnIndex}].cards[${cardIndex}]`);
+          const memberValues = card.assigneeRefs ?? card.assignedTo ?? [];
+          const members = restoreArray(memberValues, `projects[${projectIndex}].boards[${boardIndex}].columns[${columnIndex}].cards[${cardIndex}].assignedTo`)
+            .map((member, memberIndex) => restoreOwner(member, `card assignee ${memberIndex}`))
+            .filter((member): member is RestoreOwner => member !== null);
+          return {
+            title: restoreString(card.title, `projects[${projectIndex}].boards[${boardIndex}].columns[${columnIndex}].cards[${cardIndex}].title`)!,
+            description: restoreString(card.description, "card.description", false) ?? "",
+            dueDate: (restoreDate(card.dueDate, "card.dueDate", true) ?? null) as Date | null,
+            position: restorePosition(card.position, cardIndex, "card.position"),
+            createdAt: restoreDate(card.createdAt, "card.createdAt") as Date | undefined,
+            updatedAt: restoreDate(card.updatedAt, "card.updatedAt") as Date | undefined,
+            members,
+          };
+        });
+        return {
+          name: restoreString(column.name, "column.name")!,
+          position: restorePosition(column.position, columnIndex, "column.position"),
+          createdAt: restoreDate(column.createdAt, "column.createdAt") as Date | undefined,
+          cards,
+        };
+      });
+      return {
+        name: restoreString(board.name, "board.name")!,
+        position: restorePosition(board.position, boardIndex, "board.position"),
+        archivedAt: (restoreDate(board.archivedAt, "board.archivedAt", true) ?? null) as Date | null,
+        createdAt: restoreDate(board.createdAt, "board.createdAt") as Date | undefined,
+        columns,
+      };
+    });
+    const groups = Array.isArray(project.projectGroups) ? project.projectGroups : [];
+    const groupNames = groups.map((group, index) => {
+      if (typeof group === "string") return restoreString(group, `projectGroups[${index}]`)!;
+      return restoreString(restoreRecord(group, `projectGroups[${index}]`).name, `projectGroups[${index}].name`)!;
+    });
+    return {
+      name: restoreString(project.name, `projects[${projectIndex}].name`)!,
+      description: restoreString(project.description, `projects[${projectIndex}].description`, false) ?? "",
+      owner: restoreOwner(project.createdByRef ?? project.createdBy, `projects[${projectIndex}].createdBy`),
+      archivedAt: (restoreDate(project.archivedAt, `projects[${projectIndex}].archivedAt`, true) ?? null) as Date | null,
+      createdAt: restoreDate(project.createdAt, `projects[${projectIndex}].createdAt`) as Date | undefined,
+      updatedAt: restoreDate(project.updatedAt, `projects[${projectIndex}].updatedAt`) as Date | undefined,
+      groupNames,
+      boards,
+    };
+  });
+  const owners = uniqueRestoreOwners(projects.flatMap((project) => [
+    project.owner,
+    ...project.boards.flatMap((board) => board.columns.flatMap((column) => column.cards.flatMap((card) => card.members))),
+  ]));
+  return { kind: "projects", projects, owners, warnings: [] };
+}
+
+function parseRestoreFile(file: Express.Multer.File | undefined): RestoreBackup {
+  if (!file) throw new Error("Choose a JSON backup file");
+  if (file.buffer.length === 0) throw new Error("The backup file is empty");
+  try {
+    return parseRestoreBackup(JSON.parse(file.buffer.toString("utf-8")) as unknown);
+  } catch (error) {
+    throw new Error(`Invalid backup: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+router.post("/admin/restore/preview", requireAuth, requireRole("admin"), upload.single("file"), async (req, res) => {
+  try {
+    const backup = parseRestoreFile(req.file);
+    const users = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable).orderBy(asc(usersTable.name));
+    const usersByEmail = new Map(users.map((user) => [user.email.toLocaleLowerCase(), user.id]));
+    const total = backup.kind === "logs" ? backup.logs.length : backup.kind === "tasks"
+      ? backup.lists.length + backup.lists.reduce((sum, list) => sum + list.tasks.length, 0)
+      : backup.projects.length;
+    res.json({
+      kind: backup.kind,
+      total,
+      owners: backup.owners.map((owner) => ({
+        ...owner,
+        suggestedUserId: owner.key.startsWith("email:") ? usersByEmail.get(owner.key.slice(6)) ?? null : null,
+      })),
+      warnings: backup.warnings,
+      users,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Invalid backup file" });
+  }
+});
+
+router.post("/admin/restore", requireAuth, requireRole("admin"), upload.single("file"), async (req, res) => {
+  try {
+    const backup = parseRestoreFile(req.file);
+    const suppliedMappings = JSON.parse(typeof req.body.ownerMappings === "string" ? req.body.ownerMappings : "{}") as Record<string, unknown>;
+    const allUsers = await db.select({ id: usersTable.id }).from(usersTable);
+    const validUserIds = new Set(allUsers.map((user) => user.id));
+    const ownerIds = new Map<string, number>();
+    for (const owner of backup.owners) {
+      const mappedId = suppliedMappings[owner.key];
+      if (typeof mappedId !== "number" || !Number.isSafeInteger(mappedId) || !validUserIds.has(mappedId)) {
+        throw new Error(`Choose a valid local account for ${owner.label}`);
+      }
+      ownerIds.set(owner.key, mappedId);
+    }
+    if (backup.warnings.length > 0) throw new Error(backup.warnings[0]);
+
+    const result = {
+      kind: backup.kind,
+      imported: { logs: 0, taskLists: 0, tasks: 0, projects: 0, boards: 0, columns: 0, cards: 0 },
+      skipped: 0,
+      warnings: [] as string[],
+    };
+    const mappedOwnerId = (owner: RestoreOwner | null): number | null => owner ? ownerIds.get(owner.key) ?? null : null;
+
+    await db.transaction(async (tx) => {
+      if (backup.kind === "logs") {
+        for (const entry of backup.logs) {
+          const ownerId = mappedOwnerId(entry.owner);
+          if (!ownerId) throw new Error(`Log "${entry.title}" has no owner mapping`);
+          const logSlug = slugify(entry.logSlug ?? entry.slug ?? entry.title);
+          if (!logSlug) throw new Error(`Log "${entry.title}" does not have a usable URL segment`);
+          const [existing] = await tx.select({ id: articlesTable.id }).from(articlesTable)
+            .where(and(eq(articlesTable.createdById, ownerId), eq(articlesTable.logSlug, logSlug))).limit(1);
+          if (existing) { result.skipped++; continue; }
+          await tx.insert(articlesTable).values({
+            slug: `private-log-import-${randomUUID()}`,
+            logSlug,
+            title: entry.title,
+            content: sanitizeArticleHtml(entry.content),
+            isLogEntry: true,
+            createdById: ownerId,
+            updatedById: ownerId,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+          });
+          result.imported.logs++;
+        }
+        return;
+      }
+
+      if (backup.kind === "tasks") {
+        for (const list of backup.lists) {
+          const ownerId = mappedOwnerId(list.owner);
+          if (!ownerId) throw new Error(`Task list "${list.name}" has no owner mapping`);
+          const [existing] = await tx.select({ id: taskListsTable.id }).from(taskListsTable)
+            .where(and(eq(taskListsTable.userId, ownerId), eq(taskListsTable.name, list.name))).limit(1);
+          if (existing) { result.skipped += 1 + list.tasks.length; continue; }
+          const [insertedList] = await tx.insert(taskListsTable).values({ userId: ownerId, name: list.name, createdAt: list.createdAt }).returning({ id: taskListsTable.id });
+          result.imported.taskLists++;
+          for (const task of list.tasks) {
+            await tx.insert(tasksTable).values({
+              listId: insertedList.id, title: task.title, position: task.position, completedAt: task.completedAt,
+              createdAt: task.createdAt, updatedAt: task.updatedAt,
+            });
+            result.imported.tasks++;
+          }
+        }
+        return;
+      }
+
+      const groups = await tx.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable);
+      const groupsByName = new Map(groups.map((group) => [group.name.toLocaleLowerCase(), group.id]));
+      for (const project of backup.projects) {
+        const [existing] = await tx.select({ id: projectsTable.id }).from(projectsTable)
+          .where(eq(projectsTable.name, project.name)).limit(1);
+        if (existing) { result.skipped++; continue; }
+        const projectOwnerId = mappedOwnerId(project.owner);
+        const [insertedProject] = await tx.insert(projectsTable).values({
+          name: project.name, description: project.description, createdById: projectOwnerId,
+          archivedAt: project.archivedAt, createdAt: project.createdAt, updatedAt: project.updatedAt,
+        }).returning({ id: projectsTable.id });
+        result.imported.projects++;
+        for (const groupName of project.groupNames) {
+          const groupId = groupsByName.get(groupName.toLocaleLowerCase());
+          if (groupId) await tx.insert(projectGroupsTable).values({ projectId: insertedProject.id, groupId }).onConflictDoNothing();
+          else result.warnings.push(`Project "${project.name}" was restored without missing group "${groupName}".`);
+        }
+        for (const board of project.boards) {
+          const [insertedBoard] = await tx.insert(boardsTable).values({
+            projectId: insertedProject.id, name: board.name, position: board.position, archivedAt: board.archivedAt, createdAt: board.createdAt,
+          }).returning({ id: boardsTable.id });
+          result.imported.boards++;
+          for (const column of board.columns) {
+            const [insertedColumn] = await tx.insert(boardColumnsTable).values({
+              boardId: insertedBoard.id, name: column.name, position: column.position, createdAt: column.createdAt,
+            }).returning({ id: boardColumnsTable.id });
+            result.imported.columns++;
+            for (const card of column.cards) {
+              const [insertedCard] = await tx.insert(boardCardsTable).values({
+                columnId: insertedColumn.id, title: card.title, description: card.description, dueDate: card.dueDate,
+                position: card.position, createdById: projectOwnerId, createdAt: card.createdAt, updatedAt: card.updatedAt,
+              }).returning({ id: boardCardsTable.id });
+              for (const member of card.members) {
+                const memberId = mappedOwnerId(member);
+                if (!memberId) throw new Error(`Card "${card.title}" has an unresolved assignee`);
+                await tx.insert(boardCardMembersTable).values({ cardId: insertedCard.id, userId: memberId }).onConflictDoNothing();
+              }
+              result.imported.cards++;
+            }
+          }
+        }
+      }
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Restore failed" });
+  }
+});
+
 // ─── Additional Exports ───────────────────────────────────────────────────────
 
 router.get("/admin/export/logs", requireAuth, requireRole("admin"), async (_req, res) => {
   const entries = await db
     .select({
+      id: articlesTable.id,
       slug: articlesTable.slug,
+      logSlug: articlesTable.logSlug,
       title: articlesTable.title,
       content: articlesTable.content,
       createdAt: articlesTable.createdAt,
       updatedAt: articlesTable.updatedAt,
+      createdById: articlesTable.createdById,
       createdByName: usersTable.name,
+      createdByEmail: usersTable.email,
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.createdById, usersTable.id))
@@ -751,15 +1120,25 @@ router.get("/admin/export/logs", requireAuth, requireRole("admin"), async (_req,
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", 'attachment; filename="logs-export.json"');
   res.json({
+    format: "memex-backup",
+    version: 1,
+    kind: "logs",
     exportedAt: new Date(),
     entryCount: entries.length,
     entries: entries.map((e) => ({
+      id: e.id,
       slug: e.slug,
+      logSlug: e.logSlug,
       title: e.title,
       content: e.content,
       createdAt: e.createdAt,
       updatedAt: e.updatedAt,
       createdByName: e.createdByName ?? null,
+      ownerRef: e.createdById === null ? null : {
+        id: e.createdById,
+        name: e.createdByName ?? null,
+        email: e.createdByEmail ?? null,
+      },
     })),
   });
 });
@@ -768,25 +1147,36 @@ router.get("/admin/export/tasks", requireAuth, requireRole("admin"), async (_req
   const [lists, tasks, users] = await Promise.all([
     db.select().from(taskListsTable).orderBy(asc(taskListsTable.createdAt)),
     db.select().from(tasksTable).orderBy(asc(tasksTable.listId), asc(tasksTable.position), asc(tasksTable.createdAt)),
-    db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable),
+    db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable),
   ]);
 
-  const userMap = new Map(users.map((u) => [u.id, u.name]));
+  const userMap = new Map(users.map((u) => [u.id, u]));
 
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", 'attachment; filename="tasks-export.json"');
   res.json({
+    format: "memex-backup",
+    version: 1,
+    kind: "tasks",
     exportedAt: new Date(),
     listCount: lists.length,
     taskCount: tasks.length,
     lists: lists.map((list) => ({
+      id: list.id,
       name: list.name,
-      owner: userMap.get(list.userId) ?? null,
+      owner: userMap.get(list.userId)?.name ?? null,
+      ownerRef: userMap.get(list.userId) ? {
+        id: list.userId,
+        name: userMap.get(list.userId)!.name,
+        email: userMap.get(list.userId)!.email,
+      } : null,
       createdAt: list.createdAt,
       tasks: tasks
         .filter((t) => t.listId === list.id)
         .map((t) => ({
+          id: t.id,
           title: t.title,
+          position: t.position,
           completed: t.completedAt !== null,
           completedAt: t.completedAt ?? null,
           createdAt: t.createdAt,
@@ -797,50 +1187,80 @@ router.get("/admin/export/tasks", requireAuth, requireRole("admin"), async (_req
 });
 
 router.get("/admin/export/projects", requireAuth, requireRole("admin"), async (_req, res) => {
-  const [projects, boards, columns, cards, members, users] = await Promise.all([
+  const [projects, boards, columns, cards, members, users, projectGroups, groups] = await Promise.all([
     db.select().from(projectsTable).orderBy(asc(projectsTable.createdAt)),
     db.select().from(boardsTable).orderBy(asc(boardsTable.position)),
     db.select().from(boardColumnsTable).orderBy(asc(boardColumnsTable.position)),
     db.select().from(boardCardsTable).orderBy(asc(boardCardsTable.position)),
     db.select().from(boardCardMembersTable),
-    db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable),
+    db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable),
+    db.select().from(projectGroupsTable),
+    db.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable),
   ]);
 
-  const userMap = new Map(users.map((u) => [u.id, u.name]));
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const groupMap = new Map(groups.map((group) => [group.id, group]));
 
-  const cardMembersMap = new Map<number, string[]>();
+  const cardMembersMap = new Map<number, Array<{ id: number; name: string; email: string }>>();
   for (const m of members) {
-    const names = cardMembersMap.get(m.cardId) ?? [];
-    names.push(userMap.get(m.userId) ?? `user:${m.userId}`);
-    cardMembersMap.set(m.cardId, names);
+    const memberUsers = cardMembersMap.get(m.cardId) ?? [];
+    const user = userMap.get(m.userId);
+    if (user) memberUsers.push(user);
+    cardMembersMap.set(m.cardId, memberUsers);
   }
 
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", 'attachment; filename="projects-export.json"');
   res.json({
+    format: "memex-backup",
+    version: 1,
+    kind: "projects",
     exportedAt: new Date(),
     projectCount: projects.length,
     projects: projects.map((project) => ({
+      id: project.id,
       name: project.name,
       description: project.description || null,
-      createdBy: userMap.get(project.createdById ?? -1) ?? null,
+      createdBy: userMap.get(project.createdById ?? -1)?.name ?? null,
+      createdByRef: project.createdById !== null && userMap.get(project.createdById) ? {
+        id: project.createdById,
+        name: userMap.get(project.createdById)!.name,
+        email: userMap.get(project.createdById)!.email,
+      } : null,
       createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      archivedAt: project.archivedAt,
+      projectGroups: projectGroups
+        .filter((entry) => entry.projectId === project.id)
+        .map((entry) => groupMap.get(entry.groupId))
+        .filter((group): group is { id: number; name: string } => Boolean(group)),
       boards: boards
         .filter((b) => b.projectId === project.id)
         .map((board) => ({
+          id: board.id,
           name: board.name,
+          position: board.position,
+          archivedAt: board.archivedAt,
+          createdAt: board.createdAt,
           columns: columns
             .filter((c) => c.boardId === board.id)
             .map((col) => ({
+              id: col.id,
               name: col.name,
+              position: col.position,
+              createdAt: col.createdAt,
               cards: cards
                 .filter((c) => c.columnId === col.id)
                 .map((card) => ({
+                  id: card.id,
                   title: card.title,
                   description: card.description || null,
                   dueDate: card.dueDate ?? null,
-                  assignedTo: cardMembersMap.get(card.id) ?? [],
+                  position: card.position,
+                  assignedTo: (cardMembersMap.get(card.id) ?? []).map((user) => user.name),
+                  assigneeRefs: cardMembersMap.get(card.id) ?? [],
                   createdAt: card.createdAt,
+                  updatedAt: card.updatedAt,
                 })),
             })),
         })),

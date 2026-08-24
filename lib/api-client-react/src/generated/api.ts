@@ -22,6 +22,10 @@ import type {
 import type {
   AdminImportInput,
   AdminImportResponse,
+  AdminRestoreInput,
+  AdminRestorePreview,
+  AdminRestorePreviewInput,
+  AdminRestoreResult,
   ApiToken,
   ApiTokenCreated,
   ApiTokenInput,
@@ -3338,5 +3342,152 @@ export const useAdminImportAll = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getAdminImportAllMutationOptions(options));
+    }
+
+export const getPreviewAdminRestoreUrl = () => {
+
+
+
+
+  return `/api/admin/restore/preview`
+}
+
+/**
+ * @summary Validate and preview a Logs, Tasks, or Projects JSON backup (admin only)
+ */
+export const previewAdminRestore = async (adminRestorePreviewInput: AdminRestorePreviewInput, options?: RequestInit): Promise<AdminRestorePreview> => {
+    const formData = new FormData();
+formData.append(`file`, adminRestorePreviewInput.file);
+
+  return customFetch<AdminRestorePreview>(getPreviewAdminRestoreUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getPreviewAdminRestoreMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewAdminRestore>>, TError,{data: BodyType<AdminRestorePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewAdminRestore>>, TError,{data: BodyType<AdminRestorePreviewInput>}, TContext> => {
+
+const mutationKey = ['previewAdminRestore'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewAdminRestore>>, {data: BodyType<AdminRestorePreviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewAdminRestore(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewAdminRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof previewAdminRestore>>>
+    export type PreviewAdminRestoreMutationBody = BodyType<AdminRestorePreviewInput>
+    export type PreviewAdminRestoreMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Validate and preview a Logs, Tasks, or Projects JSON backup (admin only)
+ */
+export const usePreviewAdminRestore = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewAdminRestore>>, TError,{data: BodyType<AdminRestorePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewAdminRestore>>,
+        TError,
+        {data: BodyType<AdminRestorePreviewInput>},
+        TContext
+      > => {
+      return useMutation(getPreviewAdminRestoreMutationOptions(options));
+    }
+
+export const getRestoreAdminBackupUrl = () => {
+
+
+
+
+  return `/api/admin/restore`
+}
+
+/**
+ * @summary Restore a validated Logs, Tasks, or Projects JSON backup (admin only)
+ */
+export const restoreAdminBackup = async (adminRestoreInput: AdminRestoreInput, options?: RequestInit): Promise<AdminRestoreResult> => {
+    const formData = new FormData();
+formData.append(`file`, adminRestoreInput.file);
+formData.append(`ownerMappings`, adminRestoreInput.ownerMappings);
+
+  return customFetch<AdminRestoreResult>(getRestoreAdminBackupUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getRestoreAdminBackupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreAdminBackup>>, TError,{data: BodyType<AdminRestoreInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreAdminBackup>>, TError,{data: BodyType<AdminRestoreInput>}, TContext> => {
+
+const mutationKey = ['restoreAdminBackup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreAdminBackup>>, {data: BodyType<AdminRestoreInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  restoreAdminBackup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreAdminBackupMutationResult = NonNullable<Awaited<ReturnType<typeof restoreAdminBackup>>>
+    export type RestoreAdminBackupMutationBody = BodyType<AdminRestoreInput>
+    export type RestoreAdminBackupMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Restore a validated Logs, Tasks, or Projects JSON backup (admin only)
+ */
+export const useRestoreAdminBackup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreAdminBackup>>, TError,{data: BodyType<AdminRestoreInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreAdminBackup>>,
+        TError,
+        {data: BodyType<AdminRestoreInput>},
+        TContext
+      > => {
+      return useMutation(getRestoreAdminBackupMutationOptions(options));
     }
 

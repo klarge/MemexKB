@@ -1,12 +1,29 @@
 import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, UploadCloud, Download, FileArchive, FolderOpen, BookOpen, ListTodo, FolderKanban } from "lucide-react";
+import { Loader2, UploadCloud, Download, FileArchive, FolderOpen, BookOpen, ListTodo, FolderKanban, RotateCcw, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { previewAdminRestore, restoreAdminBackup } from "@workspace/api-client-react";
 
 type ImportResult = { imported: number; skipped: number; errors: string[] };
+type RestoreOwner = { key: string; label: string; suggestedUserId: number | null };
+type RestoreUser = { id: number; name: string; email: string };
+type RestorePreview = {
+  kind: "logs" | "tasks" | "projects";
+  total: number;
+  owners: RestoreOwner[];
+  users: RestoreUser[];
+  warnings: string[];
+};
+type RestoreResult = {
+  kind: string;
+  imported: { logs: number; taskLists: number; tasks: number; projects: number; boards: number; columns: number; cards: number };
+  skipped: number;
+  warnings: string[];
+};
 
 function useExportDownload(endpoint: string, filename: string) {
   const [isExporting, setIsExporting] = useState(false);
@@ -48,11 +65,19 @@ export default function AdminImport() {
   const { toast } = useToast();
   const zipInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [overwrite, setOverwrite] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
+  const [ownerMappings, setOwnerMappings] = useState<Record<string, string>>({});
+  const [restoreConfirmed, setRestoreConfirmed] = useState(false);
+  const [isPreviewingRestore, setIsPreviewingRestore] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
 
   const kbExport = useExportDownload("/api/admin/export", "knowledge-base-export.zip");
   const logsExport = useExportDownload("/api/admin/export/logs", "logs-export.json");
@@ -120,6 +145,69 @@ export default function AdminImport() {
     if (overwrite) formData.append("overwrite", "true");
     await doImport(formData);
   };
+
+  const handleRestoreFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setRestoreFile(file);
+    setRestorePreview(null);
+    setOwnerMappings({});
+    setRestoreConfirmed(false);
+    setRestoreResult(null);
+  };
+
+  const previewRestore = async () => {
+    if (!restoreFile) return;
+    setIsPreviewingRestore(true);
+    setRestorePreview(null);
+    setRestoreResult(null);
+    try {
+      const preview = await previewAdminRestore({ file: restoreFile }) as RestorePreview;
+      setRestorePreview(preview);
+      setOwnerMappings(Object.fromEntries(
+        preview.owners
+          .filter((owner) => owner.suggestedUserId !== null)
+          .map((owner) => [owner.key, String(owner.suggestedUserId)]),
+      ));
+    } catch (error) {
+      toast({
+        title: "Backup could not be previewed",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsPreviewingRestore(false);
+    }
+  };
+
+  const restoreBackup = async () => {
+    if (!restoreFile || !restorePreview) return;
+    setIsRestoring(true);
+    setRestoreResult(null);
+    try {
+      const result = await restoreAdminBackup({
+        file: restoreFile,
+        ownerMappings: JSON.stringify(
+        Object.fromEntries(Object.entries(ownerMappings).map(([key, value]) => [key, Number(value)])),
+        ),
+      }) as RestoreResult;
+      setRestoreResult(result);
+      toast({
+        title: "Backup restored",
+        description: `${restorePreview.kind[0].toUpperCase()}${restorePreview.kind.slice(1)} were restored safely.`,
+      });
+      setRestoreConfirmed(false);
+    } catch (error) {
+      toast({
+        title: "Restore failed",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const hasAllOwnerMappings = restorePreview?.owners.every((owner) => Boolean(ownerMappings[owner.key])) ?? false;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -239,6 +327,137 @@ export default function AdminImport() {
 
         </div>
       </div>
+
+      {/* ── Restore data backups ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RotateCcw className="h-5 w-5" />
+            Restore Logs, Tasks, or Projects
+          </CardTitle>
+          <CardDescription>
+            Select a JSON backup created by this app. You will review it and map each exported owner to a local account before anything is restored.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <input
+            id="restore-backup-file"
+            type="file"
+            ref={restoreInputRef}
+            className="sr-only"
+            accept=".json,application/json"
+            onChange={handleRestoreFileChange}
+          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button variant="outline" type="button" onClick={() => restoreInputRef.current?.click()}>
+              <UploadCloud className="mr-2 h-4 w-4" />
+              Choose JSON backup
+            </Button>
+            <div className="text-sm text-muted-foreground" aria-live="polite">
+              {restoreFile ? `${restoreFile.name} (${Math.ceil(restoreFile.size / 1024)} KB)` : "No file selected"}
+            </div>
+            <Button type="button" onClick={previewRestore} disabled={!restoreFile || isPreviewingRestore} className="sm:ml-auto">
+              {isPreviewingRestore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              {isPreviewingRestore ? "Checking…" : "Preview restore"}
+            </Button>
+          </div>
+
+          {restorePreview && (
+            <div className="space-y-5 rounded-lg border bg-muted/30 p-4" aria-live="polite">
+              <div>
+                <h3 className="font-semibold">Restore preview</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This backup contains {restorePreview.total} {restorePreview.kind === "tasks" ? "task list or task record" : restorePreview.kind} record{restorePreview.total === 1 ? "" : "s"}.
+                  Existing matching records will be skipped; nothing is overwritten.
+                </p>
+              </div>
+
+              {restorePreview.owners.length > 0 && (
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="text-sm font-medium">Map exported owners</h4>
+                    <p className="text-xs text-muted-foreground">Private logs and task lists cannot be restored until every owner is matched to a local account.</p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {restorePreview.owners.map((owner) => (
+                      <div key={owner.key} className="space-y-1.5">
+                        <Label htmlFor={`owner-${owner.key}`} className="text-xs">Exported owner: {owner.label}</Label>
+                        <Select
+                          value={ownerMappings[owner.key] ?? ""}
+                          onValueChange={(value) => setOwnerMappings((current) => ({ ...current, [owner.key]: value }))}
+                        >
+                          <SelectTrigger id={`owner-${owner.key}`}>
+                            <SelectValue placeholder="Choose local account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {restorePreview.users.map((user) => (
+                              <SelectItem key={user.id} value={String(user.id)}>
+                                {user.name} · {user.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {restorePreview.warnings.length > 0 && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+                  <div className="font-medium">This backup needs attention</div>
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    {restorePreview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="confirm-restore"
+                  checked={restoreConfirmed}
+                  onCheckedChange={(checked) => setRestoreConfirmed(checked === true)}
+                />
+                <Label htmlFor="confirm-restore" className="text-sm font-normal leading-5">
+                  I reviewed the owner mappings. Restore this backup as new data and skip any matching local records.
+                </Label>
+              </div>
+              <Button
+                type="button"
+                onClick={restoreBackup}
+                disabled={!restoreConfirmed || !hasAllOwnerMappings || restorePreview.warnings.length > 0 || isRestoring}
+              >
+                {isRestoring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+                {isRestoring ? "Restoring…" : "Restore backup"}
+              </Button>
+              {!hasAllOwnerMappings && restorePreview.owners.length > 0 && (
+                <p className="text-xs text-muted-foreground">Choose a local account for each exported owner to continue.</p>
+              )}
+            </div>
+          )}
+
+          {restoreResult && (
+            <div className="rounded-md border bg-muted/40 p-4 text-sm" role="status">
+              <div className="font-semibold">Restore results</div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground sm:grid-cols-4">
+                {restoreResult.imported.logs > 0 && <span>{restoreResult.imported.logs} logs created</span>}
+                {restoreResult.imported.taskLists > 0 && <span>{restoreResult.imported.taskLists} lists created</span>}
+                {restoreResult.imported.tasks > 0 && <span>{restoreResult.imported.tasks} tasks created</span>}
+                {restoreResult.imported.projects > 0 && <span>{restoreResult.imported.projects} projects created</span>}
+                {restoreResult.imported.boards > 0 && <span>{restoreResult.imported.boards} boards created</span>}
+                {restoreResult.imported.columns > 0 && <span>{restoreResult.imported.columns} columns created</span>}
+                {restoreResult.imported.cards > 0 && <span>{restoreResult.imported.cards} cards created</span>}
+                {restoreResult.skipped > 0 && <span>{restoreResult.skipped} records skipped</span>}
+              </div>
+              {restoreResult.warnings.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-700 dark:text-amber-300">
+                  {restoreResult.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Import ── */}
       <div>

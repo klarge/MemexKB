@@ -960,3 +960,51 @@ export const AdminImportAllResponse = zod.object({
 })
 
 
+/**
+ * @summary Validate and preview a Logs, Tasks, or Projects JSON backup (admin only)
+ */
+export const PreviewAdminRestoreBody = zod.object({
+  "file": zod.instanceof(File)
+})
+
+export const PreviewAdminRestoreResponse = zod.object({
+  "kind": zod.enum(['logs', 'tasks', 'projects']),
+  "total": zod.number(),
+  "owners": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "suggestedUserId": zod.number().nullable()
+})),
+  "users": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string().email()
+})),
+  "warnings": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Restore a validated Logs, Tasks, or Projects JSON backup (admin only)
+ */
+export const RestoreAdminBackupBody = zod.object({
+  "file": zod.instanceof(File),
+  "ownerMappings": zod.string().describe('JSON object mapping each exported owner key to a local user ID.')
+})
+
+export const RestoreAdminBackupResponse = zod.object({
+  "kind": zod.enum(['logs', 'tasks', 'projects']),
+  "imported": zod.object({
+  "logs": zod.number(),
+  "taskLists": zod.number(),
+  "tasks": zod.number(),
+  "projects": zod.number(),
+  "boards": zod.number(),
+  "columns": zod.number(),
+  "cards": zod.number()
+}),
+  "skipped": zod.number(),
+  "warnings": zod.array(zod.string())
+})
+
+
