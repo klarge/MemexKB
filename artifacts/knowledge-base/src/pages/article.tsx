@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useGetArticle,
+  useGetLogEntry,
+  getGetLogEntryQueryKey,
   useGetArticleBacklinks,
   getGetArticleQueryKey,
   getGetArticleBacklinksQueryKey,
@@ -34,32 +36,46 @@ interface LockStatus {
   lockedBy: { userId: number; userName: string; lockedAt: string } | null;
 }
 
-export default function ArticleView({ params }: { params?: { slug?: string } }) {
-  const { slug } = params || {};
+export default function ArticleView({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
+  const { slug, userId: userIdParam, logSlug } = params || {};
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
 
   const isHome = !slug || slug === "home";
   const actualSlug = slug || "home";
+  const logOwnerId = Number(userIdParam);
+  const isLogRoute = Number.isSafeInteger(logOwnerId) && logOwnerId > 0 && Boolean(logSlug);
 
   const { data: article, isLoading, isError } = useGetArticle(actualSlug, {
     query: {
-      enabled: !!actualSlug,
+      enabled: !!actualSlug && !isLogRoute,
       queryKey: getGetArticleQueryKey(actualSlug),
       retry: false,
     },
   });
+  const {
+    data: logArticle,
+    isLoading: isLoadingLog,
+    isError: isLogError,
+  } = useGetLogEntry(logOwnerId, logSlug ?? "", {
+    query: { enabled: isLogRoute, retry: false, queryKey: getGetLogEntryQueryKey(logOwnerId, logSlug ?? "") },
+  });
+  const displayedArticle = isLogRoute ? logArticle : article;
+  const displayedIsLoading = isLogRoute ? isLoadingLog : isLoading;
+  const displayedIsError = isLogRoute ? isLogError : isError;
+  const apiSlug = displayedArticle?.slug ?? actualSlug;
+  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/wiki/${actualSlug}`;
 
   // ─── Edit lock status ─────────────────────────────────────────────────────
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
 
   useEffect(() => {
-    if (!article?.id || !user) return;
+    if (!displayedArticle?.id || !user) return;
 
     const fetchLock = async () => {
       try {
-        const res = await fetch(`/api/articles/${actualSlug}/lock`, { credentials: "include" });
+        const res = await fetch(`/api/articles/${apiSlug}/lock`, { credentials: "include" });
         if (res.ok) {
           const data: LockStatus = await res.json();
           setLockStatus(data);
@@ -72,7 +88,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     fetchLock();
     const interval = setInterval(fetchLock, 30_000);
     return () => clearInterval(interval);
-  }, [article?.id, actualSlug, user]);
+  }, [displayedArticle?.id, apiSlug, user]);
 
   const canEdit = user?.role === "admin" || user?.role === "editor";
   const lockHeldByOther = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId !== user?.id;
@@ -80,7 +96,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
 
   const forceBreakLock = async () => {
     try {
-      await fetch(`/api/articles/${actualSlug}/lock`, { method: "DELETE", credentials: "include" });
+      await fetch(`/api/articles/${apiSlug}/lock`, { method: "DELETE", credentials: "include" });
       setLockStatus((prev) => prev ? { ...prev, lockedBy: null } : prev);
       toast({ title: "Lock released" });
     } catch {
@@ -88,10 +104,10 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     }
   };
 
-  const { data: backlinks } = useGetArticleBacklinks(actualSlug, {
+  const { data: backlinks } = useGetArticleBacklinks(apiSlug, {
     query: {
-      enabled: !!actualSlug && !!article?.canAccess,
-      queryKey: getGetArticleBacklinksQueryKey(actualSlug),
+      enabled: !!apiSlug && !!displayedArticle?.canAccess,
+      queryKey: getGetArticleBacklinksQueryKey(apiSlug),
     },
   });
 
@@ -99,7 +115,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
 
   const handleDelete = () => {
     deleteMutation.mutate(
-      { slug: actualSlug },
+      { slug: apiSlug },
       {
         onSuccess: () => {
           toast({ title: "Article deleted" });
@@ -210,10 +226,10 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     }
   };
 
-  const exportPdf = () => triggerDownload(`/api/articles/${actualSlug}/export/pdf`, `${actualSlug}.pdf`);
-  const exportMd  = () => triggerDownload(`/api/articles/${actualSlug}/export/md`,  `${actualSlug}.md`);
+  const exportPdf = () => triggerDownload(`/api/articles/${apiSlug}/export/pdf`, `${displayedArticle?.title ?? apiSlug}.pdf`);
+  const exportMd  = () => triggerDownload(`/api/articles/${apiSlug}/export/md`,  `${displayedArticle?.title ?? apiSlug}.md`);
 
-  if (isLoading) {
+  if (displayedIsLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -221,7 +237,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
     );
   }
 
-  if (isError || !article) {
+  if (displayedIsError || !displayedArticle) {
     if (isHome) {
       setLocation("/");
       return null;
@@ -294,9 +310,9 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-4xl font-extrabold tracking-tight" data-testid="article-title">
-                {article.title}
+                {displayedArticle.title}
               </h1>
-              {article.isRestricted && (
+              {displayedArticle.isRestricted && (
                 <Badge variant="outline" className="border-primary/20 text-primary bg-primary/5">
                   <Lock className="w-3 h-3 mr-1" />
                   Restricted
@@ -304,13 +320,13 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
               )}
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>Last updated: {format(new Date(article.updatedAt), "MMMM d, yyyy 'at' h:mm a")}</span>
-              {article.updatedByName && <span>by {article.updatedByName}</span>}
+              <span>Last updated: {format(new Date(displayedArticle.updatedAt), "MMMM d, yyyy 'at' h:mm a")}</span>
+              {displayedArticle.updatedByName && <span>by {displayedArticle.updatedByName}</span>}
             </div>
           </div>
         </div>
 
-        {!article.canAccess ? (
+        {!displayedArticle.canAccess ? (
           <Card className="border-dashed bg-muted/30">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <Lock className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
@@ -337,7 +353,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
         ) : (
           <div
             className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-2 prose-th:bg-muted [&_img]:cursor-zoom-in"
-            dangerouslySetInnerHTML={{ __html: processContent(article.content) }}
+            dangerouslySetInnerHTML={{ __html: processContent(displayedArticle.content) }}
             data-testid="article-content"
           />
         )}
@@ -350,7 +366,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(`/wiki/${actualSlug}/edit`)}
+                onClick={() => setLocation(isLogRoute ? `${articlePath}/edit` : `/wiki/${actualSlug}/edit`)}
                 data-testid="button-edit-article"
               >
                 <Edit className="mr-2 h-4 w-4" /> Edit Article
@@ -358,7 +374,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(`/wiki/${actualSlug}/history`)}
+                onClick={() => setLocation(isLogRoute ? `${articlePath}/history` : `/wiki/${actualSlug}/history`)}
               >
                 <Clock className="mr-2 h-4 w-4" /> Version History
               </Button>
@@ -395,7 +411,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           </Card>
         )}
 
-        {article.canAccess && (
+        {displayedArticle.canAccess && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Export</CardTitle>
@@ -411,7 +427,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           </Card>
         )}
 
-        {article.canAccess && backlinks && backlinks.length > 0 && (
+        {displayedArticle.canAccess && backlinks && backlinks.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Linked From</CardTitle>
@@ -421,7 +437,7 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
                 {backlinks.map((link) => (
                   <li key={link.id}>
                     <Link
-                      href={`/wiki/${link.slug}`}
+                      href={link.logOwnerId && link.logSlug ? `/logs/${link.logOwnerId}/${link.logSlug}` : `/wiki/${link.slug}`}
                       className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
                     >
                       <FileText className="h-3 w-3" />
@@ -434,14 +450,14 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           </Card>
         )}
 
-        {article.groups && article.groups.length > 0 && (
+        {displayedArticle.groups && displayedArticle.groups.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Required Groups</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {article.groups.map((g) => (
+                {displayedArticle.groups.map((g) => (
                   <Badge key={g.id} variant="secondary">{g.name}</Badge>
                 ))}
               </div>
@@ -449,14 +465,14 @@ export default function ArticleView({ params }: { params?: { slug?: string } }) 
           </Card>
         )}
 
-        {article.tags && article.tags.length > 0 && (
+        {displayedArticle.tags && displayedArticle.tags.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Tags</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {article.tags.map((tag) => (
+                {displayedArticle.tags.map((tag) => (
                   <span
                     key={tag.id}
                     className="rounded-full px-3 py-1 text-xs font-medium text-white"

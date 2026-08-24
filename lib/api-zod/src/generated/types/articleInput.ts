@@ -13,4 +13,6 @@ export interface ArticleInput {
   content: string;
   groupIds?: number[];
   tagIds?: number[];
+  /** Create a personal log entry instead of a shared article */
+  isLogEntry?: boolean;
 }

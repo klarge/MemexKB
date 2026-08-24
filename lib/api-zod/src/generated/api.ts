@@ -127,6 +127,8 @@ export const ListArticlesResponse = zod.object({
   "articles": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -160,7 +162,8 @@ export const CreateArticleBody = zod.object({
   "title": zod.string().min(1),
   "content": zod.string().describe('HTML content'),
   "groupIds": zod.array(zod.number()).optional(),
-  "tagIds": zod.array(zod.number()).optional()
+  "tagIds": zod.array(zod.number()).optional(),
+  "isLogEntry": zod.boolean().optional().describe('Create a personal log entry instead of a shared article')
 })
 
 
@@ -179,6 +182,8 @@ export const ListArticlesMaintenanceResponse = zod.object({
   "articles": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -213,6 +218,8 @@ export const GetArticleStatsResponse = zod.object({
   "recentlyUpdated": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -235,6 +242,8 @@ export const GetArticleStatsResponse = zod.object({
   "oldestUpdated": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -253,6 +262,66 @@ export const GetArticleStatsResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "articleCount": zod.number()
 })).optional()
+})).optional()
+})
+
+
+/**
+ * @summary Get a private log entry by its owner and stable log URL segment
+ */
+export const getLogEntryPathLogSlugRegExp = new RegExp('^[a-z0-9]+(?:-[a-z0-9]+)\*$');
+
+
+export const GetLogEntryParams = zod.object({
+  "userId": zod.coerce.number(),
+  "logSlug": zod.coerce.string().regex(getLogEntryPathLogSlugRegExp)
+})
+
+export const GetLogEntryResponse = zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "content": zod.string().describe('HTML content of the article'),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean(),
+  "canAccess": zod.boolean(),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})),
+  "backlinks": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
+  "title": zod.string(),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
+  "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})).optional()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
 })).optional()
 })
 
@@ -282,6 +351,8 @@ export const GetArticleResponse = zod.object({
   "backlinks": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -346,6 +417,8 @@ export const UpdateArticleResponse = zod.object({
   "backlinks": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -466,6 +539,8 @@ export const GetArticleBacklinksParams = zod.object({
 export const GetArticleBacklinksResponseItem = zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -533,6 +608,8 @@ export const SetArticleGroupsResponse = zod.object({
   "backlinks": zod.array(zod.object({
   "id": zod.number(),
   "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),

@@ -2,3 +2,4 @@
 - [Netinfo version in Expo](netinfo-expo.md) — @react-native-community/netinfo@12.x works with expo 54 despite a version-mismatch warning; 11.4.1 causes Metro ENOENT crash on pnpm due to _tmp dir cleanup race.
 - [Drizzle migration journal](drizzle-migration-journal.md) — Docker migrations only run SQL files listed in the journal; add an entry whenever a migration is added manually.
 - [Article URL policy](article-url-policy.md) — titles retain stable URLs; only deliberate administrator URL changes migrate internal links.
+- [Private log URLs](private-log-urls.md) — personal logs use immutable owner-scoped paths and always require server-side owner/admin checks.

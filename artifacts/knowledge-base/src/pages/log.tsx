@@ -12,6 +12,8 @@ const PAGE_SIZE = 50;
 type LogEntry = {
   id: number;
   slug: string;
+  logSlug: string;
+  logOwnerId: number;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -70,7 +72,7 @@ export default function LogPage() {
 
   const handleNewEntry = () => {
     if (todayEntry) {
-      setLocation(`/wiki/${todayEntry.slug}/edit`);
+      setLocation(`/logs/${todayEntry.logOwnerId}/${todayEntry.logSlug}/edit`);
     } else {
       setLocation("/wiki/new?log=1");
     }
@@ -111,7 +113,7 @@ export default function LogPage() {
       ) : (
         <div className="space-y-2">
           {allEntries.map((entry) => (
-            <Link key={entry.id} href={`/wiki/${entry.slug}`}>
+            <Link key={entry.id} href={`/logs/${entry.logOwnerId}/${entry.logSlug}`}>
               <div className="group flex items-center gap-5 rounded-lg border border-border bg-card px-5 py-4 hover:bg-muted/40 transition-colors cursor-pointer">
                 {/* Date badge */}
                 <div className="shrink-0 text-center w-12">

@@ -1,12 +1,15 @@
-import { pgTable, serial, text, timestamp, integer, primaryKey, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, primaryKey, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 import { groupsTable } from "./groups";
 
 export const articlesTable = pgTable("articles", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull().unique(),
+  // Log URLs are owner-scoped. Normal article URLs continue to use `slug`.
+  logSlug: text("log_slug"),
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   isLogEntry: boolean("is_log_entry").notNull().default(false),
@@ -18,7 +21,11 @@ export const articlesTable = pgTable("articles", {
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("articles_log_owner_slug_unique")
+    .on(t.createdById, t.logSlug)
+    .where(sql`log_slug IS NOT NULL`),
+]);
 
 export const articleGroupsTable = pgTable(
   "article_groups",

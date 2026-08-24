@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { useLocation } from "wouter";
 import {
   useGetArticle,
+  useGetLogEntry,
+  getGetLogEntryQueryKey,
   getGetArticleQueryKey,
   useCreateArticle,
   useUpdateArticle,
@@ -90,11 +92,13 @@ function AutosaveChip({ status }: { status: AutosaveStatus }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ArticleEdit({ params }: { params?: { slug?: string } }) {
-  const { slug } = params || {};
-  const isNew = !slug || slug === "new";
+export default function ArticleEdit({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
+  const { slug, userId: userIdParam, logSlug } = params || {};
+  const logOwnerId = Number(userIdParam);
+  const isLogRoute = Number.isSafeInteger(logOwnerId) && logOwnerId > 0 && Boolean(logSlug);
+  const isNew = !isLogRoute && (!slug || slug === "new");
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
-  const isLog = isNew && searchParams.get("log") === "1";
+  const isLog = isLogRoute || (isNew && searchParams.get("log") === "1");
   const prefillTitle = isNew
     ? (isLog
         ? new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -148,13 +152,19 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   // 500 was unnecessarily large and would be slow at scale.
   const { data: articlesData } = useListArticles({ limit: 100, sort: "updated_at", order: "desc" });
 
-  const { data: article, isLoading: isLoadingArticle } = useGetArticle(slug as string, {
+  const { data: regularArticle, isLoading: isLoadingArticle } = useGetArticle(slug as string, {
     query: {
-      enabled: !isNew && !!slug,
+      enabled: !isNew && !isLogRoute && !!slug,
       queryKey: getGetArticleQueryKey(slug as string),
       retry: false,
     },
   });
+  const { data: logArticle, isLoading: isLoadingLog } = useGetLogEntry(logOwnerId, logSlug ?? "", {
+    query: { enabled: isLogRoute, retry: false, queryKey: getGetLogEntryQueryKey(logOwnerId, logSlug ?? "") },
+  });
+  const article = isLogRoute ? logArticle : regularArticle;
+  const articleSlug = article?.slug ?? slug;
+  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/wiki/${articleSlug}`;
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
@@ -209,23 +219,23 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
   const lockReleasedRef = useRef(false);
 
   const releaseLock = useCallback(async () => {
-    if (isNew || !slug || lockReleasedRef.current) return;
+    if (isNew || !articleSlug || lockReleasedRef.current) return;
     lockReleasedRef.current = true;
     try {
-      await fetch(`/api/articles/${slug}/lock`, { method: "DELETE", credentials: "include" });
+      await fetch(`/api/articles/${articleSlug}/lock`, { method: "DELETE", credentials: "include" });
     } catch {
       // best-effort
     }
-  }, [isNew, slug]);
+  }, [isNew, articleSlug]);
 
   useEffect(() => {
-    if (isNew || !slug) return;
+    if (isNew || !articleSlug) return;
 
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
     const acquireLock = async () => {
       try {
-        const res = await fetch(`/api/articles/${slug}/lock`, {
+        const res = await fetch(`/api/articles/${articleSlug}/lock`, {
           method: "PUT",
           credentials: "include",
         });
@@ -245,20 +255,19 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       releaseLock();
     };
-  }, [isNew, slug, releaseLock]);
+  }, [isNew, articleSlug, releaseLock]);
 
   useEffect(() => {
-    if (isNew || !slug) return;
+    if (isNew || !articleSlug) return;
     const onUnload = () => {
       if (!lockReleasedRef.current) {
-        navigator.sendBeacon(`/api/articles/${slug}/lock-release`);
-        fetch(`/api/articles/${slug}/lock`, { method: "DELETE", credentials: "include", keepalive: true }).catch(() => {});
+        fetch(`/api/articles/${articleSlug}/lock`, { method: "DELETE", credentials: "include", keepalive: true }).catch(() => {});
         lockReleasedRef.current = true;
       }
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
-  }, [isNew, slug]);
+  }, [isNew, articleSlug]);
 
   // ─── Wikilink items ref ───────────────────────────────────────────────────────
   const wikilinkItemsRef = useRef<WikilinkItem[]>([]);
@@ -385,7 +394,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         if (editor.getHTML() !== article.content) {
           // Pass false as emitUpdate so this programmatic load does NOT fire
           // the editor's "update" event and accidentally schedule an autosave.
-          editor.commands.setContent(article.content, false);
+          editor.commands.setContent(article.content, { emitUpdate: false });
         }
         // Seed lastSavedRef with the *normalized* HTML that Tiptap produces,
         // not the raw string from the server — they can differ in whitespace /
@@ -422,7 +431,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
   // ─── Autosave: existing articles ──────────────────────────────────────────
   const scheduleAutosave = useCallback(() => {
-    if (isNew || !slug || !editor) return;
+    if (isNew || !articleSlug || !editor) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     autosaveTimerRef.current = setTimeout(async () => {
@@ -439,26 +448,26 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
       setAutosaveStatus("saving");
       try {
-        const res = await fetch(`/api/articles/${slug}`, {
+        const res = await fetch(`/api/articles/${articleSlug}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
             title: currentTitle,
             content: currentContent,
-            groupIds: groupsRef.current,
+            groupIds: isLog ? undefined : groupsRef.current,
             tagIds: tagsRef.current,
           }),
         });
         if (!res.ok) throw new Error("autosave failed");
         lastSavedRef.current = { title: currentTitle, content: currentContent };
         setAutosaveStatus("saved");
-        queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
+        queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
       } catch {
         setAutosaveStatus("error");
       }
     }, 3000);
-  }, [isNew, slug, editor, queryClient]);
+  }, [isNew, articleSlug, editor, queryClient]);
 
   // ─── Autosave: new articles → localStorage ────────────────────────────────
   const scheduleDraftSave = useCallback(() => {
@@ -545,10 +554,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           toast({ title: "Failed to create", description: err.error, variant: "destructive" });
           return;
         }
-        const data = await res.json() as { slug: string };
+        const data = await res.json() as { slug: string; logSlug?: string | null; logOwnerId?: number | null };
         localStorage.removeItem(draftKey);
         toast({ title: "Log entry created" });
-        setLocation(`/wiki/${data.slug}`);
+        if (!data.logSlug || !data.logOwnerId) throw new Error("The server did not return the new log URL");
+        setLocation(`/logs/${data.logOwnerId}/${data.logSlug}`);
       } catch {
         toast({ title: "Network error", variant: "destructive" });
       } finally {
@@ -559,7 +569,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
 
     if (isNew) {
       createMutation.mutate(
-        { data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
+        { data: { title, content, groupIds: isLog ? undefined : selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
             localStorage.removeItem(draftKey);
@@ -571,17 +581,17 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           },
         },
       );
-    } else if (slug) {
+    } else if (articleSlug) {
       updateMutation.mutate(
-        { slug, data: { title, content, groupIds: selectedGroups, tagIds: selectedTags } },
+        { slug: articleSlug, data: { title, content, groupIds: isLog ? undefined : selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: async (data) => {
             lastSavedRef.current = { title, content };
             setAutosaveStatus("idle");
-            queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(slug) });
+            queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
             toast({ title: "Article updated" });
             await releaseLock();
-            setLocation(`/wiki/${data.slug}`);
+            setLocation(isLogRoute ? articlePath : `/wiki/${data.slug}`);
           },
           onError: (err) => {
             toast({ title: "Failed to update", description: err.message, variant: "destructive" });
@@ -595,7 +605,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
     setSelectedGroups((prev) => (prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]));
   };
 
-  if (!isNew && isLoadingArticle) {
+  if (!isNew && (isLoadingArticle || isLoadingLog)) {
     return (
       <div className="flex justify-center p-12">
         <Loader2 className="animate-spin text-primary" />
@@ -611,7 +621,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation(isLog ? "/log" : isNew ? "/" : `/wiki/${slug}`)}
+          onClick={() => setLocation(isLog ? (isLogRoute ? articlePath : "/log") : isNew ? "/" : articlePath)}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -653,7 +663,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
             variant="ghost"
             size="sm"
             className="ml-auto h-7 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900"
-            onClick={() => setLocation(`/wiki/${slug}`)}
+            onClick={() => setLocation(articlePath)}
           >
             View read-only
           </Button>
@@ -665,7 +675,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="title" className="text-base">Article Title</Label>
-              {!isNew && user?.role === "admin" && (
+              {!isNew && !isLog && user?.role === "admin" && (
                 <Button type="button" variant="outline" size="sm" onClick={openSlugDialog}>
                   Edit URL
                 </Button>
@@ -681,7 +691,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string } }) 
             />
             {!isNew && (
               <p className="text-xs text-muted-foreground">
-                URL: <span className="font-mono">/wiki/{article?.slug ?? slug}</span>
+                URL: <span className="font-mono">{isLogRoute ? articlePath : `/wiki/${article?.slug ?? slug}`}</span>
               </p>
             )}
           </div>

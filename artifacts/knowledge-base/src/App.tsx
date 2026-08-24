@@ -126,6 +126,30 @@ function Router() {
         </AuthRoute>
       </Route>
 
+      <Route path="/logs/:userId/:logSlug/edit">
+        {(params: Record<string, string>) => (
+          <AuthRoute editorOnly>
+            <ArticleEdit params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/logs/:userId/:logSlug/history">
+        {(params: Record<string, string>) => (
+          <AuthRoute editorOnly>
+            <ArticleHistory params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/logs/:userId/:logSlug">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <ArticleView params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
       <Route path="/wiki/:slug/edit">
         {(params: Record<string, string>) => (
           <AuthRoute editorOnly>

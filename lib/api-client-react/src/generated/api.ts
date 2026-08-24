@@ -971,6 +971,88 @@ export function useGetArticleStats<TData = Awaited<ReturnType<typeof getArticleS
 
 
 
+export const getGetLogEntryUrl = (userId: number,
+    logSlug: string,) => {
+
+
+
+
+  return `/api/logs/${userId}/${logSlug}`
+}
+
+/**
+ * @summary Get a private log entry by its owner and stable log URL segment
+ */
+export const getLogEntry = async (userId: number,
+    logSlug: string, options?: RequestInit): Promise<Article> => {
+
+  return customFetch<Article>(getGetLogEntryUrl(userId,logSlug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLogEntryQueryKey = (userId: number,
+    logSlug: string,) => {
+    return [
+    `/api/logs/${userId}/${logSlug}`
+    ] as const;
+    }
+
+
+export const getGetLogEntryQueryOptions = <TData = Awaited<ReturnType<typeof getLogEntry>>, TError = ErrorType<ErrorResponse>>(userId: number,
+    logSlug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLogEntry>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLogEntryQueryKey(userId,logSlug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogEntry>>> = ({ signal }) => getLogEntry(userId,logSlug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(userId && logSlug), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLogEntry>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLogEntryQueryResult = NonNullable<Awaited<ReturnType<typeof getLogEntry>>>
+export type GetLogEntryQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a private log entry by its owner and stable log URL segment
+ */
+
+export function useGetLogEntry<TData = Awaited<ReturnType<typeof getLogEntry>>, TError = ErrorType<ErrorResponse>>(
+ userId: number,
+    logSlug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLogEntry>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLogEntryQueryOptions(userId,logSlug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getGetArticleUrl = (slug: string,) => {
 
 

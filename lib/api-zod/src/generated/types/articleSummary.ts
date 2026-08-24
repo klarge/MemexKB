@@ -11,6 +11,16 @@ import type { Tag } from './tag';
 export interface ArticleSummary {
   id: number;
   slug: string;
+  /**
+     * Stable owner-scoped URL segment for personal log entries
+     * @nullable
+     */
+  logSlug?: string | null;
+  /**
+     * Owner ID for personal log entries
+     * @nullable
+     */
+  logOwnerId?: number | null;
   title: string;
   updatedAt: Date;
   createdAt: Date;

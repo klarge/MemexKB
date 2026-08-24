@@ -192,6 +192,10 @@ function SearchResultRow({ result, icon }: { result: SearchResult; icon: React.R
   );
 }
 
+function logHref(result: { logOwnerId?: number | null; logSlug?: string | null; slug: string }) {
+  return result.logOwnerId && result.logSlug ? `/logs/${result.logOwnerId}/${result.logSlug}` : `/wiki/${result.slug}`;
+}
+
 function DueDateBadge({ dueDate }: { dueDate: string }) {
   const d = new Date(dueDate);
   const overdue = isPast(d) && !isToday(d);
@@ -281,7 +285,7 @@ export default function Home() {
   const todayEntry = (logData?.entries ?? []).find((e) => e.title === todayTitle);
 
   const handleTodayLog = () => {
-    setLocation(todayEntry ? `/wiki/${todayEntry.slug}/edit` : "/wiki/new?log=1");
+    setLocation(todayEntry ? `${logHref(todayEntry)}/edit` : "/wiki/new?log=1");
   };
 
   const activeTasks = (dashboard?.activeTasks ?? []).slice(0, 5);
@@ -369,7 +373,12 @@ export default function Home() {
               </div>
               <div className="rounded-lg border bg-card divide-y divide-border overflow-hidden">
                 {searchData.logEntries.map((r) => (
-                  <SearchResultRow key={r.id} result={r} icon={<ScrollText className="h-4 w-4" />} />
+                  <Link key={r.id} href={logHref(r)}>
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
+                      <div className="shrink-0 text-muted-foreground"><ScrollText className="h-4 w-4" /></div>
+                      <div className="flex-1 min-w-0"><p className="font-medium text-sm truncate">{r.title}</p></div>
+                    </div>
+                  </Link>
                 ))}
               </div>
             </section>
@@ -455,7 +464,7 @@ export default function Home() {
               }
             >
               {recentLogs.map((entry) => (
-                <Link key={entry.id} href={`/wiki/${entry.slug}`}>
+                <Link key={entry.id} href={logHref(entry)}>
                   <div className="flex items-center gap-4 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
                     <div className="shrink-0 text-center w-10">
                       <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider leading-none">

@@ -322,6 +322,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ArticleStats"
 
+  /logs/{userId}/{logSlug}:
+    get:
+      operationId: getLogEntry
+      tags: [articles]
+      summary: Get a private log entry by its owner and stable log URL segment
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: logSlug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      responses:
+        "200":
+          description: The requested private log entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "404":
+          description: Log entry not found or not accessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /articles/{slug}:
     get:
       operationId: getArticle
@@ -1158,6 +1189,12 @@ components:
           type: integer
         slug:
           type: string
+        logSlug:
+          type: ["string", "null"]
+          description: Stable owner-scoped URL segment for personal log entries
+        logOwnerId:
+          type: ["integer", "null"]
+          description: Owner ID for personal log entries
         title:
           type: string
         updatedAt:
@@ -1250,6 +1287,9 @@ components:
           type: array
           items:
             type: integer
+        isLogEntry:
+          type: boolean
+          description: Create a personal log entry instead of a shared article
 
     ArticleUpdate:
       type: object

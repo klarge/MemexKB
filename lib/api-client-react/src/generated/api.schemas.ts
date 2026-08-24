@@ -74,6 +74,16 @@ export interface GroupSummary {
 export interface ArticleSummary {
   id: number;
   slug: string;
+  /**
+     * Stable owner-scoped URL segment for personal log entries
+     * @nullable
+     */
+  logSlug?: string | null;
+  /**
+     * Owner ID for personal log entries
+     * @nullable
+     */
+  logOwnerId?: number | null;
   title: string;
   updatedAt: string;
   createdAt: string;
@@ -116,6 +126,8 @@ export interface ArticleInput {
   content: string;
   groupIds?: number[];
   tagIds?: number[];
+  /** Create a personal log entry instead of a shared article */
+  isLogEntry?: boolean;
 }
 
 export interface ArticleUpdate {

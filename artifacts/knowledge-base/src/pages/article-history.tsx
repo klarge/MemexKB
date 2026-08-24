@@ -90,8 +90,21 @@ function WordDiff({ a, b }: { a: string; b: string }) {
   );
 }
 
-export default function ArticleHistory({ params }: { params?: { slug?: string } }) {
-  const slug = params?.slug ?? "";
+export default function ArticleHistory({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
+  const userId = Number(params?.userId);
+  const logSlug = params?.logSlug;
+  const isLogRoute = Number.isSafeInteger(userId) && userId > 0 && Boolean(logSlug);
+  const { data: logArticle, isLoading: isLoadingLog } = useQuery<{ slug: string }>({
+    queryKey: ["log-entry-for-history", userId, logSlug],
+    queryFn: () => fetch(`/api/logs/${userId}/${logSlug}`, { credentials: "include" }).then((r) => {
+      if (!r.ok) throw new Error("Failed to load log entry");
+      return r.json();
+    }),
+    enabled: isLogRoute,
+    retry: false,
+  });
+  const slug = isLogRoute ? (logArticle?.slug ?? "") : (params?.slug ?? "");
+  const articlePath = isLogRoute ? `/logs/${userId}/${logSlug}` : `/wiki/${slug}`;
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -102,7 +115,7 @@ export default function ArticleHistory({ params }: { params?: { slug?: string } 
   const { data: versions, isLoading } = useQuery({
     queryKey: ["article-versions", slug],
     queryFn: () => fetchVersions(slug),
-    enabled: !!slug,
+    enabled: !!slug && !isLoadingLog,
   });
 
   const [viewingId, setViewingId] = useState<number | null>(null);
@@ -133,7 +146,7 @@ export default function ArticleHistory({ params }: { params?: { slug?: string } 
       toast({ title: "Version restored", description: "The article has been restored to that version." });
       queryClient.invalidateQueries({ queryKey: ["article-versions", slug] });
       queryClient.invalidateQueries({ queryKey: ["getArticle", slug] });
-      setLocation(`/wiki/${slug}`);
+          setLocation(articlePath);
     },
     onError: (err) =>
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" }),
@@ -152,7 +165,7 @@ export default function ArticleHistory({ params }: { params?: { slug?: string } 
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => setLocation(`/wiki/${slug}`)}>
+        <Button variant="ghost" size="sm" onClick={() => setLocation(articlePath)}>
           <ChevronLeft className="h-4 w-4 mr-1" /> Back to article
         </Button>
       </div>
