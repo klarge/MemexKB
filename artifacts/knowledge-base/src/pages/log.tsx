@@ -50,15 +50,17 @@ export default function LogPage() {
     },
     enabled: siteSettings?.logEntriesEnabled === true,
     staleTime: 30_000,
+    refetchInterval: (query) => query.state.data?.schemaOutOfDate ? 5_000 : false,
   });
 
   // Merge each page into the accumulated list exactly once
   useEffect(() => {
-    if (!page || lastMergedOffset.current === offset) return;
+    if (!page) return;
+    if (offset === 0) setSchemaOutOfDate(page.schemaOutOfDate === true);
+    if (lastMergedOffset.current === offset) return;
     lastMergedOffset.current = offset;
     setAllEntries((prev) => (offset === 0 ? page.entries : [...prev, ...page.entries]));
     setHasMore(page.hasMore);
-    if (offset === 0) setSchemaOutOfDate(page.schemaOutOfDate === true);
   }, [page, offset]);
 
   const loadMore = useCallback(() => {

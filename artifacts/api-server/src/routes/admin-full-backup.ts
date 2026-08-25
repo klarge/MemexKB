@@ -174,7 +174,32 @@ async function buildBackup(): Promise<EnvironmentBackup> {
     const groups = await tx.select().from(groupsTable);
     const groupMembers = await tx.select().from(groupMembersTable);
     const tags = await tx.select().from(tagsTable);
-    const articles = await tx.select().from(articlesTable);
+    const logSlugColumn = await tx.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'articles'
+          AND column_name = 'log_slug'
+      ) AS "exists"
+    `);
+    const supportsLogSlug = (logSlugColumn.rows[0] as { exists?: boolean } | undefined)?.exists === true;
+    const articles = supportsLogSlug
+      ? await tx.select().from(articlesTable)
+      : (await tx.select({
+          id: articlesTable.id,
+          slug: articlesTable.slug,
+          title: articlesTable.title,
+          content: articlesTable.content,
+          isLogEntry: articlesTable.isLogEntry,
+          createdById: articlesTable.createdById,
+          updatedById: articlesTable.updatedById,
+          createdAt: articlesTable.createdAt,
+          updatedAt: articlesTable.updatedAt,
+        }).from(articlesTable)).map((article) => ({
+          ...article,
+          logSlug: article.isLogEntry ? article.slug : null,
+        }));
     const articleGroups = await tx.select().from(articleGroupsTable);
     const articleLinks = await tx.select().from(articleLinksTable);
     const articleImages = await tx.select().from(articleImagesTable);

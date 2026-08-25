@@ -209,7 +209,8 @@ function logUrlFields(article: { isLogEntry: boolean; logSlug: string | null; cr
   };
 }
 
-let logSlugColumnSupport: Promise<boolean> | undefined;
+let logSlugColumnSupport: { value: boolean; checkedAt: number } | undefined;
+const LOG_SCHEMA_RECHECK_MS = 5_000;
 
 /**
  * Older deployments can briefly run application code that expects log_slug before
@@ -217,7 +218,11 @@ let logSlugColumnSupport: Promise<boolean> | undefined;
  * still safe as a public segment when paired with their verified owner ID.
  */
 function hasLogSlugColumn(): Promise<boolean> {
-  logSlugColumnSupport ??= (async () => {
+  const now = Date.now();
+  if (logSlugColumnSupport?.value || (logSlugColumnSupport && now - logSlugColumnSupport.checkedAt < LOG_SCHEMA_RECHECK_MS)) {
+    return Promise.resolve(logSlugColumnSupport.value);
+  }
+  return (async () => {
     const result = await db.execute(sql`
       SELECT EXISTS (
         SELECT 1
@@ -227,9 +232,10 @@ function hasLogSlugColumn(): Promise<boolean> {
           AND column_name = 'log_slug'
       ) AS "exists"
     `);
-    return (result.rows[0] as { exists?: boolean } | undefined)?.exists === true;
+    const value = (result.rows[0] as { exists?: boolean } | undefined)?.exists === true;
+    logSlugColumnSupport = { value, checkedAt: Date.now() };
+    return value;
   })();
-  return logSlugColumnSupport;
 }
 
 router.get("/articles", optionalAuth, async (req, res) => {
