@@ -49,7 +49,7 @@ export interface UseWikilinkAutocompleteResult {
    * (ArrowUp / ArrowDown / Escape); the caller should stop propagation.
    * Does NOT handle Enter — the caller does that by reading selectedIndex.
    */
-  handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => boolean;
+  handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => boolean;
   /** Close the dropdown, cancel any pending request, and invalidate in-flight ones. */
   dismiss: () => void;
 }
@@ -131,7 +131,7 @@ export function useWikilinkAutocomplete(): UseWikilinkAutocompleteResult {
     setItems([]);
   }, []);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>): boolean => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>): boolean => {
     if (!isOpen || items.length === 0) return false;
     if (e.key === "ArrowDown") {
       e.preventDefault();

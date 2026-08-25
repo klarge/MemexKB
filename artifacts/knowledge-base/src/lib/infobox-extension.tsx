@@ -43,8 +43,20 @@ interface WikilinkValueInputProps {
   placeholder?: string;
 }
 
+function resizeInfoboxTextarea(element: HTMLTextAreaElement) {
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight}px`;
+}
+
+function renderInfoboxText(value: string): unknown[] {
+  return value.split("\n").flatMap((line, index) => [
+    ...(index > 0 ? [["br"]] : []),
+    line,
+  ]);
+}
+
 function WikilinkValueInput({ value, onChange, className, placeholder }: WikilinkValueInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [pendingCursor, setPendingCursor] = useState<number | null>(null);
   const { isOpen, items, selectedIndex, onInputChange, handleKeyDown: acKeyDown, dismiss } =
     useWikilinkAutocomplete();
@@ -56,6 +68,10 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
     inputRef.current.setSelectionRange(pendingCursor, pendingCursor);
     setPendingCursor(null);
   }, [pendingCursor, value]);
+
+  useEffect(() => {
+    if (inputRef.current) resizeInfoboxTextarea(inputRef.current);
+  }, [value]);
 
   const doInsert = useCallback(
     (item: WikilinkSuggestion) => {
@@ -77,12 +93,19 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
     [value, onChange, dismiss],
   );
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
     onInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && e.shiftKey) {
+      // Let the textarea insert the line break, but keep the parent editor
+      // from interpreting this as an editor-level hard break.
+      e.stopPropagation();
+      dismiss();
+      return;
+    }
     // Enter with an open dropdown: insert the selected suggestion
     if (e.key === "Enter" && isOpen && items.length > 0) {
       e.preventDefault();
@@ -91,16 +114,23 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
       if (item) doInsert(item);
       return;
     }
+    if (e.key === "Enter") {
+      // Preserve the cell's previous single-line Enter behavior.
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     // Arrow keys / Escape: delegate to the autocomplete hook
     acKeyDown(e);
   };
 
   return (
     <div className="relative min-w-0 flex-1">
-      <input
+      <textarea
         ref={inputRef}
         className={className}
         placeholder={placeholder}
+        rows={1}
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -133,6 +163,38 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
         </div>
       )}
     </div>
+  );
+}
+
+interface InfoboxCellInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  placeholder?: string;
+}
+
+function InfoboxCellInput({ value, onChange, className, placeholder }: InfoboxCellInputProps) {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current) resizeInfoboxTextarea(inputRef.current);
+  }, [value]);
+
+  return (
+    <textarea
+      ref={inputRef}
+      className={className}
+      placeholder={placeholder}
+      rows={1}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        e.stopPropagation();
+        if (!e.shiftKey) e.preventDefault();
+      }}
+      onClick={(e) => e.stopPropagation()}
+    />
   );
 }
 
@@ -262,18 +324,17 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
                   className="px-2 py-1.5 align-top bg-muted/40 text-left border-r border-border"
                   style={{ width: "42%" }}
                 >
-                  <input
-                    className="w-full bg-transparent font-medium text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
+                  <InfoboxCellInput
+                    className="w-full resize-none overflow-hidden bg-transparent font-medium text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
                     placeholder="Label"
                     value={row.label}
-                    onChange={(e) => updateRow(i, "label", e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
+                    onChange={(value) => updateRow(i, "label", value)}
                   />
                 </th>
                 <td className="px-2 py-1.5 align-top">
                   <div className="flex items-start gap-1">
                     <WikilinkValueInput
-                      className="w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
+                      className="w-full resize-none overflow-hidden bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
                       placeholder="Value"
                       value={row.value}
                       onChange={(v) => updateRow(i, "value", v)}
@@ -378,8 +439,8 @@ export const InfoBoxExtension = Node.create({
       .filter((r) => r.label || r.value)
       .map((r): [string, object, ...unknown[]] => [
         "tr", {},
-        ["th", {}, r.label],
-        ["td", {}, r.value],
+        ["th", {}, ...renderInfoboxText(r.label)],
+        ["td", {}, ...renderInfoboxText(r.value)],
       ]);
 
     const imageRow: [string, object, ...unknown[]] | null = imageUrl
