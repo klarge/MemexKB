@@ -1,0 +1,31 @@
+2026-08-25 13:53:27.957 UTC [171897] ERROR:  column "log_slug" does not exist at character 22
+
+2026-08-25 13:53:27.957 UTC [171897] STATEMENT:  select "id", "slug", "log_slug", "title", "content", "is_log_entry", "created_by_id", "updated_by_id", "created_at", "updated_at" from "articles"
+
+2026-08-25 13:56:49.944 UTC [28] LOG:  checkpoint starting: time
+
+2026-08-25 13:56:50.302 UTC [28] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.312 s, sync=0.008 s, total=0.358 s; sync files=4, longest=0.008 s, average=0.002 s; distance=12 kB, estimate=26 kB; lsn=0/1D49CD0, redo lsn=0/1D49C98
+
+2026-08-25 14:01:49.402 UTC [28] LOG:  checkpoint starting: time
+
+2026-08-25 14:01:49.748 UTC [28] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.309 s, sync=0.008 s, total=0.347 s; sync files=4, longest=0.007 s, average=0.002 s; distance=9 kB, estimate=25 kB; lsn=0/1D4C1B0, redo lsn=0/1D4C178
+
+2026-08-25 14:06:49.847 UTC [28] LOG:  checkpoint starting: time
+
+2026-08-25 14:06:50.204 UTC [28] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.313 s, sync=0.015 s, total=0.358 s; sync files=4, longest=0.015 s, average=0.004 s; distance=10 kB, estimate=23 kB; lsn=0/1D4EAB0, redo lsn=0/1D4EA78
+
+2026-08-25 14:08:04.503 UTC [173164] ERROR:  column "log_slug" does not exist at character 22
+
+2026-08-25 14:08:04.503 UTC [173164] STATEMENT:  select "id", "slug", "log_slug", "title", "content", "is_log_entry", "created_by_id", "updated_by_id", "created_at", "updated_at" from "articles"
+
+2026-08-25 14:08:42.957 UTC [173242] ERROR:  column "log_slug" does not exist at character 22
+
+2026-08-25 14:08:42.957 UTC [173242] STATEMENT:  select "id", "slug", "log_slug", "title", "content", "is_log_entry", "created_by_id", "updated_by_id", "created_at", "updated_at" from "articles"
+
+2026-08-25 14:11:49.277 UTC [28] LOG:  checkpoint starting: time
+
+2026-08-25 14:11:49.752 UTC [28] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.418 s, sync=0.019 s, total=0.475 s; sync files=5, longest=0.019 s, average=0.004 s; distance=20 kB, estimate=23 kB; lsn=0/1D53CD0, redo lsn=0/1D53C98
+
+2026-08-25 14:16:49.818 UTC [28] LOG:  checkpoint starting: time
+
+2026-08-25 14:16:50.699 UTC [28] LOG:  checkpoint complete: wrote 9 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.815 s, sync=0.028 s, total=0.881 s; sync files=7, longest=0.027 s, average=0.004 s; distance=27 kB, estimate=27 kB; lsn=0/1D5AAE0, redo lsn=0/1D5AAA8
