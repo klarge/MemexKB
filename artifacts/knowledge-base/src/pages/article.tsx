@@ -53,8 +53,10 @@ function errorStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
-export default function ArticleView({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
-  const { slug, userId: userIdParam, logSlug } = params || {};
+export default function ArticleView({ params }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string } }) {
+  const { slug, userId: userIdParam, logSlug, projectId: projectIdParam } = params || {};
+  const projectId = Number(projectIdParam);
+  const isProjectDocument = Number.isSafeInteger(projectId) && projectId > 0;
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -87,7 +89,11 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   const displayedRefetch = isLogRoute ? refetchLogArticle : refetchArticle;
   const articleIsMissing = displayedIsError && errorStatus(displayedError) === 404;
   const apiSlug = displayedArticle?.slug ?? actualSlug;
-  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/knowledge/${actualSlug}`;
+  const articlePath = isLogRoute
+    ? `/logs/${logOwnerId}/${logSlug}`
+    : isProjectDocument
+      ? `/projects/${projectId}/documents/${actualSlug}`
+      : `/knowledge/${actualSlug}`;
 
   // ─── Edit lock status ─────────────────────────────────────────────────────
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
@@ -112,7 +118,9 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     return () => clearInterval(interval);
   }, [displayedArticle?.id, apiSlug, user]);
 
-  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const canEdit = isProjectDocument
+    ? Boolean((displayedArticle as (typeof displayedArticle & { canEdit?: boolean }) | undefined)?.canEdit)
+    : user?.role === "admin" || user?.role === "editor";
   const lockHeldByOther = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId !== user?.id;
   const lockHeldByMe = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId === user?.id;
 
@@ -140,8 +148,8 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
       { slug: apiSlug },
       {
         onSuccess: () => {
-          toast({ title: "Article deleted" });
-          setLocation("/");
+          toast({ title: isProjectDocument ? "Document deleted" : "Article deleted" });
+          setLocation(isProjectDocument ? `/projects/${projectId}` : "/");
         },
         onError: (err) => {
           toast({
@@ -410,15 +418,15 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(isLogRoute ? `${articlePath}/edit` : `/knowledge/${actualSlug}/edit`)}
+                onClick={() => setLocation(isLogRoute || isProjectDocument ? `${articlePath}/edit` : `/knowledge/${actualSlug}/edit`)}
                 data-testid="button-edit-article"
               >
-                <Edit className="mr-2 h-4 w-4" /> Edit Article
+                <Edit className="mr-2 h-4 w-4" /> {isProjectDocument ? "Edit Document" : "Edit Article"}
               </Button>
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(isLogRoute ? `${articlePath}/history` : `/knowledge/${actualSlug}/history`)}
+                onClick={() => setLocation(isLogRoute || isProjectDocument ? `${articlePath}/history` : `/knowledge/${actualSlug}/history`)}
               >
                 <Clock className="mr-2 h-4 w-4" /> Version History
               </Button>
@@ -437,7 +445,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
                   <AlertDialogHeader>
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete the article.
+                      This action cannot be undone. This will permanently delete the {isProjectDocument ? "document" : "article"}.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

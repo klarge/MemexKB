@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import {
   Plus, Trash2, LayoutGrid, ArrowLeft, Loader2, X, Users, Shield, FolderKanban,
-  Archive, ArchiveRestore, ChevronDown, ChevronRight,
+  Archive, ArchiveRestore, ChevronDown, ChevronRight, FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -22,6 +22,15 @@ type ProjectDetail = {
   isOwner: boolean;
 };
 type GroupItem = { id: number; name: string; description: string };
+type ProjectDocument = {
+  id: number;
+  slug: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByName: string | null;
+  canEdit: boolean;
+};
 
 export default function ProjectPage({ params }: { params: { projectId: string } }) {
   const projectId = Number(params.projectId);
@@ -43,6 +52,15 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
     queryKey: ["all-groups"],
     queryFn: () => fetch("/api/groups").then((r) => r.json()),
     enabled: project?.isOwner === true,
+  });
+  const { data: documentsData, isLoading: isLoadingDocuments, isError: isDocumentsError } = useQuery<{ documents: ProjectDocument[] }>({
+    queryKey: ["project-documents", projectId],
+    queryFn: async () => {
+      const response = await fetch(`/api/projects/${projectId}/documents`);
+      if (!response.ok) throw new Error("Unable to load project documents.");
+      return response.json();
+    },
+    enabled: !!project,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -92,6 +110,10 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
     mutationFn: (boardId: number) => fetch(`/api/boards/${boardId}`, { method: "DELETE" }),
     onSuccess: invalidate,
   });
+  const deleteDocument = useMutation({
+    mutationFn: (slug: string) => fetch(`/api/projects/${projectId}/documents/${slug}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["project-documents", projectId] }),
+  });
 
   if (isLoading) {
     return (
@@ -109,6 +131,8 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
   const availableGroups = allGroups.filter((g) => !sharedGroupIds.has(g.id));
   const activeBoards = project.boards.filter((b) => !b.archivedAt);
   const archivedBoards = project.boards.filter((b) => !!b.archivedAt);
+  const documents = documentsData?.documents ?? [];
+  const canEditDocuments = project.isOwner || user?.role === "admin" || user?.role === "editor";
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -134,7 +158,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
               variant="destructive"
               size="sm"
               onClick={() => {
-                if (confirm("Delete this project and all its boards? This cannot be undone.")) {
+                if (confirm("Delete this project and all its boards and documents? This cannot be undone.")) {
                   deleteProject.mutate();
                 }
               }}
@@ -144,6 +168,71 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           )}
         </div>
       </div>
+
+      {/* Documents */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Documents
+          </h2>
+          {canEditDocuments && (
+            <Link href={`/projects/${projectId}/documents/new/edit`}>
+              <Button size="sm">
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> New Document
+              </Button>
+            </Link>
+          )}
+        </div>
+
+        {isLoadingDocuments ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : isDocumentsError ? (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 py-8 text-center">
+            <p className="text-sm font-medium text-destructive">Unable to load project documents.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Refresh the page to try again.</p>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 py-10 text-center text-muted-foreground">
+            <FileText className="mx-auto h-8 w-8 opacity-20 mb-2" />
+            <p className="text-sm">
+              {canEditDocuments
+                ? "No documents yet. Create one to keep project knowledge in one place."
+                : "No documents have been added to this project yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {documents.map((document) => (
+              <div key={document.id} className="group relative rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-primary/30">
+                <Link href={`/projects/${projectId}/documents/${document.slug}`}>
+                  <div className="cursor-pointer pr-8">
+                    <h3 className="font-semibold group-hover:text-primary transition-colors">{document.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Updated {format(new Date(document.updatedAt), "MMM d, yyyy")}
+                      {document.updatedByName ? ` by ${document.updatedByName}` : ""}
+                    </p>
+                  </div>
+                </Link>
+                {document.canEdit && (
+                  <button
+                    type="button"
+                    title="Delete document"
+                    onClick={() => {
+                      if (confirm(`Delete document "${document.title}"?`)) deleteDocument.mutate(document.slug);
+                    }}
+                    className="absolute top-3 right-3 p-1.5 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-muted transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Boards */}
       <section className="space-y-3">

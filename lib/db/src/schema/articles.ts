@@ -1,9 +1,10 @@
-import { pgTable, serial, text, timestamp, integer, primaryKey, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, primaryKey, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 import { groupsTable } from "./groups";
+import { projectsTable } from "./projects";
 
 export const articlesTable = pgTable("articles", {
   id: serial("id").primaryKey(),
@@ -13,6 +14,9 @@ export const articlesTable = pgTable("articles", {
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   isLogEntry: boolean("is_log_entry").notNull().default(false),
+  projectId: integer("project_id").references(() => projectsTable.id, {
+    onDelete: "cascade",
+  }),
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),
@@ -25,6 +29,7 @@ export const articlesTable = pgTable("articles", {
   uniqueIndex("articles_log_owner_slug_unique")
     .on(t.createdById, t.logSlug)
     .where(sql`log_slug IS NOT NULL`),
+  index("articles_project_updated_idx").on(t.projectId, t.updatedAt),
 ]);
 
 export const articleGroupsTable = pgTable(

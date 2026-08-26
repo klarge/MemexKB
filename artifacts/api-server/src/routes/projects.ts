@@ -8,6 +8,12 @@ import {
   boardCardsTable,
   boardCardMembersTable,
   boardCardCommentsTable,
+  articlesTable,
+  articleLinksTable,
+  articleImagesTable,
+  articleVersionsTable,
+  articleTagsTable,
+  tagsTable,
   groupsTable,
   groupMembersTable,
   usersTable,
@@ -15,6 +21,8 @@ import {
 } from "@workspace/db";
 import { eq, and, inArray, asc, desc, count, max, or, sql, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { sanitizeArticleHtml } from "../lib/sanitize";
+import { slugify, extractWikilinks } from "../lib/slugify";
 
 const router = Router();
 
@@ -66,6 +74,45 @@ async function checkProjectAccess(
     if (pg.length > 0) return { canAccess: true, isOwner: false, project };
   }
   return { canAccess: false, isOwner: false, project };
+}
+
+function canEditProjectDocument(
+  access: { canAccess: boolean; isOwner: boolean },
+  userRole: string | undefined,
+): boolean {
+  return access.canAccess && (access.isOwner || userRole === "editor");
+}
+
+async function getProjectDocumentTags(articleId: number) {
+  const rows = await db
+    .select({ id: tagsTable.id, name: tagsTable.name, color: tagsTable.color, createdAt: tagsTable.createdAt })
+    .from(articleTagsTable)
+    .innerJoin(tagsTable, eq(articleTagsTable.tagId, tagsTable.id))
+    .where(eq(articleTagsTable.articleId, articleId));
+  return rows.map((tag) => ({ ...tag, articleCount: 0 }));
+}
+
+function projectDocumentResponse(
+  article: typeof articlesTable.$inferSelect,
+  tags: Awaited<ReturnType<typeof getProjectDocumentTags>>,
+  canEdit: boolean,
+) {
+  return {
+    id: article.id,
+    slug: article.slug,
+    projectId: article.projectId,
+    title: article.title,
+    content: article.content,
+    updatedAt: article.updatedAt,
+    createdAt: article.createdAt,
+    updatedByName: null,
+    isRestricted: true,
+    canAccess: true,
+    canEdit,
+    groups: [],
+    tags,
+    backlinks: [],
+  };
 }
 
 async function getProjectIdForBoard(boardId: number): Promise<number | null> {
@@ -250,6 +297,225 @@ router.delete("/projects/:projectId/groups/:groupId", requireAuth, async (req, r
   const { canAccess, isOwner } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!canAccess || !isOwner) { res.status(403).json({ error: "Access denied" }); return; }
   await db.delete(projectGroupsTable).where(and(eq(projectGroupsTable.projectId, projectId), eq(projectGroupsTable.groupId, groupId)));
+  res.status(204).send();
+});
+
+// ─── Project Documents ───────────────────────────────────────────────────────
+
+router.get("/projects/:projectId/documents", requireAuth, async (req, res) => {
+  const projectId = Number(req.params.projectId);
+  const access = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!access.project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (!access.canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+
+  const documents = await db
+    .select({
+      id: articlesTable.id,
+      slug: articlesTable.slug,
+      projectId: articlesTable.projectId,
+      title: articlesTable.title,
+      updatedAt: articlesTable.updatedAt,
+      createdAt: articlesTable.createdAt,
+      updatedByName: usersTable.name,
+    })
+    .from(articlesTable)
+    .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
+    .where(and(eq(articlesTable.projectId, projectId), eq(articlesTable.isLogEntry, false)))
+    .orderBy(desc(articlesTable.updatedAt), desc(articlesTable.id));
+
+  res.json({
+    documents: documents.map((document) => ({
+      ...document,
+      canAccess: true,
+      canEdit: canEditProjectDocument(access, req.session.userRole),
+    })),
+  });
+});
+
+router.get("/projects/:projectId/documents/:slug", requireAuth, async (req, res) => {
+  const projectId = Number(req.params.projectId);
+  const access = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!access.project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (!access.canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+
+  const [document] = await db
+    .select()
+    .from(articlesTable)
+    .where(and(
+      eq(articlesTable.projectId, projectId),
+      eq(articlesTable.slug, String(req.params.slug)),
+      eq(articlesTable.isLogEntry, false),
+    ))
+    .limit(1);
+  if (!document) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const tags = await getProjectDocumentTags(document.id);
+  res.json(projectDocumentResponse(document, tags, canEditProjectDocument(access, req.session.userRole)));
+});
+
+router.post("/projects/:projectId/documents", requireAuth, async (req, res) => {
+  const projectId = Number(req.params.projectId);
+  const access = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!access.project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (!canEditProjectDocument(access, req.session.userRole)) {
+    res.status(403).json({ error: "Only the project owner, an administrator, or an editor can create documents" });
+    return;
+  }
+
+  const { title, content, tagIds } = req.body as { title?: string; content?: string; tagIds?: unknown };
+  const trimmedTitle = title?.trim();
+  if (!trimmedTitle) { res.status(400).json({ error: "Title required" }); return; }
+  const slug = slugify(trimmedTitle);
+  if (!slug) { res.status(400).json({ error: "Title must contain at least one letter or number" }); return; }
+
+  const existing = await db.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  if (existing.length > 0) {
+    res.status(409).json({ error: "An article already uses this URL. Choose a more specific title." });
+    return;
+  }
+
+  const sanitizedContent = sanitizeArticleHtml(content ?? "");
+  const article = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(824199)`);
+    const [slugConflict] = await tx.select({ id: articlesTable.id }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+    if (slugConflict) return null;
+
+    const [created] = await tx.insert(articlesTable).values({
+      slug,
+      title: trimmedTitle,
+      content: sanitizedContent,
+      isLogEntry: false,
+      projectId,
+      createdById: req.session.userId!,
+      updatedById: req.session.userId!,
+    }).returning();
+
+    const wikilinks = extractWikilinks(content ?? "");
+    if (wikilinks.length > 0) {
+      await tx.insert(articleLinksTable)
+        .values(wikilinks.map((target) => ({ fromArticleId: created.id, toSlug: slugify(target) })))
+        .onConflictDoNothing();
+    }
+
+    const imageIds = [...(content ?? "").matchAll(/\/api\/articles\/images\/(\d+)/g)]
+      .map((match) => parseInt(match[1], 10))
+      .filter((id) => !Number.isNaN(id));
+    if (imageIds.length > 0) {
+      await tx.update(articleImagesTable).set({ articleId: created.id }).where(inArray(articleImagesTable.id, imageIds));
+    }
+
+    await tx.insert(articleVersionsTable).values({
+      articleId: created.id,
+      versionNumber: 1,
+      title: created.title,
+      content: created.content,
+      createdById: req.session.userId!,
+    });
+    return created;
+  });
+
+  if (!article) { res.status(409).json({ error: "Could not reserve a unique document URL. Please try again." }); return; }
+  if (Array.isArray(tagIds)) {
+    const numericTagIds = tagIds.filter((id): id is number => typeof id === "number");
+    if (numericTagIds.length > 0) {
+      await db.insert(articleTagsTable)
+        .values(numericTagIds.map((tagId) => ({ articleId: article.id, tagId })))
+        .onConflictDoNothing();
+    }
+  }
+
+  const tags = await getProjectDocumentTags(article.id);
+  res.status(201).json(projectDocumentResponse(article, tags, true));
+});
+
+router.patch("/projects/:projectId/documents/:slug", requireAuth, async (req, res) => {
+  const projectId = Number(req.params.projectId);
+  const access = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!access.project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (!canEditProjectDocument(access, req.session.userRole)) {
+    res.status(403).json({ error: "Only the project owner, an administrator, or an editor can edit documents" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(articlesTable)
+    .where(and(eq(articlesTable.projectId, projectId), eq(articlesTable.slug, String(req.params.slug)), eq(articlesTable.isLogEntry, false)))
+    .limit(1);
+  if (!existing) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const { title, content, tagIds } = req.body as { title?: string; content?: string; tagIds?: unknown };
+  const nextTitle = title === undefined ? existing.title : title.trim();
+  if (!nextTitle) { res.status(400).json({ error: "Title required" }); return; }
+
+  const updates: Record<string, unknown> = {
+    title: nextTitle,
+    updatedAt: new Date(),
+    updatedById: req.session.userId!,
+  };
+  if (content !== undefined) updates.content = sanitizeArticleHtml(content);
+
+  const article = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(824199)`);
+    const [updated] = await tx.update(articlesTable).set(updates).where(eq(articlesTable.id, existing.id)).returning();
+    if (!updated) return null;
+
+    if (content !== undefined) {
+      await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, updated.id));
+      const wikilinks = extractWikilinks(content);
+      if (wikilinks.length > 0) {
+        await tx.insert(articleLinksTable)
+          .values(wikilinks.map((target) => ({ fromArticleId: updated.id, toSlug: slugify(target) })))
+          .onConflictDoNothing();
+      }
+
+      const imageIds = [...content.matchAll(/\/api\/articles\/images\/(\d+)/g)]
+        .map((match) => parseInt(match[1], 10))
+        .filter((id) => !Number.isNaN(id));
+      if (imageIds.length > 0) {
+        await tx.update(articleImagesTable).set({ articleId: updated.id }).where(inArray(articleImagesTable.id, imageIds));
+      }
+    }
+
+    const [versionCount] = await tx.select({ value: count() }).from(articleVersionsTable).where(eq(articleVersionsTable.articleId, updated.id));
+    await tx.insert(articleVersionsTable).values({
+      articleId: updated.id,
+      versionNumber: Number(versionCount?.value ?? 0) + 1,
+      title: updated.title,
+      content: updated.content,
+      createdById: req.session.userId!,
+    });
+    return updated;
+  });
+  if (!article) { res.status(409).json({ error: "Could not save this document. Reload and try again." }); return; }
+
+  if (Array.isArray(tagIds)) {
+    await db.delete(articleTagsTable).where(eq(articleTagsTable.articleId, article.id));
+    const numericTagIds = tagIds.filter((id): id is number => typeof id === "number");
+    if (numericTagIds.length > 0) {
+      await db.insert(articleTagsTable).values(numericTagIds.map((tagId) => ({ articleId: article.id, tagId }))).onConflictDoNothing();
+    }
+  }
+
+  const tags = await getProjectDocumentTags(article.id);
+  res.json(projectDocumentResponse(article, tags, true));
+});
+
+router.delete("/projects/:projectId/documents/:slug", requireAuth, async (req, res) => {
+  const projectId = Number(req.params.projectId);
+  const access = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!access.project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (!canEditProjectDocument(access, req.session.userRole)) {
+    res.status(403).json({ error: "Only the project owner, an administrator, or an editor can delete documents" });
+    return;
+  }
+
+  const deleted = await db.delete(articlesTable).where(and(
+    eq(articlesTable.projectId, projectId),
+    eq(articlesTable.slug, String(req.params.slug)),
+    eq(articlesTable.isLogEntry, false),
+  )).returning({ id: articlesTable.id });
+  if (deleted.length === 0) { res.status(404).json({ error: "Document not found" }); return; }
   res.status(204).send();
 });
 

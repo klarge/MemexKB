@@ -21,6 +21,8 @@ tags:
     description: Admin-only bulk operations
   - name: tags
     description: Tag management
+  - name: projects
+    description: Project workspaces, boards, and documents
 paths:
   /healthz:
     get:
@@ -333,6 +335,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArticleListResponse"
+
+  /projects/{projectId}/documents:
+    get:
+      operationId: listProjectDocuments
+      tags: [projects]
+      summary: List documents belonging to a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocumentListResponse"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createProjectDocument
+      tags: [projects]
+      summary: Create a document in a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectDocumentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocument"
+
+  /projects/{projectId}/documents/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getProjectDocument
+      tags: [projects]
+      summary: Read a project document
+      responses:
+        "200":
+          description: Project document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocument"
+    patch:
+      operationId: updateProjectDocument
+      tags: [projects]
+      summary: Update a project document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectDocumentInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDocument"
+    delete:
+      operationId: deleteProjectDocument
+      tags: [projects]
+      summary: Delete a project document
+      responses:
+        "204":
+          description: Deleted
 
   /articles/stats:
     get:
@@ -1234,6 +1320,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+
   schemas:
     PasswordRecoveryInput:
       type: object
@@ -1543,6 +1637,9 @@ components:
       properties:
         id:
           type: integer
+        projectId:
+          type: ["integer", "null"]
+          description: Owning project when this article is a project document
         slug:
           type: string
         title:
@@ -1562,6 +1659,9 @@ components:
           type: boolean
         canAccess:
           type: boolean
+        canEdit:
+          type: boolean
+          description: Whether the current user can edit a project document
         groups:
           type: array
           items:
@@ -1585,6 +1685,49 @@ components:
             $ref: "#/components/schemas/ArticleSummary"
         total:
           type: integer
+
+    ProjectDocumentInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        content:
+          type: string
+          description: HTML content
+        tagIds:
+          type: array
+          items:
+            type: integer
+
+    ProjectDocument:
+      allOf:
+        - $ref: "#/components/schemas/Article"
+        - type: object
+          required: [projectId, canEdit]
+          properties:
+            projectId:
+              type: integer
+            canEdit:
+              type: boolean
+
+    ProjectDocumentListResponse:
+      type: object
+      required: [documents]
+      properties:
+        documents:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/ArticleSummary"
+              - type: object
+                required: [projectId, canEdit]
+                properties:
+                  projectId:
+                    type: integer
+                  canEdit:
+                    type: boolean
 
     ArticleInput:
       type: object

@@ -90,9 +90,11 @@ function WordDiff({ a, b }: { a: string; b: string }) {
   );
 }
 
-export default function ArticleHistory({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
+export default function ArticleHistory({ params }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string } }) {
   const userId = Number(params?.userId);
   const logSlug = params?.logSlug;
+  const projectId = Number(params?.projectId);
+  const isProjectDocument = Number.isSafeInteger(projectId) && projectId > 0;
   const isLogRoute = Number.isSafeInteger(userId) && userId > 0 && Boolean(logSlug);
   const { data: logArticle, isLoading: isLoadingLog } = useQuery<{ slug: string }>({
     queryKey: ["log-entry-for-history", userId, logSlug],
@@ -104,13 +106,29 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
     retry: false,
   });
   const slug = isLogRoute ? (logArticle?.slug ?? "") : (params?.slug ?? "");
-  const articlePath = isLogRoute ? `/logs/${userId}/${logSlug}` : `/knowledge/${slug}`;
+  const articlePath = isLogRoute
+    ? `/logs/${userId}/${logSlug}`
+    : isProjectDocument
+      ? `/projects/${projectId}/documents/${slug}`
+      : `/knowledge/${slug}`;
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const { data: projectDocument } = useQuery<{ canEdit?: boolean }>({
+    queryKey: ["project-document-permissions", slug],
+    queryFn: async () => {
+      const response = await fetch(`/api/articles/${slug}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to load document permissions");
+      return response.json();
+    },
+    enabled: isProjectDocument && !!slug,
+    retry: false,
+  });
+  const canEdit = isProjectDocument
+    ? Boolean(projectDocument?.canEdit)
+    : user?.role === "admin" || user?.role === "editor";
 
   const { data: versions, isLoading } = useQuery({
     queryKey: ["article-versions", slug],

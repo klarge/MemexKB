@@ -222,6 +222,11 @@ export interface ArticleSummary {
 
 export interface Article {
   id: number;
+  /**
+     * Owning project when this article is a project document
+     * @nullable
+     */
+  projectId?: number | null;
   slug: string;
   title: string;
   /** HTML content of the article */
@@ -232,6 +237,8 @@ export interface Article {
   updatedByName?: string | null;
   isRestricted: boolean;
   canAccess: boolean;
+  /** Whether the current user can edit a project document */
+  canEdit?: boolean;
   groups: GroupSummary[];
   backlinks?: ArticleSummary[];
   tags?: Tag[];
@@ -240,6 +247,28 @@ export interface Article {
 export interface ArticleListResponse {
   articles: ArticleSummary[];
   total: number;
+}
+
+export interface ProjectDocumentInput {
+  /** @minLength 1 */
+  title: string;
+  /** HTML content */
+  content?: string;
+  tagIds?: number[];
+}
+
+export type ProjectDocument = Article & {
+  projectId: number;
+  canEdit: boolean;
+};
+
+export type ProjectDocumentListResponseDocumentsItem = ArticleSummary & {
+  projectId: number;
+  canEdit: boolean;
+};
+
+export interface ProjectDocumentListResponse {
+  documents: ProjectDocumentListResponseDocumentsItem[];
 }
 
 export interface ArticleInput {

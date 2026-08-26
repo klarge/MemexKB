@@ -11,6 +11,11 @@ import type { Tag } from './tag';
 
 export interface Article {
   id: number;
+  /**
+     * Owning project when this article is a project document
+     * @nullable
+     */
+  projectId?: number | null;
   slug: string;
   title: string;
   /** HTML content of the article */
@@ -21,6 +26,8 @@ export interface Article {
   updatedByName?: string | null;
   isRestricted: boolean;
   canAccess: boolean;
+  /** Whether the current user can edit a project document */
+  canEdit?: boolean;
   groups: GroupSummary[];
   backlinks?: ArticleSummary[];
   tags?: Tag[];

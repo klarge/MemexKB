@@ -264,6 +264,38 @@ function Router() {
         </AuthRoute>
       </Route>
 
+      <Route path="/projects/:projectId/documents/new/edit">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <ArticleEdit params={{ ...params, slug: "new" }} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/projects/:projectId/documents/:slug/edit">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <ArticleEdit params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/projects/:projectId/documents/:slug/history">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <ArticleHistory params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
+      <Route path="/projects/:projectId/documents/:slug">
+        {(params: Record<string, string>) => (
+          <AuthRoute>
+            <ArticleView params={params} />
+          </AuthRoute>
+        )}
+      </Route>
+
       <Route path="/projects/:projectId">
         {(params: Record<string, string>) => (
           <AuthRoute>

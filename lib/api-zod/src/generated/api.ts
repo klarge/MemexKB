@@ -225,6 +225,203 @@ export const ListArticlesMaintenanceResponse = zod.object({
 
 
 /**
+ * @summary List documents belonging to a project
+ */
+export const ListProjectDocumentsParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const ListProjectDocumentsResponse = zod.object({
+  "documents": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
+  "title": zod.string(),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
+  "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})).optional()
+}).and(zod.object({
+  "projectId": zod.number(),
+  "canEdit": zod.boolean()
+})))
+})
+
+
+/**
+ * @summary Create a document in a project
+ */
+export const CreateProjectDocumentParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+
+
+
+export const CreateProjectDocumentBody = zod.object({
+  "title": zod.string().min(1),
+  "content": zod.string().optional().describe('HTML content'),
+  "tagIds": zod.array(zod.number()).optional()
+})
+
+
+/**
+ * @summary Read a project document
+ */
+export const GetProjectDocumentParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "slug": zod.coerce.string()
+})
+
+export const GetProjectDocumentResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number().nullish().describe('Owning project when this article is a project document'),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "content": zod.string().describe('HTML content of the article'),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean(),
+  "canAccess": zod.boolean(),
+  "canEdit": zod.boolean().optional().describe('Whether the current user can edit a project document'),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})),
+  "backlinks": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
+  "title": zod.string(),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
+  "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})).optional()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})).optional()
+}).and(zod.object({
+  "projectId": zod.number(),
+  "canEdit": zod.boolean()
+}))
+
+
+/**
+ * @summary Update a project document
+ */
+export const UpdateProjectDocumentParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "slug": zod.coerce.string()
+})
+
+
+
+
+export const UpdateProjectDocumentBody = zod.object({
+  "title": zod.string().min(1),
+  "content": zod.string().optional().describe('HTML content'),
+  "tagIds": zod.array(zod.number()).optional()
+})
+
+export const UpdateProjectDocumentResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number().nullish().describe('Owning project when this article is a project document'),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "content": zod.string().describe('HTML content of the article'),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean(),
+  "canAccess": zod.boolean(),
+  "canEdit": zod.boolean().optional().describe('Whether the current user can edit a project document'),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})),
+  "backlinks": zod.array(zod.object({
+  "id": zod.number(),
+  "slug": zod.string(),
+  "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
+  "logOwnerId": zod.number().nullish().describe('Owner ID for personal log entries'),
+  "title": zod.string(),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedByName": zod.string().nullish(),
+  "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
+  "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
+  "groups": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})).optional()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "articleCount": zod.number()
+})).optional()
+}).and(zod.object({
+  "projectId": zod.number(),
+  "canEdit": zod.boolean()
+}))
+
+
+/**
+ * @summary Delete a project document
+ */
+export const DeleteProjectDocumentParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "slug": zod.coerce.string()
+})
+
+
+/**
  * @summary Get aggregate stats for the knowledge base dashboard
  */
 export const GetArticleStatsResponse = zod.object({
@@ -296,6 +493,7 @@ export const GetLogEntryParams = zod.object({
 
 export const GetLogEntryResponse = zod.object({
   "id": zod.number(),
+  "projectId": zod.number().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "content": zod.string().describe('HTML content of the article'),
@@ -304,6 +502,7 @@ export const GetLogEntryResponse = zod.object({
   "updatedByName": zod.string().nullish(),
   "isRestricted": zod.boolean(),
   "canAccess": zod.boolean(),
+  "canEdit": zod.boolean().optional().describe('Whether the current user can edit a project document'),
   "groups": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -352,6 +551,7 @@ export const GetArticleParams = zod.object({
 
 export const GetArticleResponse = zod.object({
   "id": zod.number(),
+  "projectId": zod.number().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "content": zod.string().describe('HTML content of the article'),
@@ -360,6 +560,7 @@ export const GetArticleResponse = zod.object({
   "updatedByName": zod.string().nullish(),
   "isRestricted": zod.boolean(),
   "canAccess": zod.boolean(),
+  "canEdit": zod.boolean().optional().describe('Whether the current user can edit a project document'),
   "groups": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -418,6 +619,7 @@ export const UpdateArticleBody = zod.object({
 
 export const UpdateArticleResponse = zod.object({
   "id": zod.number(),
+  "projectId": zod.number().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "content": zod.string().describe('HTML content of the article'),
@@ -426,6 +628,7 @@ export const UpdateArticleResponse = zod.object({
   "updatedByName": zod.string().nullish(),
   "isRestricted": zod.boolean(),
   "canAccess": zod.boolean(),
+  "canEdit": zod.boolean().optional().describe('Whether the current user can edit a project document'),
   "groups": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -609,6 +812,7 @@ export const SetArticleGroupsBody = zod.object({
 
 export const SetArticleGroupsResponse = zod.object({
   "id": zod.number(),
+  "projectId": zod.number().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "content": zod.string().describe('HTML content of the article'),
@@ -617,6 +821,7 @@ export const SetArticleGroupsResponse = zod.object({
   "updatedByName": zod.string().nullish(),
   "isRestricted": zod.boolean(),
   "canAccess": zod.boolean(),
+  "canEdit": zod.boolean().optional().describe('Whether the current user can edit a project document'),
   "groups": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

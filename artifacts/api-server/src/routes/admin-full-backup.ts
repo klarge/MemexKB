@@ -346,6 +346,11 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
       await tx.insert(groupsTable).values(backup.data.groups.map(restoreDates) as any);
       await tx.insert(groupMembersTable).values(backup.data.groupMembers.map(restoreDates) as any);
       await tx.insert(tagsTable).values(backup.data.tags.map(restoreDates) as any);
+      // Project documents reference their owning project, so restore projects
+      // before article rows. Backups created before project documents simply omit
+      // projectId and remain valid.
+      await tx.insert(projectsTable).values(backup.data.projects.map(restoreDates) as any);
+      await tx.insert(projectGroupsTable).values(backup.data.projectGroups.map(restoreDates) as any);
       await tx.insert(articlesTable).values(backup.data.articles.map(restoreDates) as any);
       await tx.insert(articleGroupsTable).values(backup.data.articleGroups.map(restoreDates) as any);
       await tx.insert(articleLinksTable).values(backup.data.articleLinks.map(restoreDates) as any);
@@ -356,8 +361,6 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
       await tx.insert(templateTagsTable).values(backup.data.templateTags.map(restoreDates) as any);
       await tx.insert(taskListsTable).values(backup.data.taskLists.map(restoreDates) as any);
       await tx.insert(tasksTable).values(backup.data.tasks.map(restoreDates) as any);
-      await tx.insert(projectsTable).values(backup.data.projects.map(restoreDates) as any);
-      await tx.insert(projectGroupsTable).values(backup.data.projectGroups.map(restoreDates) as any);
       await tx.insert(boardsTable).values(backup.data.boards.map(restoreDates) as any);
       await tx.insert(boardColumnsTable).values(backup.data.boardColumns.map(restoreDates) as any);
       await tx.insert(boardCardsTable).values(backup.data.boardCards.map(restoreDates) as any);

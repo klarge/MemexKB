@@ -92,8 +92,10 @@ function AutosaveChip({ status }: { status: AutosaveStatus }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ArticleEdit({ params }: { params?: { slug?: string; userId?: string; logSlug?: string } }) {
-  const { slug, userId: userIdParam, logSlug } = params || {};
+export default function ArticleEdit({ params }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string } }) {
+  const { slug, userId: userIdParam, logSlug, projectId: projectIdParam } = params || {};
+  const projectId = Number(projectIdParam);
+  const isProjectDocument = Number.isSafeInteger(projectId) && projectId > 0;
   const logOwnerId = Number(userIdParam);
   const isLogRoute = Number.isSafeInteger(logOwnerId) && logOwnerId > 0 && Boolean(logSlug);
   const isNew = !isLogRoute && (!slug || slug === "new");
@@ -105,7 +107,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         : searchParams.get("title") || "")
     : "";
 
-  const draftKey = isLog ? "memex-draft-log" : "memex-draft-article";
+  const draftKey = isLog ? "memex-draft-log" : isProjectDocument ? `memex-draft-project-${projectId}` : "memex-draft-article";
 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -117,6 +119,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [isLogSaving, setIsLogSaving] = useState(false);
+  const [isProjectSaving, setIsProjectSaving] = useState(false);
   const [slugDialogOpen, setSlugDialogOpen] = useState(false);
   const [slugDraft, setSlugDraft] = useState("");
 
@@ -164,7 +167,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   });
   const article = isLogRoute ? logArticle : regularArticle;
   const articleSlug = article?.slug ?? slug;
-  const articlePath = isLogRoute ? `/logs/${logOwnerId}/${logSlug}` : `/knowledge/${articleSlug}`;
+  const articlePath = isLogRoute
+    ? `/logs/${logOwnerId}/${logSlug}`
+    : isProjectDocument
+      ? `/projects/${projectId}/documents/${articleSlug}`
+      : `/knowledge/${articleSlug}`;
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
@@ -455,7 +462,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
           body: JSON.stringify({
             title: currentTitle,
             content: currentContent,
-            groupIds: isLog ? undefined : groupsRef.current,
+            groupIds: isLog || isProjectDocument ? undefined : groupsRef.current,
             tagIds: tagsRef.current,
           }),
         });
@@ -567,6 +574,32 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       return;
     }
 
+    if (isNew && isProjectDocument) {
+      setIsProjectSaving(true);
+      try {
+        const res = await fetch(`/api/projects/${projectId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ title, content, tagIds: selectedTags }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Failed to create document" }));
+          toast({ title: "Failed to create document", description: err.error, variant: "destructive" });
+          return;
+        }
+        const data = await res.json() as { slug: string };
+        localStorage.removeItem(draftKey);
+        toast({ title: "Document created" });
+        setLocation(`/projects/${projectId}/documents/${data.slug}`);
+      } catch {
+        toast({ title: "Network error", variant: "destructive" });
+      } finally {
+        setIsProjectSaving(false);
+      }
+      return;
+    }
+
     if (isNew) {
       createMutation.mutate(
         { data: { title, content, groupIds: isLog ? undefined : selectedGroups, tagIds: selectedTags } },
@@ -583,7 +616,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       );
     } else if (articleSlug) {
       updateMutation.mutate(
-        { slug: articleSlug, data: { title, content, groupIds: isLog ? undefined : selectedGroups, tagIds: selectedTags } },
+        { slug: articleSlug, data: { title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, tagIds: selectedTags } },
         {
           onSuccess: async (data) => {
             lastSavedRef.current = { title, content };
@@ -591,7 +624,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
             toast({ title: "Article updated" });
             await releaseLock();
-            setLocation(isLogRoute ? articlePath : `/knowledge/${data.slug}`);
+            setLocation(isLogRoute || isProjectDocument ? articlePath : `/knowledge/${data.slug}`);
           },
           onError: (err) => {
             toast({ title: "Failed to update", description: err.message, variant: "destructive" });
@@ -613,7 +646,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     );
   }
 
-  const isPending = isLogSaving || createMutation.isPending || updateMutation.isPending;
+  const isPending = isLogSaving || isProjectSaving || createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-6 pb-20">
@@ -621,11 +654,19 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation(isLog ? (isLogRoute ? articlePath : "/log") : isNew ? "/" : articlePath)}
+          onClick={() => setLocation(
+            isLog
+              ? (isLogRoute ? articlePath : "/log")
+              : isNew
+                ? (isProjectDocument ? `/projects/${projectId}` : "/")
+                : articlePath,
+          )}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-bold">{isLog ? "Create Log Entry" : isNew ? "Create Article" : "Edit Article"}</h1>
+        <h1 className="text-2xl font-bold">
+          {isLog ? "Create Log Entry" : isNew ? (isProjectDocument ? "Create Document" : "Create Article") : isProjectDocument ? "Edit Document" : "Edit Article"}
+        </h1>
         <div className="flex-1" />
         <AutosaveChip status={autosaveStatus} />
         <Button onClick={handleSave} disabled={isPending} data-testid="button-save-article">
@@ -675,7 +716,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="title" className="text-base">Article Title</Label>
-              {!isNew && !isLog && user?.role === "admin" && (
+              {!isNew && !isLog && !isProjectDocument && user?.role === "admin" && (
                 <Button type="button" variant="outline" size="sm" onClick={openSlugDialog}>
                   Edit URL
                 </Button>
@@ -691,7 +732,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             />
             {!isNew && (
               <p className="text-xs text-muted-foreground">
-                URL: <span className="font-mono">{isLogRoute ? articlePath : `/knowledge/${article?.slug ?? slug}`}</span>
+                URL: <span className="font-mono">{articlePath}</span>
               </p>
             )}
           </div>
@@ -889,6 +930,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                   </div>
                 </div>
               )}
+              {!isProjectDocument && (
               <div>
                 <Label className="mb-2 block">Access Control</Label>
                 <p className="text-xs text-muted-foreground mb-3">
@@ -914,6 +956,15 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                   ))}
                 </div>
               </div>
+              )}
+              {isProjectDocument && (
+                <div>
+                  <Label className="mb-2 block">Project access</Label>
+                  <p className="text-xs text-muted-foreground">
+                    This document is shared with everyone who can access this project.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

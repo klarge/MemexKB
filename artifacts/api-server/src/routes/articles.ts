@@ -22,7 +22,7 @@ import {
   projectsTable,
   projectGroupsTable,
 } from "@workspace/db";
-import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne } from "drizzle-orm";
+import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks, rewriteWikilinksForSlug } from "../lib/slugify";
@@ -202,6 +202,59 @@ function canAccessPrivateLog(
   return !article.isLogEntry || userRole === "admin" || (userId !== undefined && article.createdById === userId);
 }
 
+async function canAccessProject(
+  projectId: number,
+  userId: number | undefined,
+  userRole: string | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  const [project] = await db
+    .select({ createdById: projectsTable.createdById })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+  if (!project) return false;
+  if (userRole === "admin" || project.createdById === userId) return true;
+  const groupIds = await getUserGroupIds(userId);
+  if (groupIds.length === 0) return false;
+  const shared = await db
+    .select({ projectId: projectGroupsTable.projectId })
+    .from(projectGroupsTable)
+    .where(and(eq(projectGroupsTable.projectId, projectId), inArray(projectGroupsTable.groupId, groupIds)))
+    .limit(1);
+  return shared.length > 0;
+}
+
+async function canAccessArticleRecord(
+  article: { id: number; isLogEntry: boolean; createdById: number | null; projectId?: number | null },
+  userId: number | undefined,
+  userRole: string | undefined,
+): Promise<boolean> {
+  if (article.projectId !== null && article.projectId !== undefined) {
+    return canAccessProject(article.projectId, userId, userRole);
+  }
+  if (!canAccessPrivateLog(article, userId, userRole)) return false;
+  const articleGroupIds = (await getArticleGroups(article.id)).map((group) => group.id);
+  const userGroupIds = await getUserGroupIds(userId);
+  return canAccessArticle(articleGroupIds, userGroupIds, userRole);
+}
+
+async function canEditProjectDocument(
+  projectId: number,
+  userId: number | undefined,
+  userRole: string | undefined,
+): Promise<boolean> {
+  if (!(await canAccessProject(projectId, userId, userRole))) return false;
+  if (userRole === "admin") return true;
+  if (userRole === "editor") return true;
+  const [project] = await db
+    .select({ createdById: projectsTable.createdById })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+  return project?.createdById === userId;
+}
+
 function logUrlFields(article: { isLogEntry: boolean; logSlug: string | null; createdById: number | null }) {
   return {
     logSlug: article.isLogEntry ? article.logSlug : null,
@@ -274,8 +327,9 @@ router.get("/articles", optionalAuth, async (req, res) => {
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .$dynamic();
 
-  // Always exclude log entries from the regular article list
-  const conditions = [ne(articlesTable.isLogEntry, true)];
+  // Project documents are navigated through their project and must never surface
+  // in the global Knowledge index or search filters.
+  const conditions = [ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId)];
   if (search && typeof search === "string") {
     conditions.push(
       or(
@@ -342,8 +396,8 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
 
-  // Exclude log entries from all stats
-  const notLogEntry = ne(articlesTable.isLogEntry, true);
+  // Project documents belong to project metrics, not global Knowledge metrics.
+  const notLogEntry = and(ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId))!;
 
   const [[totalArticlesRow], [totalUsersRow], [totalGroupsRow], restrictedIds] = await Promise.all([
     db.select({ count: count() }).from(articlesTable).where(notLogEntry),
@@ -567,6 +621,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
         title: articlesTable.title,
         content: articlesTable.content,
         isLogEntry: articlesTable.isLogEntry,
+        projectId: articlesTable.projectId,
         createdById: articlesTable.createdById,
         updatedAt: articlesTable.updatedAt,
         createdAt: articlesTable.createdAt,
@@ -583,7 +638,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
 
     const userId = req.session.userId;
     const userRole = req.session.userRole;
-    if (!canAccessPrivateLog(legacyArticle, userId, userRole)) {
+    if (!(await canAccessArticleRecord(legacyArticle, userId, userRole))) {
       res.status(404).json({ error: "Article not found" });
       return;
     }
@@ -591,7 +646,9 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     const groups = await getArticleGroups(legacyArticle.id);
     const articleGroupIds = groups.map((g) => g.id);
     const isRestricted = articleGroupIds.length > 0;
-    const canAccess = userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false;
+    const canAccess = legacyArticle.projectId
+      ? await canAccessProject(legacyArticle.projectId, userId, userRole)
+      : (userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false);
     const tags = await getArticleTags(legacyArticle.id);
     res.json({
       id: legacyArticle.id,
@@ -601,7 +658,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
       updatedAt: legacyArticle.updatedAt,
       createdAt: legacyArticle.createdAt,
       updatedByName: legacyArticle.updatedByName ?? null,
-      isRestricted,
+        isRestricted: legacyArticle.projectId !== null || isRestricted,
       canAccess,
       groups: canAccess ? groups : [],
       tags,
@@ -612,7 +669,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     return;
   }
   const [article] = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
+    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(eq(articlesTable.slug, slug))
@@ -625,7 +682,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
 
   const userId = req.session.userId;
   const userRole = req.session.userRole;
-  if (!canAccessPrivateLog(article, userId, userRole)) {
+  if (!(await canAccessArticleRecord(article, userId, userRole))) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
@@ -634,12 +691,14 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   const articleGroupIds = groups.map((g) => g.id);
   const isRestricted = articleGroupIds.length > 0;
   // Unauthenticated users cannot read article content regardless of group restrictions
-  const canAccess = userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false;
+  const canAccess = article.projectId
+    ? await canAccessProject(article.projectId, userId, userRole)
+    : (userId ? canAccessArticle(articleGroupIds, userGroupIds, userRole) : false);
 
   const tags = await getArticleTags(article.id);
 
   if (!canAccess) {
-    res.json({ id: article.id, slug: article.slug, title: article.title, content: "", updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: false, groups, tags, backlinks: [], ...logUrlFields(article) });
+    res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: "", updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: false, groups, tags, backlinks: [], ...logUrlFields(article) });
     return;
   }
 
@@ -661,7 +720,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     }));
   }
 
-  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted, canAccess: true, groups, tags, backlinks, ...logUrlFields(article) });
+  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: true, canEdit: article.projectId ? await canEditProjectDocument(article.projectId, userId, userRole) : undefined, groups, tags, backlinks, ...logUrlFields(article) });
 });
 
 router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (req, res) => {
@@ -803,7 +862,7 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
   }
 });
 
-router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.patch("/articles/:slug", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const { title, content, groupIds, tagIds } = req.body;
   if (!(await hasLogSlugColumn())) {
@@ -825,6 +884,20 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
     return;
   }
 
+  if (existing.projectId !== null) {
+    if (!(await canEditProjectDocument(existing.projectId, req.session.userId, req.session.userRole))) {
+      res.status(403).json({ error: "You do not have permission to edit this document" });
+      return;
+    }
+    if (groupIds !== undefined) {
+      res.status(400).json({ error: "Project documents inherit access from their project" });
+      return;
+    }
+  } else if (req.session.userRole !== "admin" && req.session.userRole !== "editor") {
+    res.status(403).json({ error: "Editor access required" });
+    return;
+  }
+
   // Log entries can only be edited by their creator or an admin
   if (existing.isLogEntry && req.session.userRole !== "admin" && existing.createdById !== req.session.userId) {
     res.status(403).json({ error: "You can only edit your own log entries" });
@@ -836,12 +909,14 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
   }
 
   // Editors must be members of at least one group the article belongs to (admins bypass)
-  const articleGroups = await getArticleGroups(existing.id);
-  const articleGroupIds = articleGroups.map((g) => g.id);
-  const userGroupIds = await getUserGroupIds(req.session.userId);
-  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
-    res.status(403).json({ error: "You do not have permission to edit this article" });
-    return;
+  if (existing.projectId === null) {
+    const articleGroups = await getArticleGroups(existing.id);
+    const articleGroupIds = articleGroups.map((g) => g.id);
+    const userGroupIds = await getUserGroupIds(req.session.userId);
+    if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+      res.status(403).json({ error: "You do not have permission to edit this article" });
+      return;
+    }
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date(), updatedById: req.session.userId ?? null };
@@ -928,7 +1003,7 @@ router.patch("/articles/:slug", requireAuth, requireRole("admin", "editor"), asy
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
-  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: groups.length > 0, canAccess: true, groups, tags, backlinks: [], ...logUrlFields(article) });
+  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.projectId !== null || groups.length > 0, canAccess: true, canEdit: article.projectId ? true : undefined, groups, tags, backlinks: [], ...logUrlFields(article) });
 });
 
 // ─── Log Entries ─────────────────────────────────────────────────────────────
@@ -1037,7 +1112,7 @@ router.get("/search", requireAuth, async (req, res) => {
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-    .where(and(ne(articlesTable.isLogEntry, true), searchCond!))
+    .where(and(ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId), searchCond!))
     .orderBy(desc(articlesTable.updatedAt))
     .limit(20);
 
@@ -1217,20 +1292,18 @@ async function getActiveLock(articleId: number) {
 
 router.get("/articles/:slug/lock", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
-  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPrivateLog(article, req.session.userId, req.session.userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, req.session.userRole))) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
   // Apply the same access check as the article read endpoint — lock holder
   // details should not leak to users who cannot access the article.
-  const articleGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
-  const userGroupIds = await getUserGroupIds(req.session.userId);
-  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+  if (article.projectId !== null && !(await canAccessProject(article.projectId, req.session.userId, req.session.userRole))) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
@@ -1241,24 +1314,26 @@ router.get("/articles/:slug/lock", requireAuth, async (req, res) => {
   });
 });
 
-router.put("/articles/:slug/lock", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.put("/articles/:slug/lock", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const userId = req.session.userId!;
-  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPrivateLog(article, req.session.userId, req.session.userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, req.session.userRole))) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
 
-  // Only users who can access the article may acquire a lock on it.
-  const articleGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
-  const userGroupIds = await getUserGroupIds(req.session.userId);
-  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
-    res.status(403).json({ error: "Access denied" });
+  if (article.projectId !== null) {
+    if (!(await canEditProjectDocument(article.projectId, req.session.userId, req.session.userRole))) {
+      res.status(403).json({ error: "You do not have permission to edit this document" });
+      return;
+    }
+  } else if (req.session.userRole !== "admin" && req.session.userRole !== "editor") {
+    res.status(403).json({ error: "Editor access required" });
     return;
   }
 
@@ -1292,20 +1367,18 @@ router.delete("/articles/:slug/lock", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const userId = req.session.userId!;
   const userRole = req.session.userRole;
-  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPrivateLog(article, req.session.userId, userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, userRole))) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
 
   // Only users who can access the article may release its lock.
-  const articleGroupIds = (await getArticleGroups(article.id)).map((g) => g.id);
-  const userGroupIds = await getUserGroupIds(req.session.userId);
-  if (!canAccessArticle(articleGroupIds, userGroupIds, userRole)) {
+  if (article.projectId !== null && !(await canAccessProject(article.projectId, req.session.userId, userRole))) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
@@ -1325,7 +1398,7 @@ router.delete("/articles/:slug/lock", requireAuth, async (req, res) => {
   res.json({ message: "Lock released" });
 });
 
-router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.delete("/articles/:slug", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   if (!(await hasLogSlugColumn())) {
     const [legacyArticle] = await db
@@ -1345,6 +1418,15 @@ router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), as
     res.status(404).json({ error: "Article not found" });
     return;
   }
+  if (existing.projectId !== null) {
+    if (!(await canEditProjectDocument(existing.projectId, req.session.userId, req.session.userRole))) {
+      res.status(403).json({ error: "You do not have permission to delete this document" });
+      return;
+    }
+  } else if (req.session.userRole !== "admin" && req.session.userRole !== "editor") {
+    res.status(403).json({ error: "Editor access required" });
+    return;
+  }
   // Mirror PATCH's two-level authorization check:
   // 1. Log entries can only be deleted by their creator or an admin.
   if (existing.isLogEntry && req.session.userRole !== "admin" && existing.createdById !== req.session.userId) {
@@ -1352,11 +1434,13 @@ router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), as
     return;
   }
   // 2. Editors must be members of at least one of the article's groups (admins bypass).
-  const articleGroupIds = (await getArticleGroups(existing.id)).map((g) => g.id);
-  const userGroupIds = await getUserGroupIds(req.session.userId);
-  if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
-    res.status(403).json({ error: "You do not have permission to delete this article" });
-    return;
+  if (existing.projectId === null) {
+    const articleGroupIds = (await getArticleGroups(existing.id)).map((g) => g.id);
+    const userGroupIds = await getUserGroupIds(req.session.userId);
+    if (!canAccessArticle(articleGroupIds, userGroupIds, req.session.userRole)) {
+      res.status(403).json({ error: "You do not have permission to delete this article" });
+      return;
+    }
   }
   await db.delete(articlesTable).where(eq(articlesTable.slug, slug));
   res.json({ message: "Article deleted" });
@@ -1365,12 +1449,12 @@ router.delete("/articles/:slug", requireAuth, requireRole("admin", "editor"), as
 router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const supportsLogSlug = await hasLogSlugColumn();
-  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  const [article] = await db.select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById }).from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPrivateLog(article, req.session.userId, req.session.userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, req.session.userRole))) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
@@ -1387,6 +1471,7 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
     id: articlesTable.id,
     slug: articlesTable.slug,
     isLogEntry: articlesTable.isLogEntry,
+    projectId: articlesTable.projectId,
     createdById: articlesTable.createdById,
     title: articlesTable.title,
     updatedAt: articlesTable.updatedAt,
@@ -1403,7 +1488,8 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
 
-  const backlinkResult = await Promise.all(fromArticles.filter((a) => canAccessPrivateLog(a, userId, userRole)).map(async (a) => {
+  const backlinkResult = (await Promise.all(fromArticles.map(async (a) => {
+    if (!(await canAccessArticleRecord(a, userId, userRole))) return null;
     const bGroups = await getArticleGroups(a.id);
     const bGroupIds = bGroups.map((g) => g.id);
     const bIsRestricted = bGroupIds.length > 0;
@@ -1425,7 +1511,7 @@ router.get("/articles/:slug/backlinks", optionalAuth, async (req, res) => {
         : null,
       logOwnerId: a.isLogEntry ? a.createdById : null,
     };
-  }));
+  }))).filter((article): article is NonNullable<typeof article> => article !== null);
   res.json(backlinkResult);
 });
 
@@ -1452,6 +1538,10 @@ router.put("/articles/:slug/groups", requireAuth, requireRole("admin", "editor")
   }
   if (article.isLogEntry) {
     res.status(400).json({ error: "Personal log entries cannot be shared with groups" });
+    return;
+  }
+  if (article.projectId !== null) {
+    res.status(400).json({ error: "Project documents inherit access from their project" });
     return;
   }
   // Only users who can already access this article (or admins) may change its groups.
@@ -1482,7 +1572,6 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const userId = req.session.userId;
   const userRole = req.session.userRole;
-  const userGroupIds = await getUserGroupIds(userId);
   const [article] = await db
     .select({
       id: articlesTable.id,
@@ -1490,6 +1579,7 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
       title: articlesTable.title,
       content: articlesTable.content,
       isLogEntry: articlesTable.isLogEntry,
+      projectId: articlesTable.projectId,
       createdById: articlesTable.createdById,
     })
     .from(articlesTable)
@@ -1499,13 +1589,8 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPrivateLog(article, userId, userRole)) {
+  if (!(await canAccessArticleRecord(article, userId, userRole))) {
     res.status(404).json({ error: "Article not found" });
-    return;
-  }
-  const groups = await getArticleGroups(article.id);
-  if (!canAccessArticle(groups.map((g) => g.id), userGroupIds, userRole)) {
-    res.status(403).json({ error: "Access denied" });
     return;
   }
   const markdown = `# ${article.title}\n\n${turndown.turndown(article.content)}`;
@@ -1518,7 +1603,6 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const userId = req.session.userId;
   const userRole = req.session.userRole;
-  const userGroupIds = await getUserGroupIds(userId);
   const [article] = await db
     .select({
       id: articlesTable.id,
@@ -1526,6 +1610,7 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
       title: articlesTable.title,
       content: articlesTable.content,
       isLogEntry: articlesTable.isLogEntry,
+      projectId: articlesTable.projectId,
       createdById: articlesTable.createdById,
     })
     .from(articlesTable)
@@ -1535,13 +1620,8 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPrivateLog(article, userId, userRole)) {
+  if (!(await canAccessArticleRecord(article, userId, userRole))) {
     res.status(404).json({ error: "Article not found" });
-    return;
-  }
-  const groups = await getArticleGroups(article.id);
-  if (!canAccessArticle(groups.map((g) => g.id), userGroupIds, userRole)) {
-    res.status(403).json({ error: "Access denied" });
     return;
   }
 
@@ -1704,22 +1784,13 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
 router.get("/articles/:slug/versions", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const [article] = await db
-    .select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById })
+    .select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById })
     .from(articlesTable)
     .where(eq(articlesTable.slug, slug))
     .limit(1);
   if (!article) { res.status(404).json({ error: "Article not found" }); return; }
-  if (!canAccessPrivateLog(article, req.session.userId, req.session.userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, req.session.userRole))) {
     res.status(404).json({ error: "Article not found" }); return;
-  }
-
-  // Access check
-  const userId = req.session.userId;
-  const userRole = req.session.userRole;
-  const userGroupIds = await getUserGroupIds(userId);
-  const groups = await getArticleGroups(article.id);
-  if (!canAccessArticle(groups.map((g) => g.id), userGroupIds, userRole)) {
-    res.status(403).json({ error: "Access denied" }); return;
   }
 
   const versions = await db
@@ -1744,21 +1815,13 @@ router.get("/articles/:slug/versions/:versionId", requireAuth, async (req, res) 
   if (isNaN(versionId)) { res.status(400).json({ error: "Invalid version id" }); return; }
 
   const [article] = await db
-    .select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById })
+    .select({ id: articlesTable.id, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById })
     .from(articlesTable)
     .where(eq(articlesTable.slug, slug))
     .limit(1);
   if (!article) { res.status(404).json({ error: "Article not found" }); return; }
-  if (!canAccessPrivateLog(article, req.session.userId, req.session.userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, req.session.userRole))) {
     res.status(404).json({ error: "Article not found" }); return;
-  }
-
-  const userId = req.session.userId;
-  const userRole = req.session.userRole;
-  const userGroupIds = await getUserGroupIds(userId);
-  const groups = await getArticleGroups(article.id);
-  if (!canAccessArticle(groups.map((g) => g.id), userGroupIds, userRole)) {
-    res.status(403).json({ error: "Access denied" }); return;
   }
 
   const [version] = await db
@@ -1782,7 +1845,7 @@ router.get("/articles/:slug/versions/:versionId", requireAuth, async (req, res) 
   res.json(version);
 });
 
-router.post("/articles/:slug/versions/:versionId/restore", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
   const versionId = parseInt(String(req.params.versionId), 10);
   if (isNaN(versionId)) { res.status(400).json({ error: "Invalid version id" }); return; }
@@ -1807,13 +1870,21 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, requireR
     .where(eq(articlesTable.slug, slug))
     .limit(1);
   if (!article) { res.status(404).json({ error: "Article not found" }); return; }
-  if (!canAccessPrivateLog(article, req.session.userId, req.session.userRole)) {
+  if (!(await canAccessArticleRecord(article, req.session.userId, req.session.userRole))) {
     res.status(404).json({ error: "Article not found" }); return;
   }
 
-  const restoreGroups = await getArticleGroups(article.id);
-  if (!canAccessArticle(restoreGroups.map((g) => g.id), await getUserGroupIds(req.session.userId), req.session.userRole)) {
-    res.status(403).json({ error: "Access denied" }); return;
+  if (article.projectId !== null) {
+    if (!(await canEditProjectDocument(article.projectId, req.session.userId, req.session.userRole))) {
+      res.status(403).json({ error: "You do not have permission to restore this document" }); return;
+    }
+  } else if (req.session.userRole !== "admin" && req.session.userRole !== "editor") {
+    res.status(403).json({ error: "Editor access required" }); return;
+  } else {
+    const restoreGroups = await getArticleGroups(article.id);
+    if (!canAccessArticle(restoreGroups.map((g) => g.id), await getUserGroupIds(req.session.userId), req.session.userRole)) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
   }
 
   const [version] = await db
