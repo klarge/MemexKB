@@ -4,3 +4,4 @@
 - [Development schema sync](dev-schema-sync.md) — API dev workflow skips startup migrations; align the development database before testing new schema code.
 - [Article URL policy](article-url-policy.md) — titles retain stable URLs; only deliberate administrator URL changes migrate internal links.
 - [Private log URLs](private-log-urls.md) — personal logs use immutable owner-scoped paths and always require server-side owner/admin checks.
+- [Web login navigation](web-login-navigation.md) — after local login or initial setup, reload the destination so a fresh browser starts with the new session.

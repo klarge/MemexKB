@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, ShieldCheck } from "lucide-react";
 
 export default function Setup() {
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -52,13 +49,11 @@ export default function Setup() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? "Setup failed. Please try again.");
       }
-      // Populate the auth cache directly from the response so the app sees the
-      // authenticated user immediately — no refetch race and no full-page reload
-      // (which can race against Set-Cookie on Docker Desktop for Mac).
-      const user = await res.json();
-      queryClient.setQueryData(getGetMeQueryKey(), user);
+      await res.json();
       await queryClient.invalidateQueries({ queryKey: ["setup-status"] });
-      setLocation("/");
+      // Start the authenticated app with a clean cache once the session cookie
+      // from the setup response has been stored.
+      window.location.replace("/");
     } catch (err: unknown) {
       toast({
         title: "Setup failed",

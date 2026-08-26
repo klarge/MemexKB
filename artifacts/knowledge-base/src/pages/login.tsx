@@ -1,10 +1,9 @@
 import { useEffect } from "react";
-import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { useLogin } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,9 +35,7 @@ const SSO_ERRORS: Record<string, string> = {
 };
 
 export default function Login() {
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const login = useLogin();
 
   // Show SSO error from redirect params
@@ -62,24 +59,20 @@ export default function Login() {
     defaultValues: { email: "", password: "" },
   });
 
-  const onSubmit = (data: LoginFormValues) => {
-    login.mutate({ data }, {
-      onSuccess: (user) => {
-        // Populate the auth cache directly from the login response so navigation
-        // to "/" sees the user as authenticated immediately — no refetch race
-        // and no full-page reload (which can race against Set-Cookie on Docker
-        // Desktop for Mac).
-        queryClient.setQueryData(getGetMeQueryKey(), user);
-        setLocation("/");
-      },
-      onError: (error) => {
-        toast({
-          title: "Login failed",
-          description: error.message || "Please check your credentials and try again.",
-          variant: "destructive",
-        });
-      },
-    });
+  const onSubmit = async (data: LoginFormValues) => {
+    try {
+      await login.mutateAsync({ data });
+      // The session cookie is in the successful login response. A full
+      // navigation prevents stale unauthenticated React Query state from
+      // keeping a newly signed-in browser on /login.
+      window.location.replace("/");
+    } catch (error) {
+      toast({
+        title: "Login failed",
+        description: error instanceof Error ? error.message : "Please check your credentials and try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSso = (p: SsoProvider) => {
