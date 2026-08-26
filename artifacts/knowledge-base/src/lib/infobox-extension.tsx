@@ -45,7 +45,12 @@ interface WikilinkValueInputProps {
 
 function resizeInfoboxTextarea(element: HTMLTextAreaElement) {
   element.style.height = "auto";
-  element.style.height = `${element.scrollHeight}px`;
+  // A newly mounted textarea can report a zero scrollHeight while its
+  // ProseMirror node view is settling into the document. Keep one line of
+  // clickable surface in that case; subsequent changes still grow normally.
+  const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+  const minimumHeight = Math.max(Number.isFinite(lineHeight) ? lineHeight : 0, 20);
+  element.style.height = `${Math.max(element.scrollHeight, minimumHeight)}px`;
 }
 
 function renderInfoboxText(value: string): unknown[] {
@@ -134,6 +139,7 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onMouseDown={(e) => e.stopPropagation()}
         onBlur={() => {
           // Small delay so a click on a dropdown item fires before the blur closes it
           setTimeout(dismiss, 150);
@@ -183,11 +189,12 @@ function InfoboxCellInput({ value, onChange, className, placeholder }: InfoboxCe
   return (
     <textarea
       ref={inputRef}
-      className={className}
+      className={`${className ?? ""} min-h-5`}
       placeholder={placeholder}
       rows={1}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onMouseDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         if (e.key !== "Enter") return;
         e.stopPropagation();
