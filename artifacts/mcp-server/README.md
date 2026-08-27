@@ -16,9 +16,9 @@ Your LLM client gets five tools:
 
 ## Prerequisites
 
-- Node.js 18+
 - A running Memex instance
 - An API token (see below)
+- Node.js 18+ for the local checkout setup, or Docker Compose v2 for the packaged setup
 
 ## Step 1 — Create an API token in Memex
 
@@ -28,6 +28,8 @@ Your LLM client gets five tools:
 4. Copy the token — it's only shown once
 
 > **Permissions:** The token inherits the permissions of the user who creates it. Create it with an account that has read access to all articles you want the LLM to see. Group-restricted articles that the token owner can't access will be listed (title visible) but their content won't be readable.
+
+For an LLM integration, choose **Read-only** when creating the token unless the integration needs to change Memex data. Read-only keys retain the owner's visibility rules while rejecting all API writes.
 
 ## Step 2 — Build the server
 
@@ -46,7 +48,42 @@ pnpm build
 
 The compiled server lands at `dist/index.js`.
 
-## Step 3 — Add to Claude Desktop
+## Step 3 — Use the Docker Compose launcher
+
+The published Memex image includes the compiled MCP server and its production dependencies. The MCP server currently uses **stdio**, so it is not a detached network service. Start it through Compose only when an MCP client launches it:
+
+1. Copy `.env.example` to `.env` in the repository containing `docker-compose.yml`.
+2. Set `MEMEX_TOKEN` in `.env`, preferably to a Read-only API key created in Memex.
+3. Configure your MCP client to run:
+
+```text
+docker compose -f /absolute/path/to/memex/docker-compose.yml run --rm -T mcp
+```
+
+For Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "memex": {
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "/absolute/path/to/memex/docker-compose.yml",
+        "run",
+        "--rm",
+        "-T",
+        "mcp"
+      ]
+    }
+  }
+}
+```
+
+The Compose service supplies `MEMEX_URL=http://app:3000` and reads `MEMEX_TOKEN` from `.env`. A regular `docker compose up -d` does not start the MCP process. If you want to run the MCP server locally instead, continue with the Node-based client configuration below.
+
+## Step 4 — Add to Claude Desktop
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -67,7 +104,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 
 Restart Claude Desktop. You should see a 🔌 icon in the chat input area confirming tools are loaded.
 
-## Step 3 (alternative) — Add to Cursor
+## Step 4 (alternative) — Add to Cursor
 
 Open Cursor → Settings → MCP, then add a new server:
 

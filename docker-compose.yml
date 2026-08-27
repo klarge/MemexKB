@@ -52,5 +52,25 @@ services:
       db:
         condition: service_healthy
 
+  # ── MCP stdio launcher (opt-in) ───────────────────────────────────────────────
+  # This is intentionally a profile service: stdio must remain attached to the
+  # LLM client's stdin/stdout, so it should be started with `docker compose run`
+  # rather than as a detached `docker compose up` service.
+  mcp:
+    image: ghcr.io/klarge/memexkb:latest
+    profiles: ["mcp"]
+    stdin_open: true
+    tty: false
+    command: ["node", "/app/mcp/dist/index.js"]
+    environment:
+      MEMEX_URL: http://app:3000
+      # Set MEMEX_TOKEN in .env. The MCP process reports a clear error if it is
+      # omitted; keeping this optional lets `docker compose config` work for the
+      # normal app-only stack.
+      MEMEX_TOKEN: ${MEMEX_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_started
+
 volumes:
   pgdata:

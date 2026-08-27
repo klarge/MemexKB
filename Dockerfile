@@ -25,6 +25,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # Build the API server — produces artifacts/api-server/dist/index.mjs via esbuild
 RUN pnpm --filter @workspace/api-server run build
 
+# Build the stdio MCP server — its compiled output is packaged in the runtime
+# image so Docker users do not need a separate MCP build on the host.
+RUN pnpm --filter @workspace/mcp-server run build
+
 # Build the frontend SPA.
 # PORT is required by vite.config.ts even at build time (port validation).
 # BASE_PATH=/ because in Docker the frontend is served from the root path.
@@ -42,6 +46,7 @@ WORKDIR /app
 #   archiver   — ZIP bulk-export
 #   unzipper   — ZIP bulk-import
 #   pdfkit     — PDF article export
+# The MCP server has its own production dependency tree under /app/mcp.
 # All other runtime dependencies (express, pino, drizzle-orm, etc.) are already
 # compiled inline into dist/index.mjs by esbuild.
 RUN npm install --no-save \
@@ -51,6 +56,13 @@ RUN npm install --no-save \
 
 # Compiled API server bundle + pino worker thread files
 COPY --from=builder /app/artifacts/api-server/dist ./dist
+
+# MCP stdio server and its production-only SDK dependencies. Keep this in a
+# separate package root so its ESM metadata and node_modules stay isolated from
+# the API runtime.
+COPY --from=builder /app/artifacts/mcp-server/package.json ./mcp/package.json
+RUN npm install --prefix /app/mcp --omit=dev --no-package-lock
+COPY --from=builder /app/artifacts/mcp-server/dist ./mcp/dist
 
 # Pre-built frontend SPA (static files served by Express via STATIC_DIR)
 COPY --from=builder /app/artifacts/knowledge-base/dist/public ./public

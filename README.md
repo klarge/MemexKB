@@ -67,7 +67,7 @@ Required env: `DATABASE_URL` (Postgres connection string), `SESSION_SECRET`
 
 ## Self-Hosting with Docker
 
-Memex ships as a single Docker image (multi-platform: `linux/amd64` and `linux/arm64`) bundling both the API server and the pre-built frontend SPA. No Node.js or pnpm required on the host.
+Memex ships as a single Docker image (multi-platform: `linux/amd64` and `linux/arm64`) bundling the API server, pre-built frontend SPA, and the stdio MCP server. No Node.js or pnpm required on the host.
 
 ### Prerequisites
 
@@ -92,6 +92,40 @@ docker compose up -d
 ```
 
 On first boot, set `RUN_SEED=true` in `.env` together with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` to create the initial admin account. Remove the seed variables after the first successful start.
+
+### Use the MCP server from Compose
+
+The image includes the MCP server automatically, but the current MCP transport is **stdio**, not an HTTP endpoint. Do not start it as a detached service: it must stay attached to the MCP client that reads and writes its protocol messages.
+
+1. Create an API key in **Settings → API Keys**. For an LLM, use **Read-only** unless the integration genuinely needs to make changes.
+2. Add the token to your local `.env` file:
+
+   ```dotenv
+   MEMEX_TOKEN=replace-with-your-read-only-api-token
+   ```
+
+3. Configure Claude Desktop, Cursor, or another MCP client to launch the Compose service:
+
+   ```json
+   {
+     "mcpServers": {
+       "memex": {
+         "command": "docker",
+         "args": [
+           "compose",
+           "-f",
+           "/absolute/path/to/memex/docker-compose.yml",
+           "run",
+           "--rm",
+           "-T",
+           "mcp"
+         ]
+       }
+     }
+   }
+   ```
+
+The `mcp` service uses `http://app:3000` inside the Compose network and reads `MEMEX_TOKEN` from `.env`. A normal `docker compose up -d` still starts only PostgreSQL and the web application. See `artifacts/mcp-server/README.md` for client-specific configuration and local non-Docker setup.
 
 ### Environment variables
 
@@ -351,7 +385,7 @@ curl --fail-with-body "$MEMEX_URL/api/settings"
 
 ## MCP Server
 
-The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compatible LLM clients. Any authenticated user with an API token can connect.
+The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compatible LLM clients. Any authenticated user with an API token can connect. Read-only API keys are recommended for LLM integrations.
 
 **Available tools:**
 
@@ -366,7 +400,7 @@ The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compa
 **Setup (Claude Desktop):**
 
 1. Create an API token in Memex → Settings → API Keys
-2. Build the server: `pnpm --filter @workspace/mcp-server build`
+2. For a local checkout, build the server: `pnpm --filter @workspace/mcp-server build`. When using the published Docker image, the MCP server is already included.
 3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
