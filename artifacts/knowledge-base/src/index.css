@@ -4,6 +4,28 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
+/* Wikilinks use a dotted underline only when their destination is missing.
+   Existing links remain visibly interactive through color and hover state. */
+[data-testid="article-content"] a[data-wikilink="true"].wikilink-existing {
+  text-decoration: none;
+}
+
+[data-testid="article-content"] a[data-wikilink="true"].wikilink-existing:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+[data-testid="article-content"] a[data-wikilink="true"].wikilink-missing {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+[data-testid="article-content"] a[data-wikilink="true"].wikilink-pending {
+  text-decoration: none;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

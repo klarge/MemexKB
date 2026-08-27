@@ -97,6 +97,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
 
   // ─── Edit lock status ─────────────────────────────────────────────────────
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
+  const [wikilinkStates, setWikilinkStates] = useState<Record<string, "existing" | "missing">>({});
 
   useEffect(() => {
     if (!displayedArticle?.id || !user) return;
@@ -117,6 +118,47 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     const interval = setInterval(fetchLock, 30_000);
     return () => clearInterval(interval);
   }, [displayedArticle?.id, apiSlug, user]);
+
+  // Resolve wikilink targets after the article HTML has been rendered so the
+  // visual treatment can distinguish real destinations from create-new links.
+  useEffect(() => {
+    const content = document.querySelector("[data-testid='article-content']");
+    if (!content) return;
+
+    const links = Array.from(
+      content.querySelectorAll<HTMLAnchorElement>("a[data-wikilink='true']"),
+    );
+    const linkSlugs = new Set<string>();
+    for (const link of links) {
+      const href = link.getAttribute("href");
+      if (!href) continue;
+      const linkSlug = href.replace(/^\/knowledge\//, "");
+      linkSlugs.add(linkSlug);
+    }
+
+    let cancelled = false;
+    const resolveLinks = async () => {
+      await Promise.all(Array.from(linkSlugs).map(async (linkSlug) => {
+        try {
+          const response = await fetch(`/api/articles/${encodeURIComponent(linkSlug)}`, {
+            credentials: "include",
+          });
+          if (cancelled) return;
+          const status = response.status === 404 ? "missing" : "existing";
+          setWikilinkStates((current) =>
+            current[linkSlug] === status ? current : { ...current, [linkSlug]: status },
+          );
+        } catch {
+          // Keep transient failures in the neutral pending style; a failed
+          // probe should not make an otherwise valid link look missing.
+        }
+      }));
+    };
+    resolveLinks();
+    return () => {
+      cancelled = true;
+    };
+  }, [displayedArticle?.id, displayedArticle?.content]);
 
   const canEdit = isProjectDocument
     ? Boolean((displayedArticle as (typeof displayedArticle & { canEdit?: boolean }) | undefined)?.canEdit)
@@ -199,7 +241,10 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
         const linkSlug = knowledgeSlug(target);
         const link = document.createElement("a");
         link.href = `/knowledge/${linkSlug}`;
-        link.className = "text-primary hover:underline font-medium";
+        const linkState = wikilinkStates[linkSlug];
+        link.className = `text-primary hover:text-primary/80 font-medium no-underline ${
+          linkState ? `wikilink-${linkState}` : "wikilink-pending"
+        }`;
         link.dataset.wikilink = "true";
         link.textContent = label || target;
         fragment.append(link);
