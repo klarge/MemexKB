@@ -8,6 +8,7 @@ export const apiTokensTable = pgTable("api_tokens", {
     .references(() => usersTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   tokenHash: text("token_hash").notNull().unique(),
+  accessMode: text("access_mode").notNull().default("full"),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

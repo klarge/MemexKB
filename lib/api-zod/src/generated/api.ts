@@ -89,9 +89,12 @@ export const ResetRecoveredPasswordResponse = zod.object({
 /**
  * @summary List API tokens for the current user
  */
+export const listApiTokensResponseAccessModeDefault = `full`;
+
 export const ListApiTokensResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "accessMode": zod.enum(['full', 'read_only']).default(listApiTokensResponseAccessModeDefault).describe('Whether this token can make changes or only read data'),
   "lastUsedAt": zod.coerce.date().nullish(),
   "expiresAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -103,10 +106,11 @@ export const ListApiTokensResponse = zod.array(ListApiTokensResponseItem)
  * @summary Create a new API token
  */
 
-
+export const createApiTokenBodyAccessModeDefault = `full`;
 
 export const CreateApiTokenBody = zod.object({
   "name": zod.string().min(1).describe('Human-readable label for this token'),
+  "accessMode": zod.enum(['full', 'read_only']).default(createApiTokenBodyAccessModeDefault).describe('Choose full access or a token restricted to read requests'),
   "expiresAt": zod.coerce.date().optional().describe('Optional expiry date-time (ISO 8601)')
 })
 

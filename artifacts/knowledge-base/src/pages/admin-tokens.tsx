@@ -21,6 +21,7 @@ import {
 type AdminToken = {
   id: number;
   name: string;
+  accessMode: "full" | "read_only";
   userId: number;
   userName: string | null;
   userEmail: string | null;
@@ -134,6 +135,7 @@ export default function AdminTokens() {
                     <tr>
                       <th className="px-6 py-3 font-medium">Token Name</th>
                       <th className="px-6 py-3 font-medium">Owner</th>
+                      <th className="px-6 py-3 font-medium">Access</th>
                       <th className="px-6 py-3 font-medium">Status</th>
                       <th className="px-6 py-3 font-medium">Created</th>
                       <th className="px-6 py-3 font-medium">Last Used</th>
@@ -158,6 +160,11 @@ export default function AdminTokens() {
                           <td className="px-6 py-4">
                             <div className="font-medium">{token.userName ?? "—"}</div>
                             <div className="text-xs text-muted-foreground">{token.userEmail ?? ""}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge variant={token.accessMode === "read_only" ? "secondary" : "default"}>
+                              {token.accessMode === "read_only" ? "Read-only" : "Full access"}
+                            </Badge>
                           </td>
                           <td className="px-6 py-4">
                             <Badge variant={status.variant}>{status.label}</Badge>

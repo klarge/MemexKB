@@ -439,9 +439,22 @@ export interface AdminImportResponse {
   errors: string[];
 }
 
+/**
+ * Whether this token can make changes or only read data
+ */
+export type ApiTokenAccessMode = typeof ApiTokenAccessMode[keyof typeof ApiTokenAccessMode];
+
+
+export const ApiTokenAccessMode = {
+  full: 'full',
+  read_only: 'read_only',
+} as const;
+
 export interface ApiToken {
   id: number;
   name: string;
+  /** Whether this token can make changes or only read data */
+  accessMode: ApiTokenAccessMode;
   /** @nullable */
   lastUsedAt?: string | null;
   /** @nullable */
@@ -449,19 +462,45 @@ export interface ApiToken {
   createdAt: string;
 }
 
+/**
+ * Choose full access or a token restricted to read requests
+ */
+export type ApiTokenInputAccessMode = typeof ApiTokenInputAccessMode[keyof typeof ApiTokenInputAccessMode];
+
+
+export const ApiTokenInputAccessMode = {
+  full: 'full',
+  read_only: 'read_only',
+} as const;
+
 export interface ApiTokenInput {
   /**
      * Human-readable label for this token
      * @minLength 1
      */
   name: string;
+  /** Choose full access or a token restricted to read requests */
+  accessMode?: ApiTokenInputAccessMode;
   /** Optional expiry date-time (ISO 8601) */
   expiresAt?: string;
 }
 
+/**
+ * Access mode selected for this token
+ */
+export type ApiTokenCreatedAccessMode = typeof ApiTokenCreatedAccessMode[keyof typeof ApiTokenCreatedAccessMode];
+
+
+export const ApiTokenCreatedAccessMode = {
+  full: 'full',
+  read_only: 'read_only',
+} as const;
+
 export interface ApiTokenCreated {
   id: number;
   name: string;
+  /** Access mode selected for this token */
+  accessMode: ApiTokenCreatedAccessMode;
   /** The raw token value — save it now, it will not be shown again */
   token: string;
   message: string;

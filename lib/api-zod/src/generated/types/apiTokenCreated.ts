@@ -5,10 +5,13 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+import type { ApiTokenCreatedAccessMode } from './apiTokenCreatedAccessMode';
 
 export interface ApiTokenCreated {
   id: number;
   name: string;
+  /** Access mode selected for this token */
+  accessMode: ApiTokenCreatedAccessMode;
   /** The raw token value — save it now, it will not be shown again */
   token: string;
   message: string;

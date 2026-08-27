@@ -130,6 +130,7 @@ function NewTokenBanner({ created, onDismiss }: { created: ApiTokenCreated; onDi
       </div>
       <p className="text-xs text-muted-foreground">
         Use this token in the <code className="text-xs">Authorization: Bearer &lt;token&gt;</code> header.
+        {" "}Access: {created.accessMode === "read_only" ? "Read-only" : "Full access"}.
       </p>
       <Button size="sm" variant="ghost" onClick={onDismiss} className="text-xs h-7">
         I've saved it — dismiss
@@ -142,6 +143,7 @@ function NewTokenBanner({ created, onDismiss }: { created: ApiTokenCreated; onDi
 
 const newKeySchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
+  accessMode: z.enum(["full", "read_only"]),
   expiresAt: z.string().optional(),
 });
 type NewKeyFormValues = z.infer<typeof newKeySchema>;
@@ -159,14 +161,14 @@ function ApiKeysCard() {
 
   const form = useForm<NewKeyFormValues>({
     resolver: zodResolver(newKeySchema),
-    defaultValues: { name: "", expiresAt: "" },
+    defaultValues: { name: "", accessMode: "full", expiresAt: "" },
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListApiTokensQueryKey() });
 
   const onSubmit = (data: NewKeyFormValues) => {
     createToken.mutate(
-      { data: { name: data.name.trim(), expiresAt: data.expiresAt || undefined } },
+        { data: { name: data.name.trim(), accessMode: data.accessMode, expiresAt: data.expiresAt || undefined } },
       {
         onSuccess: (created) => {
           setNewToken(created);
@@ -217,7 +219,7 @@ function ApiKeysCard() {
           </CardTitle>
           <CardDescription className="mt-1">
             Personal API keys let you access this knowledge base programmatically.
-            Keys inherit your permissions.
+            Keys inherit your permissions, with an optional read-only restriction.
           </CardDescription>
         </div>
         {!showForm && (
@@ -255,6 +257,25 @@ function ApiKeysCard() {
                         {...field}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="accessMode" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Access</FormLabel>
+                    <FormControl>
+                      <select
+                        {...field}
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        data-testid="select-api-key-access"
+                      >
+                        <option value="full">Full access</option>
+                        <option value="read_only">Read-only</option>
+                      </select>
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Read-only keys can retrieve content you can access but cannot change anything.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -304,6 +325,10 @@ function ApiKeysCard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{token.name}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="font-medium text-foreground">
+                        {token.accessMode === "read_only" ? "Read-only" : "Full access"}
+                      </span>
+                      {" · "}
                       Created {formatDate(token.createdAt)}
                       {" · "}
                       {token.lastUsedAt ? `Last used ${formatDate(token.lastUsedAt)}` : "Never used"}

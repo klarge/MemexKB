@@ -13,6 +13,7 @@ router.get("/auth/tokens", requireAuth, async (req, res) => {
     .select({
       id: apiTokensTable.id,
       name: apiTokensTable.name,
+      accessMode: apiTokensTable.accessMode,
       lastUsedAt: apiTokensTable.lastUsedAt,
       expiresAt: apiTokensTable.expiresAt,
       createdAt: apiTokensTable.createdAt,
@@ -24,9 +25,18 @@ router.get("/auth/tokens", requireAuth, async (req, res) => {
 
 router.post("/auth/tokens", requireAuth, async (req, res) => {
   const userId = req.session.userId as number;
-  const { name, expiresAt } = req.body as { name?: unknown; expiresAt?: unknown };
+  const { name, accessMode: accessModeInput, expiresAt } = req.body as {
+    name?: unknown;
+    accessMode?: unknown;
+    expiresAt?: unknown;
+  };
   if (!name || typeof name !== "string") {
     res.status(400).json({ error: "Token name is required" });
+    return;
+  }
+  const accessMode = accessModeInput === undefined ? "full" : accessModeInput;
+  if (accessMode !== "full" && accessMode !== "read_only") {
+    res.status(400).json({ error: "Access mode must be full or read_only" });
     return;
   }
 
@@ -39,11 +49,13 @@ router.post("/auth/tokens", requireAuth, async (req, res) => {
       userId,
       name: name.trim(),
       tokenHash,
+      accessMode,
       expiresAt: expiresAt ? new Date(expiresAt as string) : null,
     })
     .returning({
       id: apiTokensTable.id,
       name: apiTokensTable.name,
+      accessMode: apiTokensTable.accessMode,
       createdAt: apiTokensTable.createdAt,
       expiresAt: apiTokensTable.expiresAt,
     });
@@ -51,6 +63,7 @@ router.post("/auth/tokens", requireAuth, async (req, res) => {
   res.status(201).json({
     ...token,
     token: rawToken,
+    accessMode: token.accessMode,
     message: "Save this token securely — it will not be shown again.",
   });
 });
@@ -77,6 +90,7 @@ router.get("/admin/tokens", requireAuth, requireRole("admin"), async (_req, res)
     .select({
       id: apiTokensTable.id,
       name: apiTokensTable.name,
+      accessMode: apiTokensTable.accessMode,
       lastUsedAt: apiTokensTable.lastUsedAt,
       expiresAt: apiTokensTable.expiresAt,
       createdAt: apiTokensTable.createdAt,

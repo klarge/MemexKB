@@ -34,11 +34,20 @@ export async function ssoAuthMiddleware(
 // Token auth (Bearer <sha256-hashed token stored in api_tokens table>)
 // ---------------------------------------------------------------------------
 
-async function resolveTokenAuth(req: Request): Promise<boolean> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return false;
+export type ApiTokenAccessMode = "full" | "read_only";
 
-  const rawToken = authHeader.slice(7).trim();
+function hasBearerAuth(req: Request): boolean {
+  return /^Bearer(?:\s|$)/i.test(req.headers.authorization ?? "");
+}
+
+function readBearerToken(req: Request): string | null {
+  const match = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "");
+  const rawToken = match?.[1]?.trim();
+  return rawToken || null;
+}
+
+export async function resolveTokenAuth(req: Request): Promise<boolean> {
+  const rawToken = readBearerToken(req);
   if (!rawToken) return false;
 
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
@@ -50,6 +59,7 @@ async function resolveTokenAuth(req: Request): Promise<boolean> {
       userRole: usersTable.role,
       userName: usersTable.name,
       userEmail: usersTable.email,
+      accessMode: apiTokensTable.accessMode,
       expiresAt: apiTokensTable.expiresAt,
     })
     .from(apiTokensTable)
@@ -71,8 +81,39 @@ async function resolveTokenAuth(req: Request): Promise<boolean> {
   req.session.userRole = row.userRole;
   req.session.userName = row.userName;
   req.session.userEmail = row.userEmail;
+  req.apiTokenAccessMode = row.accessMode as ApiTokenAccessMode;
 
   return true;
+}
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Resolve bearer credentials before route handlers and prevent read-only keys
+ * from reaching any mutating endpoint. Browser sessions are unaffected.
+ */
+export async function enforceApiTokenAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!hasBearerAuth(req)) {
+    next();
+    return;
+  }
+
+  const resolved = await resolveTokenAuth(req);
+  if (!resolved) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (req.apiTokenAccessMode === "read_only" && MUTATING_METHODS.has(req.method)) {
+    res.status(403).json({ error: "Read-only API keys cannot modify data" });
+    return;
+  }
+
+  next();
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +121,16 @@ async function resolveTokenAuth(req: Request): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (hasBearerAuth(req)) {
+    const resolved = await resolveTokenAuth(req);
+    if (resolved) {
+      next();
+      return;
+    }
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   if (req.session?.userId) {
     next();
     return;
@@ -95,7 +146,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 }
 
 export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
-  if (!req.session?.userId) {
+  if (hasBearerAuth(req)) {
     await resolveTokenAuth(req).catch(() => {});
   }
   next();
@@ -103,7 +154,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
 
 export function requireRole(...roles: string[]) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.session?.userId) {
+    if (hasBearerAuth(req)) {
       const resolved = await resolveTokenAuth(req);
       if (!resolved) {
         res.status(401).json({ error: "Unauthorized" });
@@ -129,5 +180,13 @@ declare module "express-session" {
       nonce: string;
       providerId: number;
     };
+  }
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      apiTokenAccessMode?: ApiTokenAccessMode;
+    }
   }
 }

@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import YAML from "yamljs";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { enforceApiTokenAccess } from "./lib/auth";
 import { pool } from "@workspace/db";
 import type { Pool as PgPool } from "pg";
 
@@ -137,6 +138,10 @@ app.use(
     })(),
   }),
 );
+
+// Resolve bearer API keys before route-level auth and enforce read-only keys
+// consistently across every mutating endpoint.
+app.use("/api", enforceApiTokenAccess);
 
 // Rate limiting on authentication endpoints to prevent brute-force attacks.
 // 10 attempts per 15-minute window per IP.
