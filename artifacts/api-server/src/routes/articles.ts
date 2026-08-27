@@ -709,15 +709,18 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   let backlinks: { id: number; slug: string; title: string; updatedAt: Date; createdAt: Date; updatedByName: string | null; isRestricted: boolean; canAccess: boolean; groups: { id: number; name: string; description: string | null }[]; tags: { id: number; name: string; color: string; createdAt: Date; articleCount: number }[]; logSlug: string | null; logOwnerId: number | null }[] = [];
   if (backlinkRows.length > 0) {
     const fromIds = [...new Set(backlinkRows.map((b) => b.fromArticleId))];
-    const fromArticles = await db.select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, isLogEntry: articlesTable.isLogEntry, createdById: articlesTable.createdById, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name }).from(articlesTable).leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id)).where(inArray(articlesTable.id, fromIds));
-    backlinks = await Promise.all(fromArticles.filter((a) => canAccessPrivateLog(a, userId, userRole)).map(async (a) => {
+    const fromArticles = await db.select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, isLogEntry: articlesTable.isLogEntry, projectId: articlesTable.projectId, createdById: articlesTable.createdById, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name }).from(articlesTable).leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id)).where(inArray(articlesTable.id, fromIds));
+    backlinks = (await Promise.all(fromArticles.map(async (a) => {
+      if (!(await canAccessArticleRecord(a, userId, userRole))) return null;
       const bGroups = await getArticleGroups(a.id);
       const bGroupIds = bGroups.map((g) => g.id);
-      const bIsRestricted = bGroupIds.length > 0;
-      const bCanAccess = canAccessArticle(bGroupIds, userGroupIds, userRole);
+      const bIsRestricted = a.projectId !== null || bGroupIds.length > 0;
+      const bCanAccess = a.projectId !== null
+        ? await canAccessProject(a.projectId, userId, userRole)
+        : canAccessArticle(bGroupIds, userGroupIds, userRole);
       const bTags = await getArticleTags(a.id);
       return { id: a.id, slug: a.slug, title: a.title, updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bCanAccess ? bGroups : [], tags: bTags, ...logUrlFields(a) };
-    }));
+    }))).filter((article): article is NonNullable<typeof article> => article !== null);
   }
 
   res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: true, canEdit: article.projectId ? await canEditProjectDocument(article.projectId, userId, userRole) : undefined, groups, tags, backlinks, ...logUrlFields(article) });
