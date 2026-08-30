@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useGetArticle,
@@ -34,6 +34,43 @@ import {
 interface LockStatus {
   articleId: number;
   lockedBy: { userId: number; userName: string; lockedAt: string } | null;
+}
+
+interface TableOfContentsItem {
+  id: string;
+  level: number;
+  text: string;
+}
+
+function addHeadingAnchors(root: ParentNode): TableOfContentsItem[] {
+  const usedIds = new Set<string>();
+  const items: TableOfContentsItem[] = [];
+  const headings = root.querySelectorAll<HTMLHeadingElement>("h1, h2, h3, h4, h5, h6");
+
+  headings.forEach((heading, index) => {
+    const text = heading.textContent?.trim() ?? "";
+    if (!text) return;
+
+    const baseId =
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .slice(0, 80) || `section-${index + 1}`;
+    let id = baseId;
+    let duplicateNumber = 2;
+    while (usedIds.has(id)) {
+      id = `${baseId}-${duplicateNumber}`;
+      duplicateNumber += 1;
+    }
+    usedIds.add(id);
+    heading.id = id;
+    items.push({ id, level: Number(heading.tagName.slice(1)), text });
+  });
+
+  return items;
 }
 
 // Keep browser-rendered wikilinks aligned with the API's article slug policy.
@@ -98,6 +135,8 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   // ─── Edit lock status ─────────────────────────────────────────────────────
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
   const [wikilinkStates, setWikilinkStates] = useState<Record<string, "existing" | "missing">>({});
+  const [tableOfContents, setTableOfContents] = useState<TableOfContentsItem[]>([]);
+  const articleContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!displayedArticle?.id || !user) return;
@@ -159,6 +198,29 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
       cancelled = true;
     };
   }, [displayedArticle?.id, displayedArticle?.content]);
+
+  // Add in-page anchors to the rendered headings and derive the sidebar table
+  // of contents from the same DOM the reader sees. Anchor IDs are added by
+  // processContent so React rerenders cannot remove them.
+  useEffect(() => {
+    const content = articleContentRef.current;
+    if (!content || !displayedArticle?.canAccess) {
+      setTableOfContents([]);
+      return;
+    }
+
+    const items: TableOfContentsItem[] = [];
+    const headings = content.querySelectorAll<HTMLHeadingElement>("h1, h2, h3, h4, h5, h6");
+
+    headings.forEach((heading) => {
+      const text = heading.textContent?.trim() ?? "";
+      if (text && heading.id) {
+        items.push({ id: heading.id, level: Number(heading.tagName.slice(1)), text });
+      }
+    });
+
+    setTableOfContents(items);
+  }, [displayedArticle?.id, displayedArticle?.content, displayedArticle?.canAccess, wikilinkStates]);
 
   const canEdit = isProjectDocument
     ? Boolean((displayedArticle as (typeof displayedArticle & { canEdit?: boolean }) | undefined)?.canEdit)
@@ -255,6 +317,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
       textNode.parentNode?.replaceChild(fragment, textNode);
     }
 
+    addHeadingAnchors(template.content);
     return DOMPurify.sanitize(template.innerHTML, { USE_PROFILES: { html: true } });
   };
 
@@ -449,7 +512,8 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
           </Card>
         ) : (
           <div
-            className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-2 prose-th:bg-muted [&_img]:cursor-zoom-in"
+            ref={articleContentRef}
+            className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:bg-muted [&_img]:cursor-zoom-in"
             dangerouslySetInnerHTML={{ __html: processContent(displayedArticle.content) }}
             data-testid="article-content"
           />
@@ -520,6 +584,31 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               <Button variant="secondary" className="w-full justify-start" onClick={exportMd}>
                 <FileText className="mr-2 h-4 w-4" /> Download Markdown
               </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {displayedArticle.canAccess && tableOfContents.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Table of Contents</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <nav aria-label="Table of contents">
+                <ul className="space-y-1.5 text-sm">
+                  {tableOfContents.map((item) => (
+                    <li key={item.id}>
+                      <a
+                        href={`#${item.id}`}
+                        className="block truncate text-muted-foreground hover:text-primary transition-colors"
+                        style={{ paddingLeft: `${Math.max(0, item.level - 1) * 12}px` }}
+                      >
+                        {item.text}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
             </CardContent>
           </Card>
         )}
