@@ -317,6 +317,26 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
       textNode.parentNode?.replaceChild(fragment, textNode);
     }
 
+    // Captions are stored as an image data attribute so the editor can keep
+    // images inline. Convert them to visible, safe text in the reader view.
+    const captionedImages = Array.from(
+      template.content.querySelectorAll<HTMLImageElement>("img[data-caption]"),
+    );
+    for (const image of captionedImages) {
+      const caption = image.getAttribute("data-caption")?.trim();
+      image.removeAttribute("data-caption");
+      if (!caption || !image.parentNode) continue;
+
+      const wrapper = document.createElement("span");
+      wrapper.className = "article-image";
+      const captionElement = document.createElement("span");
+      captionElement.className = "image-caption";
+      captionElement.textContent = caption;
+
+      image.parentNode.insertBefore(wrapper, image);
+      wrapper.append(image, captionElement);
+    }
+
     addHeadingAnchors(template.content);
     return DOMPurify.sanitize(template.innerHTML, { USE_PROFILES: { html: true } });
   };

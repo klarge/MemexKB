@@ -62,6 +62,14 @@ const ResizableImage = Image.extend({
           return sw ? parseInt(sw, 10) || null : null;
         },
       },
+      caption: {
+        default: "",
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const caption = typeof attributes.caption === "string" ? attributes.caption.trim() : "";
+          return caption ? { "data-caption": caption } : {};
+        },
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-caption") || "",
+      },
     };
   },
   addNodeView() {

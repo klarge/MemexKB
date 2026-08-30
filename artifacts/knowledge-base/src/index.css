@@ -26,6 +26,38 @@
   text-decoration: none;
 }
 
+/* Keep article images inline so saved resized images can share a line and
+   wrap naturally when their combined widths exceed the content column. */
+[data-testid="article-content"] p > img,
+[data-testid="article-content"] .article-image {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+  margin: 1em 0.75em 1em 0;
+}
+
+[data-testid="article-content"] .article-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+}
+
+[data-testid="article-content"] .image-caption {
+  display: block;
+  max-width: 100%;
+  margin-top: 0.35rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+[data-testid="article-content"] p > img {
+  height: auto;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

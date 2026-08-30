@@ -21,7 +21,7 @@ export function sanitizeArticleHtml(html: string): string {
       "*": ["class", "data-type", "data-wikilink"],
       div: ["data-title", "data-rows", "data-image"],
       a: ["href", "target", "rel"],
-      img: ["src", "alt", "title", "width", "height", "style"],
+      img: ["src", "alt", "title", "width", "height", "style", "data-caption"],
       th: ["colspan", "rowspan", "colwidth"],
       td: ["colspan", "rowspan", "style"],
       p: ["style"],

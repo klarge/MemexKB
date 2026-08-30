@@ -44,6 +44,17 @@ export function ResizableImageView({ node, updateAttributes, selected }: NodeVie
         className={`rounded transition-shadow ${selected ? "ring-2 ring-primary" : ""}`}
         draggable={false}
       />
+      <input
+        type="text"
+        aria-label="Image caption"
+        placeholder="Add caption…"
+        value={(node.attrs.caption as string) || ""}
+        onChange={(e) => updateAttributes({ caption: e.target.value })}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        className="mt-1 w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/60 focus:border-border focus:bg-background"
+      />
       <div
         className="absolute bottom-0 right-0 w-4 h-4 bg-primary/80 rounded-tl cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity z-10"
         onMouseDown={onMouseDown}
