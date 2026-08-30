@@ -330,11 +330,13 @@ router.get("/articles", optionalAuth, async (req, res) => {
   // Project documents are navigated through their project and must never surface
   // in the global Knowledge index or search filters.
   const conditions = [ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId)];
-  if (search && typeof search === "string") {
+  const searchTerm = typeof search === "string" && search.trim() ? search.trim() : null;
+  if (searchTerm) {
+    const searchPattern = `%${searchTerm}%`;
     conditions.push(
       or(
-        ilike(articlesTable.title, `%${search}%`),
-        ilike(articlesTable.content, `%${search}%`),
+        ilike(articlesTable.title, searchPattern),
+        ilike(articlesTable.content, searchPattern),
       )!,
     );
   }
@@ -344,7 +346,21 @@ router.get("/articles", optionalAuth, async (req, res) => {
   query = query.where(and(...conditions));
 
   const sortCol = sort === "updated_at" ? articlesTable.updatedAt : sort === "created_at" ? articlesTable.createdAt : articlesTable.title;
-  query = query.orderBy(order === "desc" ? desc(sortCol) : asc(sortCol));
+  if (searchTerm) {
+    const searchPattern = `%${searchTerm}%`;
+    // Keep substring search compatibility while ranking a title match above a
+    // content-only match. The requested sort remains the tie-breaker.
+    const relevance = sql<number>`
+      CASE WHEN ${articlesTable.title} ILIKE ${searchPattern} THEN 2 ELSE 0 END
+      + CASE WHEN ${articlesTable.content} ILIKE ${searchPattern} THEN 1 ELSE 0 END
+    `;
+    query = query.orderBy(
+      desc(relevance),
+      order === "desc" ? desc(sortCol) : asc(sortCol),
+    );
+  } else {
+    query = query.orderBy(order === "desc" ? desc(sortCol) : asc(sortCol));
+  }
   query = query.limit(Number(limit)).offset(Number(offset));
 
   const articles = await query;

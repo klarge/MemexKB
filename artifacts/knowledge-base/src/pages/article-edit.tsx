@@ -134,6 +134,9 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks what was last successfully saved to the server (existing articles)
   const lastSavedRef = useRef<{ title: string; content: string } | null>(null);
+  // Prevents background query refreshes after autosave from replacing the
+  // document the user is actively editing.
+  const loadedArticleKeyRef = useRef<string | null>(null);
   // Draft content to apply once the editor is ready (new articles)
   const pendingDraftRef = useRef<string | null>(null);
   // Stable ref to the schedule function so editor.on('update') never goes stale
@@ -172,6 +175,9 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     : isProjectDocument
       ? `/projects/${projectId}/documents/${articleSlug}`
       : `/knowledge/${articleSlug}`;
+  const editorArticleKey = isLogRoute
+    ? `log:${logOwnerId}:${logSlug}`
+    : `${isProjectDocument ? `project:${projectId}:` : "article:"}${articleSlug ?? ""}`;
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
@@ -393,24 +399,23 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
   // ─── Load article into form ────────────────────────────────────────────────
   useEffect(() => {
-    if (article && !isNew) {
-      setTitle(article.title);
-      setSelectedGroups(article.groups?.map((g) => g.id) || []);
-      setSelectedTags(article.tags?.map((t) => t.id) || []);
-      if (editor) {
-        if (editor.getHTML() !== article.content) {
-          // Pass false as emitUpdate so this programmatic load does NOT fire
-          // the editor's "update" event and accidentally schedule an autosave.
-          editor.commands.setContent(article.content, { emitUpdate: false });
-        }
-        // Seed lastSavedRef with the *normalized* HTML that Tiptap produces,
-        // not the raw string from the server — they can differ in whitespace /
-        // attribute ordering, which would cause the diff check to think content
-        // changed and trigger a spurious save on first open.
-        lastSavedRef.current = { title: article.title, content: editor.getHTML() };
-      }
+    if (!article || isNew || !editor || loadedArticleKeyRef.current === editorArticleKey) return;
+
+    loadedArticleKeyRef.current = editorArticleKey;
+    setTitle(article.title);
+    setSelectedGroups(article.groups?.map((g) => g.id) || []);
+    setSelectedTags(article.tags?.map((t) => t.id) || []);
+    if (editor.getHTML() !== article.content) {
+      // Pass false as emitUpdate so this programmatic load does NOT fire
+      // the editor's "update" event and accidentally schedule an autosave.
+      editor.commands.setContent(article.content, { emitUpdate: false });
     }
-  }, [article, isNew, editor]);
+    // Seed lastSavedRef with the *normalized* HTML that Tiptap produces,
+    // not the raw string from the server — they can differ in whitespace /
+    // attribute ordering, which would cause the diff check to think content
+    // changed and trigger a spurious save on first open.
+    lastSavedRef.current = { title: article.title, content: editor.getHTML() };
+  }, [article, isNew, editor, editorArticleKey]);
 
   // ─── Draft restore (new articles) ─────────────────────────────────────────
   useEffect(() => {
@@ -467,9 +472,13 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
           }),
         });
         if (!res.ok) throw new Error("autosave failed");
+        const savedArticle = await res.json();
         lastSavedRef.current = { title: currentTitle, content: currentContent };
         setAutosaveStatus("saved");
-        queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
+        // Keep other views in sync without refetching the article being edited.
+        // A refetch here can arrive while the user has typed more characters,
+        // causing the load effect to replace their newer local document.
+        queryClient.setQueryData(getGetArticleQueryKey(articleSlug), savedArticle);
       } catch {
         setAutosaveStatus("error");
       }
