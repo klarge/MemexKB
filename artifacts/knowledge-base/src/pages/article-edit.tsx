@@ -303,7 +303,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     extensions: [
       StarterKit.configure({ link: false }),
       Placeholder.configure({ placeholder: "Write your article content here…" }),
-      ResizableImage.configure({ inline: true }),
+      ResizableImage.configure({ inline: true, allowBase64: true }),
       Link.configure({ openOnClick: false }),
 
       Table.configure({ resizable: true }),
