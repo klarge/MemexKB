@@ -238,11 +238,15 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   // ─── Edit lock ────────────────────────────────────────────────────────────────
   const [lockConflict, setLockConflict] = useState<{ userName: string } | null>(null);
   const lockReleasedRef = useRef(false);
+  const lockAcquirePromiseRef = useRef<Promise<void> | null>(null);
 
   const releaseLock = useCallback(async () => {
     if (isNew || !articleSlug || lockReleasedRef.current) return;
     lockReleasedRef.current = true;
     try {
+      // If the user leaves immediately, ensure a pending acquire cannot finish
+      // after the release and recreate a stale self-lock.
+      await lockAcquirePromiseRef.current;
       await fetch(`/api/articles/${articleSlug}/lock`, { method: "DELETE", credentials: "include" });
     } catch {
       // best-effort
@@ -269,8 +273,10 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       }
     };
 
-    acquireLock();
-    heartbeatTimer = setInterval(acquireLock, 60_000);
+    lockAcquirePromiseRef.current = acquireLock();
+    heartbeatTimer = setInterval(() => {
+      lockAcquirePromiseRef.current = acquireLock();
+    }, 60_000);
 
     return () => {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -289,6 +295,16 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [isNew, articleSlug]);
+
+  const handleBack = async () => {
+    const destination = isLog
+      ? (isLogRoute ? articlePath : "/log")
+      : isNew
+        ? (isProjectDocument ? `/projects/${projectId}` : "/")
+        : articlePath;
+    await releaseLock();
+    setLocation(destination);
+  };
 
   // ─── Wikilink items ref ───────────────────────────────────────────────────────
   const wikilinkItemsRef = useRef<WikilinkItem[]>([]);
@@ -671,13 +687,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation(
-            isLog
-              ? (isLogRoute ? articlePath : "/log")
-              : isNew
-                ? (isProjectDocument ? `/projects/${projectId}` : "/")
-                : articlePath,
-          )}
+          onClick={handleBack}
+          aria-label="Back"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
