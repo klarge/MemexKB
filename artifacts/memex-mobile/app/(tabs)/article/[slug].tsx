@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -23,24 +23,42 @@ export default function ArticleDetail() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { getArticle, serverUrl, isOnline } = useApp();
+  const { getArticle, serverUrl, isOnline, user, sessionCookie } = useApp();
 
   const [article, setArticle] = useState<CachedArticle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef(0);
+  const identity = user && sessionCookie ? `${user.id}:${sessionCookie}` : null;
 
   useEffect(() => {
-    if (!slug) return;
+    const request = ++requestRef.current;
+    // Clear the previous identity's article synchronously.  The route can stay
+    // mounted across logout/login, so relying on a later fetch would expose it.
+    setArticle(null);
     setLoading(true);
     setError(null);
+    if (!slug || !identity) {
+      setError('Article not found.');
+      setLoading(false);
+      return;
+    }
     getArticle(slug)
       .then((a) => {
+        if (request !== requestRef.current) return;
         if (!a) setError('Article not found.');
         else setArticle(a);
       })
-      .catch(() => setError('Failed to load article.'))
-      .finally(() => setLoading(false));
-  }, [slug]);
+      .catch(() => {
+        if (request === requestRef.current) setError('Failed to load article.');
+      })
+      .finally(() => {
+        if (request === requestRef.current) setLoading(false);
+      });
+  // `getArticle` is intentionally omitted: cache updates change its callback
+  // identity, but should not repeatedly refetch the same detail view.  The
+  // auth identity is the security boundary that must trigger a reload.
+  }, [slug, identity]);
 
   const s = styles(colors, insets, width);
 

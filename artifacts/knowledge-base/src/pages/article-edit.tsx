@@ -124,6 +124,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
   const [title, setTitle] = useState(prefillTitle);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+  const [visibility, setVisibility] = useState<"personal" | "group" | "public">("personal");
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [isLogSaving, setIsLogSaving] = useState(false);
@@ -166,15 +167,15 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   // 500 was unnecessarily large and would be slow at scale.
   const { data: articlesData } = useListArticles({ limit: 100, sort: "updated_at", order: "desc" });
 
-  const { data: regularArticle, isLoading: isLoadingArticle } = useGetArticle(slug as string, {
+  const { data: regularArticle, isLoading: isLoadingArticle, isError: isArticleError } = useGetArticle(slug as string, {
     query: {
       enabled: !isNew && !isLogRoute && !!slug,
-      queryKey: getGetArticleQueryKey(slug as string),
+      queryKey: [...getGetArticleQueryKey(slug as string), user?.id],
       retry: false,
     },
   });
-  const { data: logArticle, isLoading: isLoadingLog } = useGetLogEntry(logOwnerId, logSlug ?? "", {
-    query: { enabled: isLogRoute, retry: false, queryKey: getGetLogEntryQueryKey(logOwnerId, logSlug ?? "") },
+  const { data: logArticle, isLoading: isLoadingLog, isError: isLogError } = useGetLogEntry(logOwnerId, logSlug ?? "", {
+    query: { enabled: isLogRoute, retry: false, queryKey: [...getGetLogEntryQueryKey(logOwnerId, logSlug ?? ""), user?.id] },
   });
   const article = isLogRoute ? logArticle : regularArticle;
   const articleSlug = article?.slug ?? slug;
@@ -186,10 +187,18 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const editorArticleKey = isLogRoute
     ? `log:${logOwnerId}:${logSlug}`
     : `${isProjectDocument ? `project:${projectId}:` : "article:"}${articleSlug ?? ""}`;
+  const canEditArticle = isNew || Boolean(article?.canEdit);
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
   const updateSlugMutation = useUpdateArticleSlug();
+
+  useEffect(() => {
+    if (!isNew && article && !canEditArticle) {
+      toast({ title: "Read-only article", description: "You do not have permission to edit this article.", variant: "destructive" });
+      setLocation(articlePath, { replace: true });
+    }
+  }, [article, canEditArticle, isNew, articlePath, setLocation, toast]);
 
   const openSlugDialog = () => {
     setSlugDraft(article?.slug ?? slug ?? "");
@@ -254,7 +263,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   }, [isNew, articleSlug]);
 
   useEffect(() => {
-    if (isNew || !articleSlug) return;
+    if (isNew || !articleSlug || !canEditArticle) return;
 
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -282,7 +291,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       releaseLock();
     };
-  }, [isNew, articleSlug, releaseLock]);
+  }, [isNew, articleSlug, releaseLock, canEditArticle]);
 
   useEffect(() => {
     if (isNew || !articleSlug) return;
@@ -428,6 +437,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     loadedArticleKeyRef.current = editorArticleKey;
     setTitle(article.title);
     setSelectedGroups(article.groups?.map((g) => g.id) || []);
+    setVisibility(article.visibility ?? (article.groups?.length ? "group" : "personal"));
     setSelectedTags(article.tags?.map((t) => t.id) || []);
     if (editor.getHTML() !== article.content) {
       // Pass false as emitUpdate so this programmatic load does NOT fire
@@ -467,7 +477,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
   // ─── Autosave: existing articles ──────────────────────────────────────────
   const scheduleAutosave = useCallback(() => {
-    if (isNew || !articleSlug || !editor) return;
+    if (isNew || !articleSlug || !editor || !canEditArticle) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     autosaveTimerRef.current = setTimeout(async () => {
@@ -492,6 +502,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             title: currentTitle,
             content: currentContent,
             groupIds: isLog || isProjectDocument ? undefined : groupsRef.current,
+             visibility: isLog || isProjectDocument ? undefined : visibility,
             tagIds: tagsRef.current,
           }),
         });
@@ -507,7 +518,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         setAutosaveStatus("error");
       }
     }, 3000);
-  }, [isNew, articleSlug, editor, queryClient]);
+  }, [isNew, articleSlug, editor, queryClient, visibility, isLog, isProjectDocument, canEditArticle]);
 
   // ─── Autosave: new articles → localStorage ────────────────────────────────
   const scheduleDraftSave = useCallback(() => {
@@ -571,6 +582,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
   // ─── Manual save ─────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (!canEditArticle) return;
     if (!title.trim()) {
       toast({ title: "Title required", variant: "destructive" });
       return;
@@ -635,7 +647,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
     if (isNew) {
       createMutation.mutate(
-        { data: { title, content, groupIds: isLog ? undefined : selectedGroups, tagIds: selectedTags } },
+        { data: { title, content, groupIds: isLog ? undefined : selectedGroups, visibility: isLog ? undefined : visibility, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
             localStorage.removeItem(draftKey);
@@ -649,7 +661,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       );
     } else if (articleSlug) {
       updateMutation.mutate(
-        { slug: articleSlug, data: { title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, tagIds: selectedTags } },
+        { slug: articleSlug, data: { title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, visibility: isLog || isProjectDocument ? undefined : visibility, tagIds: selectedTags } },
         {
           onSuccess: async (data) => {
             lastSavedRef.current = { title, content };
@@ -675,6 +687,18 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     return (
       <div className="flex justify-center p-12">
         <Loader2 className="animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isNew && (isArticleError || isLogError || !article)) {
+    return (
+      <div className="rounded-lg border border-dashed p-12 text-center">
+        <h2 className="text-xl font-semibold">Article not found</h2>
+        <p className="mt-2 text-muted-foreground">This article does not exist or you do not have access to edit it.</p>
+        <Button className="mt-4" variant="outline" onClick={() => setLocation("/knowledge")}>
+          Back to knowledge
+        </Button>
       </div>
     );
   }
@@ -960,10 +984,21 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
               )}
               {!isProjectDocument && (
               <div>
-                <Label className="mb-2 block">Access Control</Label>
+                <Label className="mb-2 block">Visibility</Label>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Restrict this article to specific groups. If no groups are selected, everyone can access it.
+                  Personal is only you and administrators. Public is visible to every signed-in user.
                 </p>
+                <div className="grid grid-cols-3 gap-1 mb-4" role="group" aria-label="Article visibility">
+                  {(["personal", "group", "public"] as const).map((option) => (
+                    <Button key={option} type="button" size="sm" variant={visibility === option ? "default" : "outline"} onClick={() => {
+                      setVisibility(option);
+                      if (option !== "group") setSelectedGroups([]);
+                    }}>
+                      {option[0].toUpperCase() + option.slice(1)}
+                    </Button>
+                  ))}
+                </div>
+                {visibility === "group" && (
                 <div className="space-y-2">
                   {groupsData?.map((group) => (
                     <div key={group.id} className="flex items-center space-x-2">
@@ -983,6 +1018,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                     </div>
                   ))}
                 </div>
+                )}
               </div>
               )}
               {isProjectDocument && (

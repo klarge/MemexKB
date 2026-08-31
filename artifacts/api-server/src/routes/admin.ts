@@ -245,6 +245,8 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
   }
 
   const articles = await db.select().from(articlesTable);
+  const articleOwners = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable);
+  const ownerEmailById = new Map(articleOwners.map((owner) => [owner.id, owner.email]));
   const allGroups = await db.select().from(articleGroupsTable);
   const groups = await db.select().from(groupsTable);
   const groupMap = new Map(groups.map((g) => [g.id, g]));
@@ -327,6 +329,8 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
     const meta = {
       slug: article.slug,
       title: article.title,
+      visibility: article.visibility,
+      createdByEmail: article.createdById === null ? null : (ownerEmailById.get(article.createdById) ?? null),
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
       groups: articleGroups,
@@ -455,6 +459,8 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
   // ── Pre-load group names ─────────────────────────────────────────────────
   const allGroups = await db.select({ id: groupsTable.id, name: groupsTable.name }).from(groupsTable);
   const groupsByName = new Map(allGroups.map((g) => [g.name.toLowerCase(), g.id]));
+  const allUsers = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable);
+  const usersByEmail = new Map(allUsers.map((user) => [user.email.toLowerCase(), user.id]));
 
   // ── Pre-load / create tags ───────────────────────────────────────────────
   // Load existing tags, then upsert any tags found in tags.json
@@ -508,15 +514,39 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         title: string;
         groups?: string[];
         tags?: string[];
+        visibility?: "personal" | "group" | "public";
+        createdByEmail?: string | null;
       };
       const slug = meta.slug;
       const title = meta.title;
+      // A metadata-backed article must never fall through to the later
+      // Markdown-only import pass if metadata validation fails.
+      processedSlugs.add(slug);
       const metaGroupNames: string[] = Array.isArray(meta.groups)
         ? meta.groups.filter((g) => typeof g === "string")
         : [];
+      const visibility = meta.visibility === "personal" || meta.visibility === "group" || meta.visibility === "public"
+        ? meta.visibility
+        : metaGroupNames.length > 0
+          ? "group"
+          : "personal";
       const metaTagNames: string[] = Array.isArray(meta.tags)
         ? meta.tags.filter((t) => typeof t === "string")
         : [];
+      const ownerId = typeof meta.createdByEmail === "string"
+        ? (usersByEmail.get(meta.createdByEmail.toLowerCase()) ?? req.session.userId)
+        : req.session.userId;
+      const resolvedGroupIds = visibility === "group"
+        ? metaGroupNames
+            .map((name) => groupsByName.get(name.toLowerCase()))
+            .filter((id): id is number => id !== undefined)
+        : [];
+      if (
+        visibility === "group" &&
+        (metaGroupNames.length === 0 || resolvedGroupIds.length !== metaGroupNames.length)
+      ) {
+        throw new Error("Group-visible article references one or more groups that do not exist");
+      }
 
       const mdPath = file.path.replace(".json", ".md");
       const mdFile = directory.files.find((f) => f.path === mdPath);
@@ -564,7 +594,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         }
         await db
           .update(articlesTable)
-          .set({ title, content: articleContent, updatedAt: new Date() })
+          .set({ title, content: articleContent, visibility, createdById: ownerId, updatedAt: new Date() })
           .where(eq(articlesTable.slug, slug));
         articleId = existing.id;
         await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, articleId));
@@ -577,7 +607,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       } else {
         const [article] = await db
           .insert(articlesTable)
-          .values({ slug, title, content: articleContent })
+          .values({ slug, title, content: articleContent, visibility, createdById: ownerId })
           .returning();
         articleId = article.id;
         if (wikilinksPass1.length > 0) {
@@ -591,18 +621,13 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       // Link images to this article
       await linkImagesToArticle(articleContent, articleId);
 
-      // Restore group assignments
-      if (metaGroupNames.length > 0) {
-        const resolvedGroupIds = metaGroupNames
-          .map((name) => groupsByName.get(name.toLowerCase()))
-          .filter((id): id is number => id !== undefined);
-        if (resolvedGroupIds.length > 0) {
-          await db.delete(articleGroupsTable).where(eq(articleGroupsTable.articleId, articleId));
-          await db
-            .insert(articleGroupsTable)
-            .values(resolvedGroupIds.map((groupId) => ({ articleId, groupId })))
-            .onConflictDoNothing();
-        }
+      // Imported metadata replaces destination access rules completely.
+      await db.delete(articleGroupsTable).where(eq(articleGroupsTable.articleId, articleId));
+      if (visibility === "group") {
+        await db
+          .insert(articleGroupsTable)
+          .values(resolvedGroupIds.map((groupId) => ({ articleId, groupId })))
+          .onConflictDoNothing();
       }
 
       // Restore tag assignments

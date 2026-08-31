@@ -5,11 +5,13 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleVisibility } from './articleVisibility';
 
 export interface ArticleUpdate {
   /** @minLength 1 */
   title?: string;
   content?: string;
+  visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];
 }

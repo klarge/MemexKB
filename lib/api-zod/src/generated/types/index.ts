@@ -32,6 +32,7 @@ export * from './articleSlugUpdateResult';
 export * from './articleStats';
 export * from './articleSummary';
 export * from './articleUpdate';
+export * from './articleVisibility';
 export * from './authUser';
 export * from './authUserRole';
 export * from './changePasswordInput';

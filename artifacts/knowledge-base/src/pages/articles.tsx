@@ -62,7 +62,7 @@ export default function Articles() {
           <h1 className="text-3xl font-bold tracking-tight text-primary">Knowledge</h1>
           <p className="text-muted-foreground mt-1">Browse and search all knowledge base articles.</p>
         </div>
-        {(user?.role === "admin" || user?.role === "editor") && (
+        {user && (
           <Button onClick={() => setLocation("/knowledge/new")} data-testid="button-new-article">
             <Plus className="mr-2 h-4 w-4" />
             New Article
@@ -173,12 +173,12 @@ export default function Articles() {
                         data-testid={`text-article-title-${article.id}`}
                       >
                         {article.title}
-                        {article.isRestricted && (
+                         {article.visibility && (
                           <Badge
                             variant="outline"
                             className="text-xs font-normal border-primary/20 text-primary bg-primary/5"
                           >
-                            Restricted
+                             {article.visibility === "personal" ? "Personal" : article.visibility === "group" ? "Group" : "Public"}
                           </Badge>
                         )}
                       </h3>

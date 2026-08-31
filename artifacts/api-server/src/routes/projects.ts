@@ -10,7 +10,6 @@ import {
   boardCardCommentsTable,
   articlesTable,
   articleLinksTable,
-  articleImagesTable,
   articleVersionsTable,
   articleTagsTable,
   tagsTable,
@@ -23,6 +22,7 @@ import { eq, and, inArray, asc, desc, count, max, or, sql, isNull, isNotNull } f
 import { requireAuth } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
+import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
 
 const router = Router();
 
@@ -102,6 +102,8 @@ function projectDocumentResponse(
     slug: article.slug,
     projectId: article.projectId,
     title: article.title,
+    visibility: article.visibility,
+    ownerId: article.createdById,
     content: article.content,
     updatedAt: article.updatedAt,
     createdAt: article.createdAt,
@@ -314,6 +316,8 @@ router.get("/projects/:projectId/documents", requireAuth, async (req, res) => {
       slug: articlesTable.slug,
       projectId: articlesTable.projectId,
       title: articlesTable.title,
+      visibility: articlesTable.visibility,
+      ownerId: articlesTable.createdById,
       updatedAt: articlesTable.updatedAt,
       createdAt: articlesTable.createdAt,
       updatedByName: usersTable.name,
@@ -326,6 +330,7 @@ router.get("/projects/:projectId/documents", requireAuth, async (req, res) => {
   res.json({
     documents: documents.map((document) => ({
       ...document,
+      isRestricted: true,
       canAccess: true,
       canEdit: canEditProjectDocument(access, req.session.userRole),
     })),
@@ -390,18 +395,19 @@ router.post("/projects/:projectId/documents", requireAuth, async (req, res) => {
       updatedById: req.session.userId!,
     }).returning();
 
+    await attachReferencedArticleImages(
+      tx,
+      content ?? "",
+      created.id,
+      req.session.userId,
+      req.session.userRole,
+    );
+
     const wikilinks = extractWikilinks(content ?? "");
     if (wikilinks.length > 0) {
       await tx.insert(articleLinksTable)
         .values(wikilinks.map((target) => ({ fromArticleId: created.id, toSlug: slugify(target) })))
         .onConflictDoNothing();
-    }
-
-    const imageIds = [...(content ?? "").matchAll(/\/api\/articles\/images\/(\d+)/g)]
-      .map((match) => parseInt(match[1], 10))
-      .filter((id) => !Number.isNaN(id));
-    if (imageIds.length > 0) {
-      await tx.update(articleImagesTable).set({ articleId: created.id }).where(inArray(articleImagesTable.id, imageIds));
     }
 
     await tx.insert(articleVersionsTable).values({
@@ -412,8 +418,15 @@ router.post("/projects/:projectId/documents", requireAuth, async (req, res) => {
       createdById: req.session.userId!,
     });
     return created;
+  }).catch((error: unknown) => {
+    if (error instanceof ArticleImageAttachmentError) {
+      res.status(error.status).json({ error: error.message });
+      return undefined;
+    }
+    throw error;
   });
 
+  if (article === undefined) return;
   if (!article) { res.status(409).json({ error: "Could not reserve a unique document URL. Please try again." }); return; }
   if (Array.isArray(tagIds)) {
     const numericTagIds = tagIds.filter((id): id is number => typeof id === "number");
@@ -455,38 +468,49 @@ router.patch("/projects/:projectId/documents/:slug", requireAuth, async (req, re
   };
   if (content !== undefined) updates.content = sanitizeArticleHtml(content);
 
-  const article = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(824199)`);
-    const [updated] = await tx.update(articlesTable).set(updates).where(eq(articlesTable.id, existing.id)).returning();
-    if (!updated) return null;
+  let article;
+  try {
+    article = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(824199)`);
+      if (content !== undefined) {
+        await attachReferencedArticleImages(
+          tx,
+          content,
+          existing.id,
+          req.session.userId,
+          req.session.userRole,
+        );
+      }
+      const [updated] = await tx.update(articlesTable).set(updates).where(eq(articlesTable.id, existing.id)).returning();
+      if (!updated) return null;
 
-    if (content !== undefined) {
-      await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, updated.id));
-      const wikilinks = extractWikilinks(content);
-      if (wikilinks.length > 0) {
-        await tx.insert(articleLinksTable)
-          .values(wikilinks.map((target) => ({ fromArticleId: updated.id, toSlug: slugify(target) })))
-          .onConflictDoNothing();
+      if (content !== undefined) {
+        await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, updated.id));
+        const wikilinks = extractWikilinks(content);
+        if (wikilinks.length > 0) {
+          await tx.insert(articleLinksTable)
+            .values(wikilinks.map((target) => ({ fromArticleId: updated.id, toSlug: slugify(target) })))
+            .onConflictDoNothing();
+        }
       }
 
-      const imageIds = [...content.matchAll(/\/api\/articles\/images\/(\d+)/g)]
-        .map((match) => parseInt(match[1], 10))
-        .filter((id) => !Number.isNaN(id));
-      if (imageIds.length > 0) {
-        await tx.update(articleImagesTable).set({ articleId: updated.id }).where(inArray(articleImagesTable.id, imageIds));
-      }
-    }
-
-    const [versionCount] = await tx.select({ value: count() }).from(articleVersionsTable).where(eq(articleVersionsTable.articleId, updated.id));
-    await tx.insert(articleVersionsTable).values({
-      articleId: updated.id,
-      versionNumber: Number(versionCount?.value ?? 0) + 1,
-      title: updated.title,
-      content: updated.content,
-      createdById: req.session.userId!,
+      const [versionCount] = await tx.select({ value: count() }).from(articleVersionsTable).where(eq(articleVersionsTable.articleId, updated.id));
+      await tx.insert(articleVersionsTable).values({
+        articleId: updated.id,
+        versionNumber: Number(versionCount?.value ?? 0) + 1,
+        title: updated.title,
+        content: updated.content,
+        createdById: req.session.userId!,
+      });
+      return updated;
     });
-    return updated;
-  });
+  } catch (error) {
+    if (error instanceof ArticleImageAttachmentError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
   if (!article) { res.status(409).json({ error: "Could not save this document. Reload and try again." }); return; }
 
   if (Array.isArray(tagIds)) {

@@ -1594,7 +1594,7 @@ components:
     # ─── Articles ──────────────────────────────────────────────────────────────
     ArticleSummary:
       type: object
-      required: [id, slug, title, updatedAt, createdAt]
+      required: [id, slug, title, updatedAt, createdAt, visibility, ownerId, canEdit]
       properties:
         id:
           type: integer
@@ -1608,6 +1608,12 @@ components:
           description: Owner ID for personal log entries
         title:
           type: string
+        visibility:
+          $ref: "#/components/schemas/ArticleVisibility"
+        ownerId:
+          type: ["integer", "null"]
+        canEdit:
+          type: boolean
         updatedAt:
           type: string
           format: date-time
@@ -1633,7 +1639,7 @@ components:
 
     Article:
       type: object
-      required: [id, slug, title, content, updatedAt, createdAt, groups, isRestricted, canAccess]
+      required: [id, slug, title, content, updatedAt, createdAt, groups, isRestricted, canAccess, visibility, ownerId, canEdit]
       properties:
         id:
           type: integer
@@ -1644,6 +1650,10 @@ components:
           type: string
         title:
           type: string
+        visibility:
+          $ref: "#/components/schemas/ArticleVisibility"
+        ownerId:
+          type: ["integer", "null"]
         content:
           type: string
           description: HTML content of the article
@@ -1661,7 +1671,7 @@ components:
           type: boolean
         canEdit:
           type: boolean
-          description: Whether the current user can edit a project document
+          description: Whether the current user can edit this article or project document
         groups:
           type: array
           items:
@@ -1739,6 +1749,8 @@ components:
         content:
           type: string
           description: HTML content
+        visibility:
+          $ref: "#/components/schemas/ArticleVisibility"
         groupIds:
           type: array
           items:
@@ -1759,6 +1771,8 @@ components:
           minLength: 1
         content:
           type: string
+        visibility:
+          $ref: "#/components/schemas/ArticleVisibility"
         groupIds:
           type: array
           items:
@@ -1767,6 +1781,10 @@ components:
           type: array
           items:
             type: integer
+
+    ArticleVisibility:
+      type: string
+      enum: [personal, group, public]
 
     ArticleSlugUpdate:
       type: object

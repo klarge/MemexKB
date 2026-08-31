@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -105,20 +105,23 @@ export default function ArticleList() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    user, logout, cachedArticles, cachedTags, isOnline, isSyncing, syncProgress,
+    user, sessionCookie, logout, cachedArticles, cachedTags, isOnline, isSyncing, syncProgress,
     syncArticles, lastSyncedAt,
   } = useApp();
 
   const [search, setSearch] = useState('');
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
+  const initiallySyncedIdentityRef = useRef<string | null>(null);
 
-  // Initial sync on mount when online
+  // Every authenticated identity gets an authoritative online sync, even when
+  // its persisted cache is non-empty, so revoked access is pruned promptly.
   useEffect(() => {
-    if (isOnline && cachedArticles.length === 0) {
+    const identity = user && sessionCookie ? `${user.id}:${sessionCookie}` : null;
+    if (isOnline && identity && initiallySyncedIdentityRef.current !== identity) {
+      initiallySyncedIdentityRef.current = identity;
       syncArticles();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isOnline, user, sessionCookie, syncArticles]);
 
   const filtered = useMemo(() => {
     let list = cachedArticles;

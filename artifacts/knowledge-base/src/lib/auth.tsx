@@ -1,4 +1,5 @@
 import { createContext, useContext, ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe, getGetMeQueryKey, AuthUser } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
 
@@ -9,8 +10,10 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+let lastResolvedUserId: number | null | undefined;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const { data: user, isLoading } = useGetMe({
     query: {
       queryKey: getGetMeQueryKey(),
@@ -18,6 +21,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refetchOnWindowFocus: false,
     }
   });
+
+  if (!isLoading) {
+    const currentUserId = user?.id ?? null;
+    if (lastResolvedUserId !== undefined && lastResolvedUserId !== currentUserId) {
+      const authQueryKey = getGetMeQueryKey();
+      queryClient.removeQueries({
+        predicate: (query) => JSON.stringify(query.queryKey) !== JSON.stringify(authQueryKey),
+      });
+    }
+    lastResolvedUserId = currentUserId;
+  }
 
   if (isLoading) {
     return (

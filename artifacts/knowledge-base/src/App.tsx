@@ -127,13 +127,13 @@ function Router() {
       </Route>
 
       <Route path="/knowledge/new">
-        <AuthRoute editorOnly>
+        <AuthRoute>
           <ArticleEdit />
         </AuthRoute>
       </Route>
 
       <Route path="/knowledge/new/edit">
-        <AuthRoute editorOnly>
+        <AuthRoute>
           <ArticleEdit />
         </AuthRoute>
       </Route>
@@ -164,7 +164,7 @@ function Router() {
 
       <Route path="/knowledge/:slug/edit">
         {(params: Record<string, string>) => (
-          <AuthRoute editorOnly>
+          <AuthRoute>
             <ArticleEdit params={params} />
           </AuthRoute>
         )}
@@ -172,7 +172,7 @@ function Router() {
 
       <Route path="/knowledge/:slug/history">
         {(params: Record<string, string>) => (
-          <AuthRoute editorOnly>
+          <AuthRoute>
             <ArticleHistory params={params} />
           </AuthRoute>
         )}

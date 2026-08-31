@@ -5,6 +5,7 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleVisibility } from './articleVisibility';
 import type { GroupSummary } from './groupSummary';
 import type { Tag } from './tag';
 
@@ -22,6 +23,10 @@ export interface ArticleSummary {
      */
   logOwnerId?: number | null;
   title: string;
+  visibility: ArticleVisibility;
+  /** @nullable */
+  ownerId: number | null;
+  canEdit: boolean;
   updatedAt: Date;
   createdAt: Date;
   /** @nullable */

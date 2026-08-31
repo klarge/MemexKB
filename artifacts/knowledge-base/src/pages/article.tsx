@@ -106,7 +106,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   const { data: article, isLoading, isError, error: articleError, refetch: refetchArticle } = useGetArticle(actualSlug, {
     query: {
       enabled: !!actualSlug && !isLogRoute,
-      queryKey: getGetArticleQueryKey(actualSlug),
+      queryKey: [...getGetArticleQueryKey(actualSlug), user?.id],
       retry: false,
     },
   });
@@ -117,7 +117,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     error: logError,
     refetch: refetchLogArticle,
   } = useGetLogEntry(logOwnerId, logSlug ?? "", {
-    query: { enabled: isLogRoute, retry: false, queryKey: getGetLogEntryQueryKey(logOwnerId, logSlug ?? "") },
+    query: { enabled: isLogRoute, retry: false, queryKey: [...getGetLogEntryQueryKey(logOwnerId, logSlug ?? ""), user?.id] },
   });
   const displayedArticle = isLogRoute ? logArticle : article;
   const displayedIsLoading = isLogRoute ? isLoadingLog : isLoading;
@@ -222,9 +222,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     setTableOfContents(items);
   }, [displayedArticle?.id, displayedArticle?.content, displayedArticle?.canAccess, wikilinkStates]);
 
-  const canEdit = isProjectDocument
-    ? Boolean((displayedArticle as (typeof displayedArticle & { canEdit?: boolean }) | undefined)?.canEdit)
-    : user?.role === "admin" || user?.role === "editor";
+  const canEdit = Boolean((displayedArticle as (typeof displayedArticle & { canEdit?: boolean }) | undefined)?.canEdit);
   const lockHeldByOther = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId !== user?.id;
   const lockHeldByMe = lockStatus?.lockedBy != null && lockStatus.lockedBy.userId === user?.id;
 
@@ -492,10 +490,9 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               <h1 className="text-4xl font-extrabold tracking-tight" data-testid="article-title">
                 {displayedArticle.title}
               </h1>
-              {displayedArticle.isRestricted && (
+               {displayedArticle.visibility && (
                 <Badge variant="outline" className="border-primary/20 text-primary bg-primary/5">
-                  <Lock className="w-3 h-3 mr-1" />
-                  Restricted
+                   {displayedArticle.visibility === "personal" ? "Personal" : displayedArticle.visibility === "group" ? <><Lock className="w-3 h-3 mr-1" />Group</> : "Public"}
                 </Badge>
               )}
             </div>

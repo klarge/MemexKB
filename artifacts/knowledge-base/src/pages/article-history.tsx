@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -112,23 +111,20 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
       ? `/projects/${projectId}/documents/${slug}`
       : `/knowledge/${slug}`;
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: projectDocument } = useQuery<{ canEdit?: boolean }>({
-    queryKey: ["project-document-permissions", slug],
+  const { data: articlePermission } = useQuery<{ canEdit?: boolean }>({
+    queryKey: ["article-history-permissions", slug],
     queryFn: async () => {
       const response = await fetch(`/api/articles/${slug}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to load document permissions");
       return response.json();
     },
-    enabled: isProjectDocument && !!slug,
+    enabled: !!slug,
     retry: false,
   });
-  const canEdit = isProjectDocument
-    ? Boolean(projectDocument?.canEdit)
-    : user?.role === "admin" || user?.role === "editor";
+  const canEdit = Boolean(articlePermission?.canEdit);
 
   const { data: versions, isLoading } = useQuery({
     queryKey: ["article-versions", slug],

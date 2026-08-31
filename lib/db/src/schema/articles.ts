@@ -6,6 +6,8 @@ import { usersTable } from "./users";
 import { groupsTable } from "./groups";
 import { projectsTable } from "./projects";
 
+export type ArticleVisibility = "personal" | "group" | "public";
+
 export const articlesTable = pgTable("articles", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -14,6 +16,7 @@ export const articlesTable = pgTable("articles", {
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   isLogEntry: boolean("is_log_entry").notNull().default(false),
+  visibility: text("visibility").$type<ArticleVisibility>().notNull().default("personal"),
   projectId: integer("project_id").references(() => projectsTable.id, {
     onDelete: "cascade",
   }),
@@ -30,6 +33,7 @@ export const articlesTable = pgTable("articles", {
     .on(t.createdById, t.logSlug)
     .where(sql`log_slug IS NOT NULL`),
   index("articles_project_updated_idx").on(t.projectId, t.updatedAt),
+  index("articles_visibility_owner_idx").on(t.visibility, t.createdById),
 ]);
 
 export const articleGroupsTable = pgTable(
@@ -59,6 +63,7 @@ export const articleLinksTable = pgTable(
 export const articleImagesTable = pgTable("article_images", {
   id: serial("id").primaryKey(),
   articleId: integer("article_id").references(() => articlesTable.id, { onDelete: "set null" }),
+  uploadedById: integer("uploaded_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   filename: text("filename").notNull(),
   mimeType: text("mime_type").notNull(),
   data: text("data").notNull(),

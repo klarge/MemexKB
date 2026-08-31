@@ -187,6 +187,15 @@ export interface AuthUser {
   role: AuthUserRole;
 }
 
+export type ArticleVisibility = typeof ArticleVisibility[keyof typeof ArticleVisibility];
+
+
+export const ArticleVisibility = {
+  personal: 'personal',
+  group: 'group',
+  public: 'public',
+} as const;
+
 export interface GroupSummary {
   id: number;
   name: string;
@@ -208,6 +217,10 @@ export interface ArticleSummary {
      */
   logOwnerId?: number | null;
   title: string;
+  visibility: ArticleVisibility;
+  /** @nullable */
+  ownerId: number | null;
+  canEdit: boolean;
   updatedAt: string;
   createdAt: string;
   /** @nullable */
@@ -229,6 +242,9 @@ export interface Article {
   projectId?: number | null;
   slug: string;
   title: string;
+  visibility: ArticleVisibility;
+  /** @nullable */
+  ownerId: number | null;
   /** HTML content of the article */
   content: string;
   updatedAt: string;
@@ -237,8 +253,8 @@ export interface Article {
   updatedByName?: string | null;
   isRestricted: boolean;
   canAccess: boolean;
-  /** Whether the current user can edit a project document */
-  canEdit?: boolean;
+  /** Whether the current user can edit this article or project document */
+  canEdit: boolean;
   groups: GroupSummary[];
   backlinks?: ArticleSummary[];
   tags?: Tag[];
@@ -276,6 +292,7 @@ export interface ArticleInput {
   title: string;
   /** HTML content */
   content: string;
+  visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];
   /** Create a personal log entry instead of a shared article */
@@ -286,6 +303,7 @@ export interface ArticleUpdate {
   /** @minLength 1 */
   title?: string;
   content?: string;
+  visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];
 }

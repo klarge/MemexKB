@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ArticleSummary } from './articleSummary';
+import type { ArticleVisibility } from './articleVisibility';
 import type { GroupSummary } from './groupSummary';
 import type { Tag } from './tag';
 
@@ -18,6 +19,9 @@ export interface Article {
   projectId?: number | null;
   slug: string;
   title: string;
+  visibility: ArticleVisibility;
+  /** @nullable */
+  ownerId: number | null;
   /** HTML content of the article */
   content: string;
   updatedAt: Date;
@@ -26,8 +30,8 @@ export interface Article {
   updatedByName?: string | null;
   isRestricted: boolean;
   canAccess: boolean;
-  /** Whether the current user can edit a project document */
-  canEdit?: boolean;
+  /** Whether the current user can edit this article or project document */
+  canEdit: boolean;
   groups: GroupSummary[];
   backlinks?: ArticleSummary[];
   tags?: Tag[];

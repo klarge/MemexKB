@@ -120,6 +120,20 @@
       "when": 1787799000000,
       "tag": "0016_add_api_token_access_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788134400000,
+      "tag": "0017_add_article_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788138000000,
+      "tag": "0018_add_image_uploader",
+      "breakpoints": true
     }
   ]
 }
