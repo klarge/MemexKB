@@ -12,6 +12,7 @@ export interface SiteSettings {
   hasFavicon: boolean;
   faviconMimeType: string | null;
   faviconVersion: string | null;
+  accentColor: string | null;
   navLinks: NavLink[];
   logEntriesEnabled: boolean;
   tasksEnabled: boolean;

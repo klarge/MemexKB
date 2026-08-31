@@ -49,6 +49,10 @@ export default function AdminCustomization() {
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
 
+  // ── Accent color ─────────────────────────────────────────────────────────────
+  const [accentColor, setAccentColor] = useState<string | null>(null);
+  const activeAccentColor = accentColor ?? settings?.accentColor ?? "#2d534b";
+
   const activeLinks: NavLink[] = links ?? settings?.navLinks ?? [];
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -129,6 +133,24 @@ export default function AdminCustomization() {
       toast({ title: "Favicon removed", description: "The default browser tab icon has been restored." });
       setSelectedFavicon(null);
       setFaviconPreview(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const saveAccentColorMutation = useMutation({
+    mutationFn: async (color: string) => {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accentColor: color }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Accent color saved", description: "Your brand color is now active across the application." });
+      setAccentColor(null);
       invalidate();
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -392,6 +414,49 @@ export default function AdminCustomization() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Accent color */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Accent Color</CardTitle>
+            <CardDescription>
+              Used for primary buttons, links, active controls, and other brand accents in both light and dark modes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <label
+                htmlFor="accent-color"
+                className="h-14 w-14 rounded-lg border border-border cursor-pointer shadow-inner"
+                style={{ backgroundColor: activeAccentColor }}
+                title="Choose accent color"
+              />
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="accent-color">Brand color</Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="accent-color"
+                    type="color"
+                    value={activeAccentColor}
+                    onChange={(e) => setAccentColor(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span className="font-mono text-sm uppercase">{activeAccentColor}</span>
+                  <Button
+                    onClick={() => saveAccentColorMutation.mutate(activeAccentColor)}
+                    disabled={saveAccentColorMutation.isPending}
+                  >
+                    {saveAccentColorMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Color
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Choose a color swatch to preview it immediately. Text contrast adjusts automatically for readability.
+            </p>
           </CardContent>
         </Card>
 

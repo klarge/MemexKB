@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { ThemeProvider } from "@/lib/theme";
+import { applyAccentColor, ThemeProvider, useTheme } from "@/lib/theme";
 import { FAVICON_URL, useSiteSettings } from "@/lib/site-settings";
 
 import NotFound from "@/pages/not-found";
@@ -38,6 +38,7 @@ const queryClient = new QueryClient();
 
 function TitleSync() {
   const { data: settings } = useSiteSettings();
+  const { theme } = useTheme();
   useEffect(() => {
     document.title = settings?.siteName ?? "Memex";
     const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement("link");
@@ -50,7 +51,8 @@ function TitleSync() {
       icon.href = "/favicon.svg";
     }
     if (!icon.parentNode) document.head.appendChild(icon);
-  }, [settings]);
+    applyAccentColor(settings?.accentColor);
+  }, [settings, theme]);
   return null;
 }
 

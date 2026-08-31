@@ -58,6 +58,10 @@ function validateFaviconMagicBytes(buf: Buffer, mimetype: string): boolean {
   return false;
 }
 
+function isValidAccentColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
 async function getSetting(key: string): Promise<string | null> {
   const [row] = await db
     .select()
@@ -93,7 +97,7 @@ router.get("/settings", async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "accent_color", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
@@ -101,6 +105,7 @@ router.get("/settings", async (_req, res) => {
     hasFavicon: map.has("favicon_mime_type"),
     faviconMimeType: map.get("favicon_mime_type") ?? null,
     faviconVersion: map.get("favicon_version") ?? null,
+    accentColor: map.get("accent_color") ?? null,
     navLinks: parseNavLinks(map.get("nav_links")),
     logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
@@ -132,7 +137,7 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "accent_color", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
@@ -140,6 +145,7 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
     hasFavicon: map.has("favicon_mime_type"),
     faviconMimeType: map.get("favicon_mime_type") ?? null,
     faviconVersion: map.get("favicon_version") ?? null,
+    accentColor: map.get("accent_color") ?? null,
     navLinks: parseNavLinks(map.get("nav_links")),
     logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
@@ -150,11 +156,12 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
 // ── Admin: update settings ────────────────────────────────────────────────────
 
 router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
-  const { siteName, logEntriesEnabled, tasksEnabled, projectsEnabled } = req.body as {
+  const { siteName, logEntriesEnabled, tasksEnabled, projectsEnabled, accentColor } = req.body as {
     siteName?: string;
     logEntriesEnabled?: boolean;
     tasksEnabled?: boolean;
     projectsEnabled?: boolean;
+    accentColor?: unknown;
   };
 
   if (siteName !== undefined) {
@@ -175,6 +182,14 @@ router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
 
   if (projectsEnabled !== undefined) {
     await setSetting("projects_enabled", String(Boolean(projectsEnabled)));
+  }
+
+  if (accentColor !== undefined) {
+    if (!isValidAccentColor(accentColor)) {
+      res.status(400).json({ error: "accentColor must be a six-digit hexadecimal color such as #145f54" });
+      return;
+    }
+    await setSetting("accent_color", accentColor.toLowerCase());
   }
 
   res.json({ ok: true });
