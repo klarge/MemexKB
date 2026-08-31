@@ -9,6 +9,9 @@ export interface NavLink {
 export interface SiteSettings {
   siteName: string;
   hasLogo: boolean;
+  hasFavicon: boolean;
+  faviconMimeType: string | null;
+  faviconVersion: string | null;
   navLinks: NavLink[];
   logEntriesEnabled: boolean;
   tasksEnabled: boolean;
@@ -31,3 +34,4 @@ export function useInvalidateSiteSettings() {
 }
 
 export const LOGO_URL = "/api/settings/logo";
+export const FAVICON_URL = "/api/settings/favicon";

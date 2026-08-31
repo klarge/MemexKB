@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThemeProvider } from "@/lib/theme";
-import { useSiteSettings } from "@/lib/site-settings";
+import { FAVICON_URL, useSiteSettings } from "@/lib/site-settings";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -40,7 +40,17 @@ function TitleSync() {
   const { data: settings } = useSiteSettings();
   useEffect(() => {
     document.title = settings?.siteName ?? "Memex";
-  }, [settings?.siteName]);
+    const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement("link");
+    icon.rel = "icon";
+    if (settings?.hasFavicon) {
+      icon.type = settings.faviconMimeType ?? "image/png";
+      icon.href = `${FAVICON_URL}?v=${encodeURIComponent(settings.faviconVersion ?? String(Date.now()))}`;
+    } else {
+      icon.type = "image/svg+xml";
+      icon.href = "/favicon.svg";
+    }
+    if (!icon.parentNode) document.head.appendChild(icon);
+  }, [settings]);
   return null;
 }
 

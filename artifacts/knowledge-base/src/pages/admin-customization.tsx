@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical, BookOpen, ListTodo, FolderKanban } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL, type NavLink } from "@/lib/site-settings";
+import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL, FAVICON_URL, type NavLink } from "@/lib/site-settings";
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -26,6 +26,11 @@ export default function AdminCustomization() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Favicon ───────────────────────────────────────────────────────────────────
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
+  const [selectedFavicon, setSelectedFavicon] = useState<File | null>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
 
   // ── Log entries toggle ───────────────────────────────────────────────────────
   const [logEntriesEnabled, setLogEntriesEnabled] = useState<boolean | null>(null);
@@ -92,6 +97,38 @@ export default function AdminCustomization() {
       toast({ title: "Logo removed", description: "The default logo has been restored." });
       setSelectedFile(null);
       setLogoPreview(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const uploadFaviconMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("favicon", file);
+      const res = await fetch("/api/admin/settings/favicon", { method: "POST", body: fd });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Favicon saved", description: "Your browser tab icon is now active." });
+      setSelectedFavicon(null);
+      setFaviconPreview(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const removeFaviconMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/settings/favicon", { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to remove");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Favicon removed", description: "The default browser tab icon has been restored." });
+      setSelectedFavicon(null);
+      setFaviconPreview(null);
       invalidate();
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -181,6 +218,15 @@ export default function AdminCustomization() {
     setSelectedFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => setLogoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleFaviconFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFavicon(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setFaviconPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -340,6 +386,89 @@ export default function AdminCustomization() {
                     setSelectedFile(null);
                     setLogoPreview(null);
                     if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Favicon */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Favicon</CardTitle>
+            <CardDescription>
+              The small icon shown in browser tabs. Use a PNG, GIF, or ICO file up to 1 MB.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                {faviconPreview ? (
+                  <img src={faviconPreview} alt="Favicon preview" className="h-8 w-8 object-contain" />
+                ) : settings?.hasFavicon ? (
+                  <img
+                    src={`${FAVICON_URL}?v=${encodeURIComponent(settings.faviconVersion ?? "")}`}
+                    alt="Current favicon"
+                    className="h-8 w-8 object-contain"
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">Default</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {faviconPreview
+                    ? "Preview — click Save Favicon to apply"
+                    : settings?.hasFavicon
+                    ? "Custom favicon active"
+                    : "Using default favicon"}
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => faviconInputRef.current?.click()}>
+                    <Upload className="mr-2 h-3.5 w-3.5" />
+                    {settings?.hasFavicon ? "Replace" : "Upload"}
+                  </Button>
+                  {settings?.hasFavicon && !faviconPreview && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => removeFaviconMutation.mutate()}
+                      disabled={removeFaviconMutation.isPending}
+                    >
+                      {removeFaviconMutation.isPending
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <input
+              ref={faviconInputRef}
+              type="file"
+              accept="image/png,image/gif,image/x-icon,.ico"
+              className="hidden"
+              onChange={handleFaviconFileChange}
+            />
+            {selectedFavicon && (
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => uploadFaviconMutation.mutate(selectedFavicon)}
+                  disabled={uploadFaviconMutation.isPending}
+                >
+                  {uploadFaviconMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Favicon
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedFavicon(null);
+                    setFaviconPreview(null);
+                    if (faviconInputRef.current) faviconInputRef.current.value = "";
                   }}
                 >
                   Cancel

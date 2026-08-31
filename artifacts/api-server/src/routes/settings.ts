@@ -11,6 +11,13 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 // SVG is intentionally excluded: inline scripts in SVG execute when the file is
 // served with its own content type, making it an XSS vector.
 const ALLOWED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+const ALLOWED_FAVICON_TYPES = new Set([
+  "image/png",
+  "image/gif",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "application/ico",
+]);
 
 /**
  * Validate image magic bytes to confirm the file content matches its declared
@@ -34,6 +41,21 @@ function validateImageMagicBytes(buf: Buffer, mimetype: string): boolean {
     default:
       return false;
   }
+}
+
+function validateFaviconMagicBytes(buf: Buffer, mimetype: string): boolean {
+  if (mimetype === "image/png") {
+    return buf.length >= 8 &&
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a;
+  }
+  if (mimetype === "image/gif") {
+    return buf.length >= 6 && buf.subarray(0, 6).toString("ascii").match(/^GIF8[79]a$/) !== null;
+  }
+  if (mimetype === "image/x-icon" || mimetype === "image/vnd.microsoft.icon" || mimetype === "application/ico") {
+    return buf.length >= 4 && buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01 && buf[3] === 0x00;
+  }
+  return false;
 }
 
 async function getSetting(key: string): Promise<string | null> {
@@ -71,11 +93,14 @@ router.get("/settings", async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
+    hasFavicon: map.has("favicon_mime_type"),
+    faviconMimeType: map.get("favicon_mime_type") ?? null,
+    faviconVersion: map.get("favicon_version") ?? null,
     navLinks: parseNavLinks(map.get("nav_links")),
     logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
@@ -107,11 +132,14 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
     hasLogo: map.has("logo_mime_type"),
+    hasFavicon: map.has("favicon_mime_type"),
+    faviconMimeType: map.get("favicon_mime_type") ?? null,
+    faviconVersion: map.get("favicon_version") ?? null,
     navLinks: parseNavLinks(map.get("nav_links")),
     logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
@@ -210,6 +238,59 @@ router.delete("/admin/settings/logo", requireRole("admin"), async (_req, res) =>
     deleteSetting("logo_mime_type"),
   ]);
   res.json({ hasLogo: false });
+});
+
+// ── Favicon ────────────────────────────────────────────────────────────────────
+
+router.get("/settings/favicon", async (_req, res) => {
+  const [dataRow, mimeRow] = await Promise.all([
+    getSetting("favicon_data"),
+    getSetting("favicon_mime_type"),
+  ]);
+  if (!dataRow || !mimeRow || !ALLOWED_FAVICON_TYPES.has(mimeRow)) {
+    res.status(404).json({ error: "No favicon configured" });
+    return;
+  }
+  const buf = Buffer.from(dataRow, "base64");
+  res.setHeader("Content-Type", mimeRow);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.send(buf);
+});
+
+router.post("/admin/settings/favicon", requireRole("admin"), upload.single("favicon"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "No favicon uploaded" });
+    return;
+  }
+  const { mimetype, buffer } = req.file;
+  if (!ALLOWED_FAVICON_TYPES.has(mimetype)) {
+    res.status(400).json({ error: "Unsupported favicon type. Use PNG, GIF, or ICO." });
+    return;
+  }
+  if (buffer.length > 1024 * 1024) {
+    res.status(400).json({ error: "Favicon must be 1 MB or smaller." });
+    return;
+  }
+  if (!validateFaviconMagicBytes(buffer, mimetype)) {
+    res.status(400).json({ error: "File content does not match the declared favicon type." });
+    return;
+  }
+  await Promise.all([
+    setSetting("favicon_data", buffer.toString("base64")),
+    setSetting("favicon_mime_type", mimetype),
+    setSetting("favicon_version", `${Date.now()}`),
+  ]);
+  res.json({ hasFavicon: true });
+});
+
+router.delete("/admin/settings/favicon", requireRole("admin"), async (_req, res) => {
+  await Promise.all([
+    deleteSetting("favicon_data"),
+    deleteSetting("favicon_mime_type"),
+    deleteSetting("favicon_version"),
+  ]);
+  res.json({ hasFavicon: false });
 });
 
 export default router;
