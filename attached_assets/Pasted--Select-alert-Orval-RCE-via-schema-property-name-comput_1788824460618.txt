@@ -1,0 +1,58 @@
+
+Select alert: Orval: RCE via schema property name -> computed-property-key injection in the MSW mock generator
+Orval: RCE via schema property name -> computed-property-key injection in the MSW mock generator Critical
+#66 opened 23 minutes ago • Detected in orval (npm) • pnpm-lock.yaml
+Select alert: Orval: Import-time RCE via enum-typed default -> zod module-level template literal
+Orval: Import-time RCE via enum-typed default -> zod module-level template literal Critical
+#65 opened 23 minutes ago • Detected in orval (npm) • pnpm-lock.yaml
+Select alert: Orval: Import-time RCE via query parameter name -> computed-property-key injection in the zod cli
+Orval: Import-time RCE via query parameter name -> computed-property-key injection in the zod cli Critical
+#64 opened 23 minutes ago • Detected in orval (npm) • pnpm-lock.yaml
+Select alert: Orval: Import-time RCE via header parameter name -> computed-property-key injection in the zod client
+Orval: Import-time RCE via header parameter name -> computed-property-key injection in the zod client Critical
+#63 opened 23 minutes ago • Detected in orval (npm) • pnpm-lock.yaml
+Select alert: Orval: Import-time RCE via schema property name -> computed-property-key injection in the zod client
+Orval: Import-time RCE via schema property name -> computed-property-key injection in the zod client Critical
+#55 opened 23 minutes ago • Detected in orval (npm) • pnpm-lock.yaml
+Select alert: image-size: ICNS parser allows denial of service through an infinite loop
+image-size: ICNS parser allows denial of service through an infinite loop High
+#46 opened 8 hours ago • Detected in image-size (npm) • pnpm-lock.yaml
+Select alert: image-size: JXL and HEIF parsers allow denial of service through infinite loops
+image-size: JXL and HEIF parsers allow denial of service through infinite loops High
+#45 opened 8 hours ago • Detected in image-size (npm) • pnpm-lock.yaml
+Select alert: LinkifyIt#match scan loop has quadratic algorithmic complexity
+LinkifyIt#match scan loop has quadratic algorithmic complexity High
+#20 opened 23 minutes ago • Detected in linkify-it (npm) • pnpm-lock.yaml
+Select alert: vite: `server.fs.deny` bypass on Windows alternate paths
+vite: `server.fs.deny` bypass on Windows alternate paths High
+#7 opened 8 hours ago • Detected in vite (npm) • pnpm-lock.yaml
+Select alert: nanoid: non-secure generators can loop indefinitely with negative size
+nanoid: non-secure generators can loop indefinitely with negative size High
+#44 opened 8 hours ago • Detected in nanoid (npm) • pnpm-lock.yaml
+Select alert: nanoid: custom generators can loop indefinitely when size is zero
+nanoid: custom generators can loop indefinitely when size is zero High
+#47 opened 8 hours ago • Detected in nanoid (npm) • pnpm-lock.yaml
+Select alert: brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation
+brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation High
+#36 opened 8 hours ago • Detected in brace-expansion (npm) • pnpm-lock.yaml
+Select alert: brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation
+brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation High
+#35 opened 8 hours ago • Detected in brace-expansion (npm) • pnpm-lock.yaml
+Select alert: PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments
+PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments High
+#30 opened 8 hours ago • Detected in postcss (npm) • pnpm-lock.yaml
+Select alert: ip-address: Address4 decodes leading-zero octets as decimal while resolvers decode them as octal, allowing SSRF and trust-boundary bypass
+ip-address: Address4 decodes leading-zero octets as decimal while resolvers decode them as octal, allowing SSRF and trust-boundary bypass High
+#41 opened 8 hours ago • Detected in ip-address (npm) • pnpm-lock.yaml
+Select alert: brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups
+brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups High
+#23 opened 8 hours ago • Detected in brace-expansion (npm) • pnpm-lock.yaml
+Select alert: brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups
+brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups High
+#22 opened 8 hours ago • Detected in brace-expansion (npm) • pnpm-lock.yaml
+Select alert: js-yaml: YAML merge-key chains can force quadratic CPU consumption
+js-yaml: YAML merge-key chains can force quadratic CPU consumption High
+#24 opened 8 hours ago • Detected in js-yaml (npm) • pnpm-lock.yaml
+Select alert: brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash
+brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash High
+#33 opened 8 hours ago • Detected in brace-expansion (npm) • pnpm-lock.yaml
