@@ -1,0 +1,12 @@
+{
+  "name": "image-size",
+  "version": "2.0.3-security.0",
+  "description": "Security-safe image-size compatibility adapter for Metro",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "probe-image-size": "^7.2.3"
+  }
+}

@@ -77,6 +77,11 @@ onlyBuiltDependencies:
 overrides:
   # Security-patched transitive dependencies whose direct parents have not
   # released compatible updates yet.
+  # No published image-size version fixes GHSA-5p2g-fcmc-qvqq or
+  # GHSA-w3rx-r6r6-pgpr, so Metro uses a compatible local adapter.
+  image-size: "link:./lib/image-size-safe"
+  "@expo/ngrok>uuid": "11.1.1"
+  "xcode>uuid": "11.1.1"
   markdown-it: "14.2.0"
   "markdown-it>linkify-it": "5.0.2"
   "minimatch@3.1.5>brace-expansion": "1.1.18"
