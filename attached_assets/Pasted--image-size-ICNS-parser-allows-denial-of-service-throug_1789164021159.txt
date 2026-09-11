@@ -1,0 +1,37 @@
+
+    image-size: ICNS parser allows denial of service through an infinite loop High
+    #46 opened 4 days ago • Detected in image-size (npm) • pnpm-lock.yaml
+    Select alert: image-size: JXL and HEIF parsers allow denial of service through infinite loops
+    image-size: JXL and HEIF parsers allow denial of service through infinite loops High
+    #45 opened 4 days ago • Detected in image-size (npm) • pnpm-lock.yaml
+    Select alert: js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources
+    js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources High
+    #77 opened 2 hours ago • Detected in js-yaml (npm) • pnpm-lock.yaml
+    Select alert: js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources
+    js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources High
+    #76 opened 2 hours ago • Detected in js-yaml (npm) • pnpm-lock.yaml
+    Select alert: Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory
+    Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory Moderate
+    #74 opened 2 days ago • Detected in hono (npm) • pnpm-lock.yaml
+    Select alert: uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided
+    uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided Moderate
+    #3 opened 4 days ago • Detected in uuid (npm) • pnpm-lock.yaml
+    Select alert: Hono: Query parser reads parameters after the URL fragment, causing cache-key and proxy interpretation differentials
+    Hono: Query parser reads parameters after the URL fragment, causing cache-key and proxy interpretation differentials Moderate
+    #73 opened 2 days ago • Detected in hono (npm) • pnpm-lock.yaml
+    Select alert: Hono: Unbounded dot-notation nesting in `parseBody()` can cause memory exhaustion
+    Hono: Unbounded dot-notation nesting in `parseBody()` can cause memory exhaustion Moderate
+    #75 opened 2 days ago • Detected in hono (npm) • pnpm-lock.yaml
+    Select alert: body-parser vulnerable to denial of service when invalid limit value silently disables size enforcement
+    body-parser vulnerable to denial of service when invalid limit value silently disables size enforcement Low
+    #25 opened 4 days ago • Detected in body-parser (npm) • pnpm-lock.yaml
+    Select alert: @babel/core: Arbitrary File Read via sourceMappingURL Comment
+    @babel/core: Arbitrary File Read via sourceMappingURL Comment Low
+    #6 opened 4 days ago • Detected in @babel/core (npm) • pnpm-lock.yaml
+    Select alert: esbuild allows arbitrary file read when running the development server on Windows
+    esbuild allows arbitrary file read when running the development server on Windows Low
+    #5 opened 4 days ago • Detected in esbuild (npm) • pnpm-lock.yaml
+    Select alert: esbuild allows arbitrary file read when running the development server on Windows
+    esbuild allows arbitrary file read when running the development server on Windows Low Development Direct
+    #1 opened 4 days ago • Detected in esbuild (npm) • artifacts/api-server/package.json
+
