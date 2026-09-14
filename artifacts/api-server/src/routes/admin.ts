@@ -174,7 +174,8 @@ async function importMarkdownBuffer(
     .replace(/\.md$/i, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
   const h1 = extractH1(rawMd);
   const title = h1 ?? titleFromSlug(slug);
   const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n?/, ""), imagePathMap);
