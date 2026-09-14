@@ -5,7 +5,7 @@ import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import swaggerUi from "swagger-ui-express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import YAML from "yamljs";
@@ -142,6 +142,22 @@ app.use(
 // Resolve bearer API keys before route-level auth and enforce read-only keys
 // consistently across every mutating endpoint.
 app.use("/api", enforceApiTokenAccess);
+
+// Apply a baseline limit to the entire API route tree. Authenticated callers
+// receive an account-specific quota; unauthenticated callers fall back to a
+// normalized IP key that safely handles IPv6 addresses.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 1_000,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    req.session?.userId
+      ? `user:${req.session.userId}`
+      : `ip:${ipKeyGenerator(req.ip ?? "unknown")}`,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use("/api", apiLimiter);
 
 // Rate limiting on authentication endpoints to prevent brute-force attacks.
 // 10 attempts per 15-minute window per IP.
