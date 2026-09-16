@@ -179,6 +179,22 @@ function KanbanColumn({
   const [editing, setEditing] = useState(false);
   const [colName, setColName] = useState(column.name);
   const addCardRef = useRef<HTMLTextAreaElement>(null);
+  const cardsScrollRef = useRef<HTMLDivElement>(null);
+  const previousCardCountRef = useRef(cardIds.length);
+
+  useEffect(() => {
+    const previousCount = previousCardCountRef.current;
+    previousCardCountRef.current = cardIds.length;
+    if (cardIds.length <= previousCount) return;
+
+    const frame = requestAnimationFrame(() => {
+      const container = cardsScrollRef.current;
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [cardIds.length]);
 
   const submitCard = () => {
     const t = newCardTitle.trim();
@@ -199,7 +215,7 @@ function KanbanColumn({
     <div
       ref={setSortableRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`group/kanban-col w-72 shrink-0 flex flex-col rounded-xl border bg-muted/30 shadow-sm overflow-hidden transition-opacity ${isColDragging ? "opacity-40" : ""}`}
+      className={`group/kanban-col w-72 max-h-full min-h-0 shrink-0 flex flex-col rounded-xl border bg-muted/30 shadow-sm overflow-hidden transition-opacity ${isColDragging ? "opacity-40" : ""}`}
       {...attributes}
     >
       {/* Header */}
@@ -260,15 +276,17 @@ function KanbanColumn({
 
       {/* Cards */}
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-        <div
-          ref={setDroppableRef}
-          className={`flex-1 min-h-[60px] flex flex-col gap-2 p-2 transition-colors ${isOver && !isDraggingColumn ? "bg-primary/5" : ""}`}
-        >
-          {cardIds.map((id) =>
-            cardMap[id] ? (
-              <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} />
-            ) : null,
-          )}
+        <div ref={cardsScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+          <div
+            ref={setDroppableRef}
+            className={`min-h-[60px] flex flex-col gap-2 p-2 transition-colors ${isOver && !isDraggingColumn ? "bg-primary/5" : ""}`}
+          >
+            {cardIds.map((id) =>
+              cardMap[id] ? (
+                <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} />
+              ) : null,
+            )}
+          </div>
         </div>
       </SortableContext>
 
