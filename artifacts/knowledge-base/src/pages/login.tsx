@@ -90,7 +90,11 @@ export default function Login() {
 
       <Card className="w-full max-w-md relative z-10 border-border shadow-md">
         <CardHeader className="space-y-3 text-center pb-6 pt-8">
-          <div className="mx-auto h-12 w-12 rounded-lg bg-primary flex items-center justify-center overflow-hidden text-primary-foreground font-bold text-xl mb-2">
+          <div
+            className={`mx-auto h-12 w-12 flex items-center justify-center overflow-hidden font-bold text-xl mb-2 ${
+              siteSettings?.hasLogo ? "" : "rounded-lg bg-primary text-primary-foreground"
+            }`}
+          >
             {siteSettings?.hasLogo ? (
               <img src={LOGO_URL} alt={`${siteName} logo`} className="h-full w-full object-contain" />
             ) : (
