@@ -263,13 +263,13 @@ router.get("/settings/favicon", async (_req, res) => {
     getSetting("favicon_mime_type"),
   ]);
   if (!dataRow || !mimeRow || !ALLOWED_FAVICON_TYPES.has(mimeRow)) {
-    res.status(404).json({ error: "No favicon configured" });
+    res.redirect(307, "/favicon.svg");
     return;
   }
   const buf = Buffer.from(dataRow, "base64");
   res.setHeader("Content-Type", mimeRow);
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.setHeader("Cache-Control", "public, max-age=300, must-revalidate");
   res.send(buf);
 });
 

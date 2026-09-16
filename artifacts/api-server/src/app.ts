@@ -189,6 +189,12 @@ if (process.env.NODE_ENV !== "production") {
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDoc, { customSiteTitle: "Knowledge Base API" }));
 }
 
+// Browsers and bookmark managers commonly request this conventional path
+// instead of inspecting the icon link that React updates at runtime.
+app.get("/favicon.ico", (_req, res) => {
+  res.redirect(307, "/api/settings/favicon");
+});
+
 app.use("/api", router);
 
 // Serve the pre-built frontend SPA when STATIC_DIR is set (Docker / production).

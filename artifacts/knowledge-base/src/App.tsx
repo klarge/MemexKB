@@ -41,16 +41,22 @@ function TitleSync() {
   const { theme } = useTheme();
   useEffect(() => {
     document.title = settings?.siteName ?? "Memex";
-    const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement("link");
-    icon.rel = "icon";
-    if (settings?.hasFavicon) {
-      icon.type = settings.faviconMimeType ?? "image/png";
-      icon.href = `${FAVICON_URL}?v=${encodeURIComponent(settings.faviconVersion ?? String(Date.now()))}`;
-    } else {
-      icon.type = "image/svg+xml";
-      icon.href = "/favicon.svg";
-    }
-    if (!icon.parentNode) document.head.appendChild(icon);
+    const faviconHref = settings?.hasFavicon
+      ? `${FAVICON_URL}?v=${encodeURIComponent(settings.faviconVersion ?? String(Date.now()))}`
+      : "/favicon.svg";
+    const faviconType = settings?.hasFavicon
+      ? (settings.faviconMimeType ?? "image/png")
+      : "image/svg+xml";
+    const syncIcon = (rel: string) => {
+      const icon = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`) ?? document.createElement("link");
+      icon.rel = rel;
+      icon.type = faviconType;
+      icon.href = faviconHref;
+      if (!icon.parentNode) document.head.appendChild(icon);
+    };
+    syncIcon("icon");
+    syncIcon("shortcut icon");
+    syncIcon("apple-touch-icon");
     applyAccentColor(settings?.accentColor);
   }, [settings, theme]);
   return null;

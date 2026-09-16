@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ShieldCheck } from "lucide-react";
+import { LOGO_URL, useSiteSettings } from "@/lib/site-settings";
 
 interface SsoProvider {
   id: number;
@@ -37,6 +38,8 @@ const SSO_ERRORS: Record<string, string> = {
 export default function Login() {
   const { toast } = useToast();
   const login = useLogin();
+  const { data: siteSettings } = useSiteSettings();
+  const siteName = siteSettings?.siteName ?? "Memex";
 
   // Show SSO error from redirect params
   useEffect(() => {
@@ -87,10 +90,14 @@ export default function Login() {
 
       <Card className="w-full max-w-md relative z-10 border-border shadow-md">
         <CardHeader className="space-y-3 text-center pb-6 pt-8">
-          <div className="mx-auto h-12 w-12 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl mb-2">
-            L
+          <div className="mx-auto h-12 w-12 rounded-lg bg-primary flex items-center justify-center overflow-hidden text-primary-foreground font-bold text-xl mb-2">
+            {siteSettings?.hasLogo ? (
+              <img src={LOGO_URL} alt={`${siteName} logo`} className="h-full w-full object-contain" />
+            ) : (
+              siteName.charAt(0).toUpperCase()
+            )}
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Welcome to Memex</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Welcome to {siteName}</CardTitle>
           <CardDescription>
             Enter your credentials to access the knowledge base.
           </CardDescription>
