@@ -2,33 +2,28 @@
 /**
  * Memex MCP Server
  *
- * Exposes a Memex knowledge base as five tools for MCP-compatible LLM clients
- * (Claude Desktop, Cursor, VS Code Copilot, etc.).
+ * Exposes a Memex knowledge base as five tools over Streamable HTTP.
  *
  * Required env vars:
  *   MEMEX_URL   — base URL of your Memex instance, e.g. http://localhost:3000
- *   MEMEX_TOKEN — API token created in Memex → Settings → API Tokens
+ *   MCP_PORT    — HTTP port (default 3001); TLS terminates at a reverse proxy
  */
 
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import {
-  listArticles,
-  getArticle,
-  listTags,
+  createApiClient,
   htmlToText,
   formatDate,
   tagList,
   excerpt,
 } from "./client.js";
 
-// ─── Server init ─────────────────────────────────────────────────────────────
-
-const server = new McpServer({
-  name: "memex",
-  version: "1.0.0",
-});
+function createMcpServer(token: string): McpServer {
+  const { listArticles, getArticle, listTags } = createApiClient(token);
+  const server = new McpServer({ name: "memex", version: "1.0.0" });
 
 // ─── Tool: search_articles ────────────────────────────────────────────────────
 
@@ -307,7 +302,137 @@ server.tool(
   },
 );
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+  return server;
+}
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+// Authentication is checked for *every* request. No token or MCP session is
+// shared between connections, so an MCP client only sees the key owner's data.
+const baseUrl = (process.env.MEMEX_URL ?? "").replace(/\/+$/, "");
+if (!baseUrl) throw new Error("MEMEX_URL environment variable is not set");
+
+const port = Number(process.env.MCP_PORT ?? "3001");
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error("MCP_PORT must be a TCP port between 1 and 65535");
+}
+const host = process.env.MCP_HOST ?? "127.0.0.1";
+const allowedOrigins = new Set(
+  (process.env.MCP_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
+);
+
+function sendError(res: ServerResponse, status: number, message: string) {
+  res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+  res.end(JSON.stringify({ error: message }));
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.length;
+    if (size > 1024 * 1024) throw new Error("Request body exceeds 1 MB");
+    chunks.push(bytes);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+const httpServer = createServer(async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const path = new URL(req.url ?? "/", "http://localhost").pathname;
+  if (path === "/healthz" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (path !== "/mcp") {
+    sendError(res, 404, "Not found");
+    return;
+  }
+
+  const origin = req.headers.origin;
+  if (origin && !allowedOrigins.has(origin)) {
+    sendError(res, 403, "Origin not allowed");
+    return;
+  }
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Vary", "Origin");
+  }
+  if (req.method === "OPTIONS" && origin) {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (!["POST", "GET", "DELETE"].includes(req.method ?? "")) {
+    res.setHeader("Allow", "POST, OPTIONS");
+    sendError(res, 405, "Method not allowed");
+    return;
+  }
+
+  const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? "");
+  if (!match) {
+    res.setHeader("WWW-Authenticate", 'Bearer realm="Memex MCP"');
+    sendError(res, 401, "Bearer API key required");
+    return;
+  }
+  const token = match[1];
+  try {
+    const verified = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!verified.ok) {
+      if (verified.status === 429) {
+        const retryAfter = verified.headers.get("retry-after");
+        if (retryAfter) res.setHeader("Retry-After", retryAfter);
+        sendError(res, 429, "Memex API rate limit exceeded");
+      } else {
+        sendError(res, verified.status === 401 || verified.status === 403 ? 401 : 503,
+          verified.status === 401 || verified.status === 403 ? "Invalid API key" : "Memex API unavailable");
+      }
+      return;
+    }
+  } catch {
+    sendError(res, 503, "Memex API unavailable");
+    return;
+  }
+
+  // This server has no server-initiated notifications or persistent sessions.
+  // Per the MCP transport spec, reject standalone SSE and session termination.
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    sendError(res, 405, "Only stateless POST requests are supported");
+    return;
+  }
+
+  let parsedBody: unknown;
+  try {
+    parsedBody = await readBody(req);
+  } catch (error) {
+    sendError(res, error instanceof Error && error.message === "Request body exceeds 1 MB" ? 413 : 400,
+      "Invalid or oversized JSON request");
+    return;
+  }
+
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  const server = createMcpServer(token);
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, parsedBody);
+  } catch (error) {
+    process.stderr.write(`MCP request failed: ${error instanceof Error ? error.message : "Unknown error"}\n`);
+    if (!res.headersSent) sendError(res, 500, "MCP request failed");
+    else res.destroy();
+  } finally {
+    await server.close();
+  }
+});
+
+httpServer.listen(port, host, () => {
+  process.stderr.write(`Memex MCP listening on http://${host}:${port}/mcp\n`);
+});

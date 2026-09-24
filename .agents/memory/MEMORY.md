@@ -8,3 +8,4 @@
 - [Infobox textarea sizing](infobox-textarea-sizing.md) — node-view textareas need a nonzero first-line height before auto-grow can measure them.
 - [Article visibility policy](article-visibility-policy.md) — visibility is explicit; authorization, counts, pagination, stats, caches, and derived surfaces must all use the same policy.
 - [Docker database modes](docker-database-modes.md) — external-DB Compose is standalone so local DB dependencies cannot leak into external deployments.
+- [MCP request identity](mcp-request-identity.md) — never cache a user's bearer key in shared MCP transport/session state; bind API access to each authenticated request.

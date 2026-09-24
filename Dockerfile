@@ -25,7 +25,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # Build the API server — produces artifacts/api-server/dist/index.mjs via esbuild
 RUN pnpm --filter @workspace/api-server run build
 
-# Build the stdio MCP server — its compiled output is packaged in the runtime
+# Build the Streamable HTTP MCP server — its compiled output is packaged in the runtime
 # image so Docker users do not need a separate MCP build on the host.
 RUN pnpm --filter @workspace/mcp-server run build
 
@@ -57,7 +57,7 @@ RUN npm install --no-save \
 # Compiled API server bundle + pino worker thread files
 COPY --from=builder /app/artifacts/api-server/dist ./dist
 
-# MCP stdio server and its production-only SDK dependencies. Keep this in a
+# MCP HTTP server and its production-only SDK dependencies. Keep this in a
 # separate package root so its ESM metadata and node_modules stay isolated from
 # the API runtime.
 COPY --from=builder /app/artifacts/mcp-server/package.json ./mcp/package.json
@@ -84,6 +84,6 @@ ENV MIGRATIONS_DIR=/app/migrations
 # COOKIE_SECURE: set to true when serving over HTTPS.
 # COOKIE_SAMESITE: "lax" (default) | "strict" | "none" (auto-enables Secure).
 
-EXPOSE 3000
+EXPOSE 3000 3001
 
 CMD ["node", "--enable-source-maps", "/app/dist/index.mjs"]

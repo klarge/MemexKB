@@ -1,4 +1,4 @@
-# Standalone alternative to docker-compose.yml: only the app (and optional MCP).
+# Standalone alternative to docker-compose.yml: the app and MCP, without local PostgreSQL.
 # Run with: docker compose -f docker-compose.external-db.yml up -d
 # Set DATABASE_URL and SESSION_SECRET in an untracked .env file.
 services:
@@ -23,12 +23,16 @@ services:
 
   mcp:
     image: ghcr.io/klarge/memexkb:latest
-    profiles: ["mcp"]
-    stdin_open: true
-    tty: false
+    restart: unless-stopped
     command: ["node", "/app/mcp/dist/index.js"]
+    ports:
+      - "127.0.0.1:${MCP_PORT:-3001}:3001"
     environment:
       MEMEX_URL: http://app:3000
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "3001"
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      MCP_API_TIMEOUT_MS: ${MCP_API_TIMEOUT_MS:-10000}
     depends_on:
       app:
         condition: service_started

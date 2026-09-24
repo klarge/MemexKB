@@ -52,18 +52,21 @@ services:
       db:
         condition: service_healthy
 
-  # ── MCP stdio launcher (opt-in) ───────────────────────────────────────────────
-  # This is intentionally a profile service: stdio must remain attached to the
-  # LLM client's stdin/stdout, so it should be started with `docker compose run`
-  # rather than as a detached `docker compose up` service.
+  # ── MCP Streamable HTTP ──────────────────────────────────────────────────────
+  # Only published on loopback. Terminate HTTPS at a reverse proxy for remote
+  # clients; never expose the plain HTTP port directly to the internet.
   mcp:
     image: ghcr.io/klarge/memexkb:latest
-    profiles: ["mcp"]
-    stdin_open: true
-    tty: false
+    restart: unless-stopped
     command: ["node", "/app/mcp/dist/index.js"]
+    ports:
+      - "127.0.0.1:${MCP_PORT:-3001}:3001"
     environment:
       MEMEX_URL: http://app:3000
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "3001"
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      MCP_API_TIMEOUT_MS: ${MCP_API_TIMEOUT_MS:-10000}
     depends_on:
       app:
         condition: service_started

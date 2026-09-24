@@ -54,7 +54,7 @@ A self-hostable wiki and productivity hub with a React frontend and Express back
 ```bash
 pnpm --filter @workspace/api-server run dev       # API server (port from $PORT)
 pnpm --filter @workspace/knowledge-base run dev   # React SPA dev server
-pnpm --filter @workspace/mcp-server run dev       # MCP server (stdio, for local testing)
+MEMEX_URL=http://localhost:3000 pnpm --filter @workspace/mcp-server run dev  # MCP HTTP server on 127.0.0.1:3001
 pnpm run typecheck                                 # full typecheck across all packages
 pnpm run build                                     # typecheck + build all packages
 pnpm --filter @workspace/api-spec run codegen     # regenerate API hooks from OpenAPI spec
@@ -67,7 +67,7 @@ Required env: `DATABASE_URL` (Postgres connection string), `SESSION_SECRET`
 
 ## Self-Hosting with Docker
 
-Memex ships as a single Docker image (multi-platform: `linux/amd64` and `linux/arm64`) bundling the API server, pre-built frontend SPA, and the stdio MCP server. No Node.js or pnpm required on the host.
+Memex ships as a single Docker image (multi-platform: `linux/amd64` and `linux/arm64`) bundling the API server, pre-built frontend SPA, and the Streamable HTTP MCP server. No Node.js or pnpm required on the host.
 
 ### Prerequisites
 
@@ -108,40 +108,32 @@ For backward compatibility, the local Compose file still has insecure developmen
    curl -f http://localhost:3000/api/healthz
    ```
 
-The app applies the bundled SQL migrations before it starts listening. A connection or migration failure stops that attempt to start; check the app logs and database network/credentials rather than running `drizzle-kit push` against production. To use the optional stdio MCP service with this configuration, have your MCP client supply its own `MEMEX_TOKEN` environment variable and run `docker compose -f docker-compose.external-db.yml run --rm -T -e MEMEX_TOKEN mcp` (see below).
+The app applies the bundled SQL migrations before it starts listening. A connection or migration failure stops that attempt to start; check the app logs and database network/credentials rather than running `drizzle-kit push` against production. The external-DB Compose file also starts the same HTTP MCP service as the local-DB file.
 
 ### Use the MCP server from Compose
 
-The image includes the MCP server automatically, but the current MCP transport is **stdio**, not an HTTP endpoint. Do not start it as a detached service: it must stay attached to the MCP client that reads and writes its protocol messages.
+Both Compose files start an `mcp` service at **`http://127.0.0.1:3001/mcp`** (or the host port set by `MCP_PORT`). It is bound to loopback on the Docker host, not exposed publicly over plaintext HTTP. `MEMEX_URL=http://app:3000` is only the internal connection from MCP to the app. There is **no shared MCP token** in Compose.
 
-1. Each user logs in to Memex and creates their own **Read-only** API key in **Settings → API Keys**. MCP requests use the key owner's article and group permissions, not the permissions of whoever is logged in to the web UI at the time.
-2. Configure each user's MCP client to supply **their own** `MEMEX_TOKEN` in its local environment and launch the Compose service. For example, in Claude Desktop:
+1. Each user creates their own **Read-only** API key in **Settings → API Keys**. Every MCP request uses that key owner's permissions.
+2. For remote access, put an HTTPS reverse proxy in front of both the app and the MCP port. For example, Caddy running **on the Docker host**:
 
-   ```json
-   {
-     "mcpServers": {
-       "memex": {
-         "command": "docker",
-         "args": [
-           "compose",
-           "-f",
-           "/absolute/path/to/memex/docker-compose.yml",
-           "run",
-            "--rm",
-            "-T",
-            "-e",
-            "MEMEX_TOKEN",
-           "mcp"
-          ],
-          "env": {
-            "MEMEX_TOKEN": "paste-your-own-read-only-api-key-here"
-          }
-       }
-     }
+   ```caddyfile
+   wiki.example.com {
+     reverse_proxy /mcp 127.0.0.1:3001
+     reverse_proxy 127.0.0.1:3000
    }
    ```
 
-The `mcp` service uses `http://app:3000` inside the Compose network. The `-e MEMEX_TOKEN` flag forwards the key from **that MCP client's process environment** into its own MCP container; neither Compose file stores a shared key. Keep each client's configuration private, and remove any old `MEMEX_TOKEN` entry from the shared Compose `.env` file. A normal `docker compose up -d` still starts only PostgreSQL and the web application. See `artifacts/mcp-server/README.md` for client-specific configuration and local non-Docker setup.
+   Configure DNS and HTTPS for that hostname. Connect a Streamable HTTP-capable client to `https://wiki.example.com/mcp` and configure it to send `Authorization: Bearer <that user's API key>` on every request. Do not put the key in the URL or shared Compose `.env`. Clients with an HTTP-header field can use, for example:
+
+   ```json
+   {
+     "url": "https://wiki.example.com/mcp",
+     "headers": { "Authorization": "Bearer YOUR_OWN_READ_ONLY_API_KEY" }
+   }
+   ```
+
+   The client-specific JSON shape varies. Clients that require OAuth rather than a configurable bearer header are **not supported by this API-key setup**. Browser-based clients must also have their exact origin listed in `MCP_ALLOWED_ORIGINS` in `.env`; desktop clients usually send no `Origin` header. Only expose `/mcp` over HTTPS; leave port 3001 bound to loopback. See `artifacts/mcp-server/README.md` for local checks and client guidance.
 
 ### Environment variables
 
@@ -162,7 +154,7 @@ The Docker image includes `lib/db/migrations` and sets `MIGRATIONS_DIR=/app/migr
 
 ECS does not run Docker Compose. Build the same `Dockerfile` image, supply the external database URL and session secret to the ECS task, and put an Application Load Balancer (ALB) in front of the app. A basic single-task Fargate deployment:
 
-1. **Network and database:** In one AWS Region, create a VPC with public subnets for the ALB and private subnets for ECS and RDS. Create an RDS for PostgreSQL 16 instance (or compatible version), a database named `memexkb`, and an application user with schema-creation/migration permissions. Keep RDS **not publicly accessible**. Permit inbound TCP 5432 on the RDS security group **only from the ECS task security group**; permit ALB-to-task TCP 3000. Arrange outbound access for ECS to ECR, Secrets Manager, and CloudWatch Logs via a NAT gateway or the appropriate VPC endpoints.
+1. **Network and database:** In one AWS Region, create a VPC with public subnets for the ALB and private subnets for ECS and RDS. Create an RDS for PostgreSQL 16 instance (or compatible version), a database named `memexkb`, and an application user with schema-creation/migration permissions. Keep RDS **not publicly accessible**. Permit inbound TCP 5432 on the RDS security group **only from the ECS task security group**; permit ALB-to-task TCP 3000 for the app and 3001 for MCP. Arrange outbound access for ECS to ECR, Secrets Manager, and CloudWatch Logs via a NAT gateway or the appropriate VPC endpoints.
 2. **Image:** Create a private ECR repository and push an image built for your Fargate architecture. For example, with the AWS CLI configured for the target account and Region:
 
    ```bash
@@ -177,8 +169,8 @@ ECS does not run Docker Compose. Build the same `Dockerfile` image, supply the e
 
    Choose `ARM64` in the task definition and build for `linux/arm64` instead if using ARM-based Fargate. Reuse the repository on subsequent pushes (skip `create-repository`).
 3. **Secrets and IAM:** In AWS Secrets Manager, store the full RDS `DATABASE_URL` (including `?sslmode=require` for TLS) and a separately generated `SESSION_SECRET` as two secrets. URL-encode credential characters. Never place either value in the task definition's plain `environment` array, image, source control, or ECS service command. Give the **task execution role** the managed `AmazonECSTaskExecutionRolePolicy` plus `secretsmanager:GetSecretValue` for those secret ARNs (and `kms:Decrypt` if using a customer-managed key). Configure an `awslogs` log group. The task role does not need database credentials when they are injected by the execution role.
-4. **Task definition:** Create a Fargate task using the pushed ECR image, `awsvpc` networking, `X86_64`/Linux for the example build, at least 0.5 vCPU / 1 GB RAM, and container port **3000**. Map the secrets to environment variables named `DATABASE_URL` and `SESSION_SECRET`. Set plain environment variables `NODE_ENV=production`, `PORT=3000`, `STATIC_DIR=/app/public`, `MIGRATIONS_DIR=/app/migrations`, `COOKIE_SECURE=true`, and `TRUST_PROXY=1`. Configure CloudWatch `awslogs` and, optionally, a container health check against `http://localhost:3000/api/healthz`. The task's entrypoint is already defined by the image; do not override it.
-5. **Service and HTTPS:** Create an ECS service in the private subnets with **one task** initially. Create an ALB in the public subnets, an IP-type target group for port 3000 with health-check path `/api/healthz`, and an HTTPS listener with an ACM certificate forwarding to that target group. Redirect HTTP to HTTPS. Point DNS at the ALB. Check CloudWatch logs for “Database migrations complete” before opening the app and completing initial admin setup. The health endpoint checks HTTP availability, not RDS connectivity; use logs and app operations to confirm the database works.
+4. **Task definition:** Create a Fargate task using the pushed ECR image, `awsvpc` networking, `X86_64`/Linux for the example build, and enough task CPU/memory for **two containers** (for example, 1 vCPU / 2 GB RAM). The `app` container maps port **3000**, receives the `DATABASE_URL` and `SESSION_SECRET` secrets, and sets plain environment variables `NODE_ENV=production`, `PORT=3000`, `STATIC_DIR=/app/public`, `MIGRATIONS_DIR=/app/migrations`, `COOKIE_SECURE=true`, and `TRUST_PROXY=1`. Keep its image-defined command. Add an `mcp` container **using the same image**, mapping port **3001**, overriding its command to `["node", "/app/mcp/dist/index.js"]`, and setting `MEMEX_URL=http://127.0.0.1:3000`, `MCP_HOST=0.0.0.0`, `MCP_PORT=3001`. Containers in the same Fargate task share localhost. Do not inject any user's API key into either container. Configure CloudWatch `awslogs` for both.
+5. **Service and HTTPS:** Create an ECS service in the private subnets with **one task** initially. Create an ALB in the public subnets with two IP-type target groups: port 3000 (`/api/healthz` health check) for the app and port 3001 (`/healthz` health check) for MCP. On its ACM-backed HTTPS listener, route path `/mcp` to the MCP target group and other paths to the app target group; redirect HTTP to HTTPS. Point DNS at the ALB. Check CloudWatch logs for “Database migrations complete” before opening the app and completing initial admin setup. Each MCP request authenticates its own bearer key with the app over localhost; the health endpoints only check HTTP availability, not RDS connectivity.
 
    The app currently migrates on every start, so avoid concurrent fresh tasks during a schema upgrade. Keep the service at one task until you have a separate, coordinated migration process for scale-out or zero-downtime rolling deployments. Back up RDS before upgrading the image. To seed an admin instead of using in-app setup, supply `RUN_SEED=true` and `SEED_ADMIN_EMAIL` plus `SEED_ADMIN_PASSWORD` (as a secret) for the first start only, then remove them. Use the **same** `SESSION_SECRET` across restarts/tasks so existing sessions remain valid.
 
@@ -433,28 +425,7 @@ The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compa
 | `list_tags` | List all tags and their IDs |
 | `get_backlinks` | Find every article that links to a given one |
 
-**Setup (Claude Desktop):**
-
-1. Create an API token in Memex → Settings → API Keys
-2. For a local checkout, build the server: `pnpm --filter @workspace/mcp-server build`. When using the published Docker image, the MCP server is already included.
-3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "memex": {
-      "command": "node",
-      "args": ["/path/to/artifacts/mcp-server/dist/index.js"],
-      "env": {
-        "MEMEX_URL": "http://your-memex-host:3000",
-        "MEMEX_TOKEN": "your-api-token"
-      }
-    }
-  }
-}
-```
-
-See `artifacts/mcp-server/README.md` for full setup instructions including Cursor support.
+**Connection:** Use the HTTPS `/mcp` endpoint and a per-user Read-only API key in an MCP client that supports Streamable HTTP with a custom Authorization header. See the [Compose HTTPS instructions](#use-the-mcp-server-from-compose) and `artifacts/mcp-server/README.md`. There is no local stdio launcher or shared server-side token.
 
 ---
 
@@ -568,7 +539,7 @@ A GitHub Actions workflow (`.github/workflows/build-android.yml`) builds a debug
 
 - The `vite.config.ts` requires `PORT` to be set even during `vite build`. The Dockerfile passes `PORT=4000` as a build-time env var.
 - `drizzle-kit push` requires a TTY when there are unresolvable schema conflicts. On a fresh database this is never an issue.
-- The MCP server uses stdio transport — it must be launched as a subprocess by the LLM client, not run as a standalone server.
+- The MCP server uses stateless Streamable HTTP on `/mcp`; terminate public HTTPS at a reverse proxy, with each client sending its own bearer API key.
 - The Android APK produced by CI is a debug build (unsigned). For production distribution, set up signing keys in the GitHub Actions workflow.
 - The `/api/dev/autologin` route (used by `docs/take-screenshots.mjs`) is only registered when `NODE_ENV !== "production"` and is never present in the Docker runtime image.
 

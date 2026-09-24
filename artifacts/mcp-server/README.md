@@ -1,173 +1,63 @@
 # Memex MCP Server
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that connects Claude Desktop, Cursor, VS Code Copilot, and other MCP clients to your self-hosted [Memex](../knowledge-base) knowledge base.
+Memex exposes its knowledge base over the MCP **Streamable HTTP** transport. It runs as a long-lived service, not as a stdio subprocess on each user's computer.
 
-## What it does
-
-Your LLM client gets five tools:
+## Tools
 
 | Tool | Description |
-|------|-------------|
-| `search_articles` | Keyword search across titles and content |
-| `get_article` | Read the full body of a specific article |
-| `list_articles` | Browse all articles with optional tag filtering and pagination |
-| `list_tags` | See all tags and their IDs (for filtering) |
-| `get_backlinks` | Find every article that links to a given one |
+|---|---|
+| `search_articles` | Search titles and content |
+| `get_article` | Read an article by slug |
+| `list_articles` | Browse articles with filters and pagination |
+| `list_tags` | List available tags |
+| `get_backlinks` | Find articles linking to an article |
 
-## Prerequisites
+All tools are read-only. Each request is checked using the API key supplied by the calling client, and article/group permissions are those of **the key's owner**. No user's key is stored in the server configuration or shared between requests.
 
-- A running Memex instance
-- An API token (see below)
-- Node.js 18+ for the local checkout setup, or Docker Compose v2 for the packaged setup
+## Docker Compose
 
-## Step 1 — Create an API token in Memex
+Both `docker-compose.yml` and `docker-compose.external-db.yml` start `mcp` alongside the app with `docker compose up -d`. The service calls the app internally at `http://app:3000` and listens at `http://127.0.0.1:3001/mcp` on the Docker host (change the host port with `MCP_PORT`). An unauthenticated readiness check is available at `http://127.0.0.1:3001/healthz`.
 
-1. Log in to your Memex instance
-2. Click your avatar → **Settings** → **API Tokens**
-3. Click **New token**, give it a name (e.g. "Claude Desktop"), and click **Create**
-4. Copy the token — it's only shown once
+**Do not expose the HTTP port directly to the internet.** Run an HTTPS reverse proxy on the same Docker host, forwarding the `/mcp` path to `127.0.0.1:3001`. For example:
 
-> **Permissions:** The token inherits the permissions of the user who creates it. Create it with an account that has read access to all articles you want the LLM to see. Group-restricted articles that the token owner can't access will be listed (title visible) but their content won't be readable.
+```caddyfile
+wiki.example.com {
+  reverse_proxy /mcp 127.0.0.1:3001
+  reverse_proxy 127.0.0.1:3000
+}
+```
 
-For an LLM integration, choose **Read-only** when creating the token unless the integration needs to change Memex data. Read-only keys retain the owner's visibility rules while rejecting all API writes.
+Then point your Streamable HTTP MCP client to `https://wiki.example.com/mcp`. If the proxy runs in another container on the same Compose network, use `mcp:3001` and `app:3000` instead of host loopback. Configure DNS and TLS before opening the endpoint to remote clients. See the root README for the ECS/ALB equivalent.
 
-## Step 2 — Build the server
+## Per-user authentication
 
-From the workspace root:
+1. Each user logs in to Memex and creates a **Read-only** key in **Settings → API Keys**. Save it securely; it is shown only once.
+2. In an MCP client that supports Streamable HTTP and custom request headers, set the URL to `https://wiki.example.com/mcp` and the header `Authorization: Bearer <your own API key>`. The exact client settings vary; the following is a generic example, **not** universal configuration syntax:
+
+   ```json
+   {
+     "url": "https://wiki.example.com/mcp",
+     "headers": {
+       "Authorization": "Bearer YOUR_OWN_READ_ONLY_API_KEY"
+     }
+   }
+   ```
+
+Never put an API key in the URL, Docker Compose, or a shared `.env` file. If your MCP client only supports OAuth (and cannot send a custom bearer header), it cannot authenticate with this API-key endpoint yet. Clients that only support local stdio also need a compatible HTTP client/bridge; the former stdio launcher has been removed.
+
+Browser clients send an `Origin` header. By default the server rejects requests carrying an Origin; to allow one, set `MCP_ALLOWED_ORIGINS=https://your-client-origin.example` in the Compose `.env` file (comma-separated exact origins). Desktop clients usually do not send Origin. CORS preflight is supported for allowed origins.
+
+## Local development
+
+With the API server running locally, start the MCP service:
 
 ```bash
-pnpm --filter @workspace/mcp-server build
+MEMEX_URL=http://localhost:3000 pnpm --filter @workspace/mcp-server run dev
 ```
 
-Or from this directory:
+It binds to `127.0.0.1:3001` by default. For containers, Compose sets `MCP_HOST=0.0.0.0` so the port is reachable from the host/proxy, while publishing it **only to host loopback**.
 
-```bash
-pnpm install
-pnpm build
-```
+To confirm it is listening, `curl -f http://127.0.0.1:3001/healthz` should return `{"status":"ok"}`. To verify authentication without revealing a token, an unauthenticated `POST /mcp` should return `401`; a valid bearer key is required for initialization and every tool request. Invalid/expired keys return `401`, a disconnected app returns `503`, and disallowed browser Origins return `403`.
 
-The compiled server lands at `dist/index.js`.
-
-## Step 3 — Use the Docker Compose launcher
-
-The published Memex image includes the compiled MCP server and its production dependencies. The MCP server currently uses **stdio**, so it is not a detached network service. Start it through Compose only when an MCP client launches it:
-
-1. The Memex app must be running with either Compose file; its `.env` is for the app, **not** for a shared MCP token.
-2. Each user creates their own Read-only API key and sets `MEMEX_TOKEN` in **their own MCP client's local environment**.
-3. Configure the client to forward that variable to its MCP container:
-
-```text
-docker compose -f /absolute/path/to/memex/docker-compose.yml run --rm -T -e MEMEX_TOKEN mcp
-```
-
-For Claude Desktop:
-
-```json
-{
-  "mcpServers": {
-    "memex": {
-      "command": "docker",
-      "args": [
-        "compose",
-        "-f",
-        "/absolute/path/to/memex/docker-compose.yml",
-        "run",
-        "--rm",
-        "-T",
-        "-e",
-        "MEMEX_TOKEN",
-        "mcp"
-      ],
-      "env": {
-        "MEMEX_TOKEN": "paste-your-own-read-only-api-key-here"
-      }
-    }
-  }
-}
-```
-
-The Compose service supplies `MEMEX_URL=http://app:3000` but **no token**. Docker's `-e MEMEX_TOKEN` forwards the variable supplied by the client into the MCP container. Keep the client config private; anyone with access to it or the Docker daemon may be able to read the key. If an older shared Compose `.env` contains `MEMEX_TOKEN`, remove it so it cannot be used as a fallback. A regular `docker compose up -d` does not start the MCP process. For an external database, replace the Compose filename above with `docker-compose.external-db.yml`. If you want to run the MCP server locally instead, continue with the Node-based client configuration below.
-
-## Step 4 — Add to Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
-
-```json
-{
-  "mcpServers": {
-    "memex": {
-      "command": "node",
-      "args": ["/absolute/path/to/artifacts/mcp-server/dist/index.js"],
-      "env": {
-        "MEMEX_URL": "http://your-memex-host:3000",
-        "MEMEX_TOKEN": "paste-your-token-here"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Desktop. You should see a 🔌 icon in the chat input area confirming tools are loaded.
-
-## Step 4 (alternative) — Add to Cursor
-
-Open Cursor → Settings → MCP, then add a new server:
-
-```json
-{
-  "memex": {
-    "command": "node",
-    "args": ["/absolute/path/to/artifacts/mcp-server/dist/index.js"],
-    "env": {
-      "MEMEX_URL": "http://your-memex-host:3000",
-      "MEMEX_TOKEN": "paste-your-token-here"
-    }
-  }
-}
-```
-
-## Development (no build step)
-
-If you have `tsx` installed, you can run the server directly from TypeScript:
-
-```json
-{
-  "mcpServers": {
-    "memex": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/artifacts/mcp-server/src/index.ts"],
-      "env": {
-        "MEMEX_URL": "http://your-memex-host:3000",
-        "MEMEX_TOKEN": "paste-your-token-here"
-      }
-    }
-  }
-}
-```
-
-## Verifying it works
-
-After restarting your client, try these prompts:
-
-- *"What articles do we have in the knowledge base?"*
-- *"Search for anything related to deployment"*
-- *"What tags exist in our KB?"*
-- *"Read the article about incident response"*
-- *"Which articles link to our onboarding guide?"*
-
-## Environment variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `MEMEX_URL` | ✅ | Base URL of your Memex instance, e.g. `http://192.168.1.10:3000`. No trailing slash. |
-| `MEMEX_TOKEN` | ✅ | API token from Memex Settings → API Tokens |
-
-## Troubleshooting
-
-**"MEMEX_URL is not set"** — Check that the `env` block in your MCP config has the right key name (capital letters, underscore).
-
-**API 401 errors** — The token is invalid or expired. Create a new one in Memex Settings.
-
-**API 403 errors** — The token owner doesn't have the required role. Make sure the Memex user is at least a `viewer`.
-
-**Group-restricted articles** — These show up in search/list results (title visible) but `get_article` returns an access-denied message. Create the token with an admin account if you need full access.
+The endpoint is stateless: there is no shared session ID, so it can be served by multiple replicas once the app's startup migration process is coordinated for scale-out.
+Upstream API tool requests time out after 10 seconds by default; set `MCP_API_TIMEOUT_MS` (100–60000 milliseconds) to change this. If the app rate-limits token validation, MCP forwards HTTP 429 and `Retry-After`.
