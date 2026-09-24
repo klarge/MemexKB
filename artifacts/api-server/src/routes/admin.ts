@@ -22,7 +22,9 @@ import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import multer from "multer";
 const _require = createRequire(import.meta.url);
-const { ZipArchive } = _require("archiver") as typeof import("archiver");
+const { ZipArchive } = _require("archiver") as {
+  ZipArchive: new (options: import("archiver").ArchiverOptions) => import("archiver").Archiver;
+};
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";

@@ -60,7 +60,7 @@ router.post("/tags", requireAuth, requireRole("admin"), async (req, res) => {
 
 // PATCH /api/tags/:id — update a tag name/color (admin only)
 router.patch("/tags/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = typeof req.params.id === "string" ? parseInt(req.params.id, 10) : NaN;
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid tag id" });
     return;
@@ -98,7 +98,7 @@ router.patch("/tags/:id", requireAuth, requireRole("admin"), async (req, res) =>
 
 // DELETE /api/tags/:id — delete a tag (admin only)
 router.delete("/tags/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = typeof req.params.id === "string" ? parseInt(req.params.id, 10) : NaN;
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid tag id" });
     return;

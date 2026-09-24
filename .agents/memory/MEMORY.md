@@ -10,3 +10,4 @@
 - [Docker database modes](docker-database-modes.md) — external-DB Compose is standalone so local DB dependencies cannot leak into external deployments.
 - [MCP request identity](mcp-request-identity.md) — never cache a user's bearer key in shared MCP transport/session state; bind API access to each authenticated request.
 - [Orval path/query collision](orval-path-query-collision.md) — adding query params to an operation with path params can duplicate Zod barrel exports; account for this generator quirk.
+- [Archiver runtime types](archiver-runtime-types.md) — ZIP export uses a class at runtime even though installed declarations describe an older callable API.
