@@ -112,10 +112,10 @@ The app applies the bundled SQL migrations before it starts listening. A connect
 
 ### Use the MCP server from Compose
 
-Both Compose files start an `mcp` service at **`http://127.0.0.1:3001/mcp`** (or the host port set by `MCP_PORT`). It is bound to loopback on the Docker host, not exposed publicly over plaintext HTTP. `MEMEX_URL=http://app:3000` is only the internal connection from MCP to the app. There is **no shared MCP token** in Compose.
+Both Compose files start an `mcp` service on HTTP port **3001 published on all Docker host interfaces**, like the app (or the host port set by `MCP_PORT`). From the Docker host, `http://127.0.0.1:3001/mcp` works. **Firewall that port to the HTTPS proxy or its private network.** Without network restrictions, clients can bypass the proxy and send bearer API keys over unencrypted HTTP. `MEMEX_URL=http://app:3000` is only the internal connection from MCP to the app. There is **no shared MCP token** in Compose.
 
 1. Each user creates their own **Read-only** API key in **Settings → API Keys**. Every MCP request uses that key owner's permissions.
-2. For remote access, put an HTTPS reverse proxy in front of both the app and the MCP port. For example, Caddy running **on the Docker host**:
+2. For remote access, put an HTTPS reverse proxy in front of both the app and the MCP port. For example, Caddy running **on the Docker host** (if the proxy runs on another host, use the Docker host's private IP and allow only that proxy to reach port 3001):
 
    ```caddyfile
    wiki.example.com {
@@ -133,7 +133,7 @@ Both Compose files start an `mcp` service at **`http://127.0.0.1:3001/mcp`** (or
    }
    ```
 
-   The client-specific JSON shape varies. Clients that require OAuth rather than a configurable bearer header are **not supported by this API-key setup**. Browser-based clients must also have their exact origin listed in `MCP_ALLOWED_ORIGINS` in `.env`; desktop clients usually send no `Origin` header. Only expose `/mcp` over HTTPS; leave port 3001 bound to loopback. See `artifacts/mcp-server/README.md` for local checks and client guidance.
+   The client-specific JSON shape varies. Clients that require OAuth rather than a configurable bearer header are **not supported by this API-key setup**. Browser-based clients must also have their exact origin listed in `MCP_ALLOWED_ORIGINS` in `.env`; desktop clients usually send no `Origin` header. Only allow public clients through the HTTPS proxy; restrict direct access to port 3001 with a firewall. See `artifacts/mcp-server/README.md` for local checks and client guidance.
 
 ### Environment variables
 
