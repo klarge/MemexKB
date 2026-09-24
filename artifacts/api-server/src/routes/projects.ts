@@ -143,6 +143,17 @@ async function getProjectIdForCard(cardId: number): Promise<number | null> {
 // Safety cap: return at most this many projects per request.
 const PROJECTS_CAP = 100;
 
+// Optional paging for bounded consumers such as MCP. Requests without paging
+// retain the existing web app response shape and ordering.
+function optionalReadPage(query: Record<string, unknown>): { limit: number; offset: number } | null | undefined {
+  if (query.limit === undefined && query.offset === undefined) return null;
+  const limit = Number(query.limit ?? 50);
+  const offset = Number(query.offset ?? 0);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+      !Number.isInteger(offset) || offset < 0 || offset > 2_147_483_647) return undefined;
+  return { limit, offset };
+}
+
 router.get("/projects", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const userRole = req.session.userRole;
@@ -215,10 +226,14 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
   const { canAccess, isOwner, project } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+  const page = optionalReadPage(req.query);
+  if (page === undefined) { res.status(400).json({ error: "Invalid paging parameters" }); return; }
 
-  const [boards, projectGroupRows] = await Promise.all([
+  const boardsQuery = db.select().from(boardsTable)
+    .where(eq(boardsTable.projectId, projectId)).orderBy(asc(boardsTable.position), asc(boardsTable.id));
+  const [fetchedBoards, projectGroupRows] = await Promise.all([
     // Return all boards (active + archived); the frontend separates them
-    db.select().from(boardsTable).where(eq(boardsTable.projectId, projectId)).orderBy(asc(boardsTable.position)),
+    page ? boardsQuery.limit(page.limit + 1).offset(page.offset) : boardsQuery,
     db.select({ groupId: projectGroupsTable.groupId }).from(projectGroupsTable).where(eq(projectGroupsTable.projectId, projectId)),
   ]);
 
@@ -229,7 +244,13 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
       .from(groupsTable)
       .where(inArray(groupsTable.id, projectGroupRows.map((r) => r.groupId)));
   }
-  res.json({ ...project, boards, groups, isOwner });
+  res.json({
+    ...project,
+    boards: page ? fetchedBoards.slice(0, page.limit) : fetchedBoards,
+    boardsHasMore: page ? fetchedBoards.length > page.limit : false,
+    groups,
+    isOwner,
+  });
 });
 
 router.patch("/projects/:projectId", requireAuth, async (req, res) => {
@@ -316,8 +337,10 @@ router.get("/projects/:projectId/documents", requireAuth, async (req, res) => {
   const access = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!access.project) { res.status(404).json({ error: "Project not found" }); return; }
   if (!access.canAccess) { res.status(403).json({ error: "Access denied" }); return; }
+  const page = optionalReadPage(req.query);
+  if (page === undefined) { res.status(400).json({ error: "Invalid paging parameters" }); return; }
 
-  const documents = await db
+  const documentsQuery = db
     .select({
       id: articlesTable.id,
       slug: articlesTable.slug,
@@ -333,8 +356,13 @@ router.get("/projects/:projectId/documents", requireAuth, async (req, res) => {
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(and(eq(articlesTable.projectId, projectId), eq(articlesTable.isLogEntry, false)))
     .orderBy(desc(articlesTable.updatedAt), desc(articlesTable.id));
+  const fetchedDocuments = page
+    ? await documentsQuery.limit(page.limit + 1).offset(page.offset)
+    : await documentsQuery;
+  const documents = page ? fetchedDocuments.slice(0, page.limit) : fetchedDocuments;
 
   res.json({
+    hasMore: page ? fetchedDocuments.length > page.limit : false,
     documents: documents.map((document) => ({
       ...document,
       isRestricted: true,
@@ -848,7 +876,10 @@ router.get("/cards/:cardId/comments", requireAuth, async (req, res) => {
   if (!projectId) { res.status(404).json({ error: "Card not found" }); return; }
   const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
-  const comments = await db
+  const page = optionalReadPage(req.query);
+  if (page === undefined) { res.status(400).json({ error: "Invalid paging parameters" }); return; }
+  const newestFirst = page && req.query.order === "desc";
+  const commentsQuery = db
     .select({
       id: boardCardCommentsTable.id,
       cardId: boardCardCommentsTable.cardId,
@@ -860,7 +891,13 @@ router.get("/cards/:cardId/comments", requireAuth, async (req, res) => {
     .from(boardCardCommentsTable)
     .leftJoin(usersTable, eq(boardCardCommentsTable.userId, usersTable.id))
     .where(eq(boardCardCommentsTable.cardId, cardId))
-    .orderBy(asc(boardCardCommentsTable.createdAt));
+    .orderBy(
+      newestFirst ? desc(boardCardCommentsTable.createdAt) : asc(boardCardCommentsTable.createdAt),
+      newestFirst ? desc(boardCardCommentsTable.id) : asc(boardCardCommentsTable.id),
+    );
+  const comments = page
+    ? await commentsQuery.limit(page.limit).offset(page.offset)
+    : await commentsQuery;
   res.json(comments);
 });
 

@@ -424,8 +424,16 @@ The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compa
 | `list_articles` | Browse all articles with optional tag filtering and pagination |
 | `list_tags` | List all tags and their IDs |
 | `get_backlinks` | Find every article that links to a given one |
+| `list_projects` | List accessible active or archived projects |
+| `get_project` | Read a project and its boards |
+| `get_project_board` | Read columns and cards on an accessible board |
+| `list_project_documents` | List a project's documents |
+| `get_project_document` | Read a project's document |
+| `get_card_comments` | Read recent comments on an accessible card |
+| `list_logs` / `get_log` | List and read the API key owner's personal logs |
+| `list_tasks` | Browse the API key owner's task lists and tasks |
 
-**Connection:** Use the HTTPS `/mcp` endpoint and a per-user Read-only API key in an MCP client that supports Streamable HTTP with a custom Authorization header. See the [Compose HTTPS instructions](#use-the-mcp-server-from-compose) and `artifacts/mcp-server/README.md`. There is no local stdio launcher or shared server-side token.
+**Connection:** Use the HTTPS `/mcp` endpoint and a per-user Read-only API key in an MCP client that supports Streamable HTTP with a custom Authorization header. All tools are view-only and retain the API's project/group permissions and personal log/task ownership rules. See the [Compose HTTPS instructions](#use-the-mcp-server-from-compose) and `artifacts/mcp-server/README.md`. There is no local stdio launcher or shared server-side token.
 
 ---
 

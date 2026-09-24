@@ -35,6 +35,83 @@ export interface ArticleListResponse {
   total: number;
 }
 
+export interface ProjectSummary {
+  id: number;
+  name: string;
+  description: string;
+  archivedAt: string | null;
+  updatedAt: string;
+  boardCount?: number;
+}
+
+export interface ProjectBoard {
+  id: number;
+  name: string;
+  position: number;
+  archivedAt: string | null;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  boards: ProjectBoard[];
+  boardsHasMore: boolean;
+  groups: { id: number; name: string }[];
+}
+
+export interface ProjectDocumentSummary {
+  slug: string;
+  title: string;
+  updatedAt: string;
+}
+
+export interface ProjectDocument extends ProjectDocumentSummary {
+  content: string;
+  createdAt: string;
+  tags: Tag[];
+}
+
+export interface BoardCard {
+  id: number;
+  title: string;
+  description: string;
+  dueDate: string | null;
+  completedAt: string | null;
+  members: { id: number; name: string }[];
+}
+
+export interface BoardDetail {
+  id: number;
+  projectId: number;
+  name: string;
+  archivedAt: string | null;
+  cardsTruncated: boolean;
+  columns: { id: number; name: string; cards: BoardCard[] }[];
+}
+
+export interface CardComment {
+  id: number;
+  content: string;
+  createdAt: string;
+  userName: string | null;
+}
+
+export interface LogSummary {
+  logSlug: string;
+  logOwnerId: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LogDetail extends LogSummary {
+  content: string;
+}
+
+export interface TaskList {
+  id: number;
+  name: string;
+  tasks: { id: number; title: string; completedAt: string | null; createdAt: string }[];
+}
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 type ArticleListParams = {
@@ -85,7 +162,57 @@ export function createApiClient(token: string) {
     return apiFetch<Tag[]>("/tags");
   }
 
-  return { listArticles, getArticle, listTags };
+  async function listProjects(archived: boolean) {
+    return apiFetch<{ projects: ProjectSummary[]; truncated: boolean }>(
+      `/projects?archived=${archived}`,
+    );
+  }
+
+  async function getProject(id: number, limit: number, offset: number) {
+    return apiFetch<ProjectDetail>(`/projects/${id}?limit=${limit}&offset=${offset}`);
+  }
+
+  async function getBoard(id: number) {
+    return apiFetch<BoardDetail>(`/boards/${id}`);
+  }
+
+  async function listProjectDocuments(projectId: number, limit: number, offset: number) {
+    return apiFetch<{ documents: ProjectDocumentSummary[]; hasMore: boolean }>(
+      `/projects/${projectId}/documents?limit=${limit}&offset=${offset}`,
+    );
+  }
+
+  async function getProjectDocument(projectId: number, slug: string) {
+    return apiFetch<ProjectDocument>(`/projects/${projectId}/documents/${encodeURIComponent(slug)}`);
+  }
+
+  async function getCardComments(cardId: number, limit: number, offset: number) {
+    const comments = await apiFetch<CardComment[]>(
+      `/cards/${cardId}/comments?limit=${limit + 1}&offset=${offset}&order=desc`,
+    );
+    return { comments: comments.slice(0, limit), hasMore: comments.length > limit };
+  }
+
+  async function listLogs(limit: number, offset: number) {
+    return apiFetch<{ entries: LogSummary[]; hasMore: boolean }>(
+      `/log?limit=${limit}&offset=${offset}`,
+    );
+  }
+
+  async function getMyLog(userId: number, logSlug: string) {
+    // The ID comes from the verified /auth/me response, never MCP tool arguments.
+    return apiFetch<LogDetail>(`/logs/${userId}/${encodeURIComponent(logSlug)}`);
+  }
+
+  async function listTaskLists() {
+    return apiFetch<{ lists: TaskList[]; truncated: boolean }>("/tasks/lists");
+  }
+
+  return {
+    listArticles, getArticle, listTags,
+    listProjects, getProject, getBoard, listProjectDocuments, getProjectDocument, getCardComments,
+    listLogs, getMyLog, listTaskLists,
+  };
 }
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────

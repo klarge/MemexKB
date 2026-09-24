@@ -341,6 +341,7 @@ paths:
       operationId: listProjectDocuments
       tags: [projects]
       summary: List documents belonging to a project
+      description: Optional query parameters `limit` (1-100) and `offset` (non-negative integer) return a bounded page; omitting both preserves the existing unpaged response.
       parameters:
         - $ref: "#/components/parameters/ProjectId"
       responses:
@@ -1729,6 +1730,9 @@ components:
       type: object
       required: [documents]
       properties:
+        hasMore:
+          type: boolean
+          description: Whether another page of documents exists when paging is requested
         documents:
           type: array
           items:

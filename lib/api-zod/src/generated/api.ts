@@ -303,6 +303,7 @@ export const ListArticlesMaintenanceResponse = zod.object({
 
 
 /**
+ * Optional query parameters `limit` (1-100) and `offset` (non-negative integer) return a bounded page; omitting both preserves the existing unpaged response.
  * @summary List documents belonging to a project
  */
 export const ListProjectDocumentsParams = zod.object({
@@ -310,6 +311,7 @@ export const ListProjectDocumentsParams = zod.object({
 })
 
 export const ListProjectDocumentsResponse = zod.object({
+  "hasMore": zod.boolean().optional().describe('Whether another page of documents exists when paging is requested'),
   "documents": zod.array(zod.object({
   "id": zod.number().int(),
   "slug": zod.string(),

@@ -2,7 +2,7 @@
 /**
  * Memex MCP Server
  *
- * Exposes a Memex knowledge base as five tools over Streamable HTTP.
+ * Exposes read-only Memex knowledge base, project, log, and task tools over Streamable HTTP.
  *
  * Required env vars:
  *   MEMEX_URL   — base URL of your Memex instance, e.g. http://localhost:3000
@@ -20,9 +20,12 @@ import {
   tagList,
   excerpt,
 } from "./client.js";
+import { registerProjectTools } from "./project-tools.js";
+import { registerPersonalTools } from "./personal-tools.js";
 
-function createMcpServer(token: string): McpServer {
-  const { listArticles, getArticle, listTags } = createApiClient(token);
+function createMcpServer(token: string, userId: number): McpServer {
+  const api = createApiClient(token);
+  const { listArticles, getArticle, listTags } = api;
   const server = new McpServer({ name: "memex", version: "1.0.0" });
 
 // ─── Tool: search_articles ────────────────────────────────────────────────────
@@ -302,6 +305,8 @@ server.tool(
   },
 );
 
+  registerProjectTools(server, api);
+  registerPersonalTools(server, api, userId);
   return server;
 }
 
@@ -378,6 +383,7 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
   const token = match[1];
+  let userId: number;
   try {
     const verified = await fetch(`${baseUrl}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -394,6 +400,12 @@ const httpServer = createServer(async (req, res) => {
       }
       return;
     }
+    const identity = await verified.json() as { id?: unknown };
+    if (typeof identity?.id !== "number" || !Number.isSafeInteger(identity.id) || identity.id < 1) {
+      sendError(res, 503, "Invalid Memex API identity response");
+      return;
+    }
+    userId = identity.id;
   } catch {
     sendError(res, 503, "Memex API unavailable");
     return;
@@ -420,7 +432,7 @@ const httpServer = createServer(async (req, res) => {
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
-  const server = createMcpServer(token);
+  const server = createMcpServer(token, userId);
   try {
     await server.connect(transport);
     await transport.handleRequest(req, res, parsedBody);

@@ -11,8 +11,19 @@ Memex exposes its knowledge base over the MCP **Streamable HTTP** transport. It 
 | `list_articles` | Browse articles with filters and pagination |
 | `list_tags` | List available tags |
 | `get_backlinks` | Find articles linking to an article |
+| `list_projects` | List active or archived projects accessible to the caller |
+| `get_project` | Read a project and its boards |
+| `get_project_board` | Read columns, cards, due dates, and assignments on a board |
+| `list_project_documents` | List documents in an accessible project |
+| `get_project_document` | Read a document within an accessible project |
+| `get_card_comments` | Read recent comments on an accessible card |
+| `list_logs` | Browse the caller's own personal log entries |
+| `get_log` | Read one of the caller's personal log entries |
+| `list_tasks` | Browse the caller's own task lists and tasks |
 
-All tools are read-only. Each request is checked using the API key supplied by the calling client, and article/group permissions are those of **the key's owner**. No user's key is stored in the server configuration or shared between requests.
+All tools are read-only. Each request is checked using the API key supplied by the calling client. Articles and project content follow **the key owner's** access rights; tasks and logs are limited to that person's own data, even for admin keys. No user's key is stored in the server configuration or shared between requests. Feature settings follow the API's rules (admins can still read Projects and Tasks when those features are disabled); disabled Logs remain unavailable through MCP.
+
+The underlying API caps a project list at 100 projects, a board at 300 cards, and task lists at 200 tasks total; the tools warn if the API has truncated a result. Project boards, documents, comments, and logs support paging through `boards_offset` or `offset`. `get_card_comments` returns up to 50 comments per page, newest first. Project member email addresses are not exposed by the MCP tools.
 
 ## Docker Compose
 

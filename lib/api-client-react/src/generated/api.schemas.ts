@@ -286,6 +286,8 @@ export type ProjectDocumentListResponseDocumentsItem = ArticleSummary & {
 };
 
 export interface ProjectDocumentListResponse {
+  /** Whether another page of documents exists when paging is requested */
+  hasMore?: boolean;
   documents: ProjectDocumentListResponseDocumentsItem[];
 }
 

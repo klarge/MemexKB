@@ -1054,6 +1054,7 @@ export const getListProjectDocumentsUrl = (projectId: number,) => {
 }
 
 /**
+ * Optional query parameters `limit` (1-100) and `offset` (non-negative integer) return a bounded page; omitting both preserves the existing unpaged response.
  * @summary List documents belonging to a project
  */
 export const listProjectDocuments = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectDocumentListResponse> => {

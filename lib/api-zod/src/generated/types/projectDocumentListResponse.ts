@@ -8,5 +8,7 @@
 import type { ProjectDocumentListResponseDocumentsItem } from './projectDocumentListResponseDocumentsItem';
 
 export interface ProjectDocumentListResponse {
+  /** Whether another page of documents exists when paging is requested */
+  hasMore?: boolean;
   documents: ProjectDocumentListResponseDocumentsItem[];
 }
