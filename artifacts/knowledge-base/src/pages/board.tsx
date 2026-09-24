@@ -64,7 +64,7 @@ const isColKey = (id: string | number): id is string =>
 
 // ─── Card chip (used in both board and drag overlay) ─────────────────────────
 
-function CardChip({ card, onClick, onToggleComplete, completionPending }: { card: Card; onClick?: () => void; onToggleComplete?: (completed: boolean) => void; completionPending?: boolean }) {
+function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
   const overdue =
     card.dueDate &&
     !isToday(new Date(card.dueDate)) &&
@@ -76,18 +76,7 @@ function CardChip({ card, onClick, onToggleComplete, completionPending }: { card
       className="bg-card border rounded-lg p-3 shadow-sm space-y-2 cursor-pointer hover:shadow-md transition-shadow select-none"
     >
       <div className="flex items-start gap-2">
-        {onToggleComplete ? (
-          <input
-            type="checkbox"
-            aria-label={`Mark ${card.title} ${card.completedAt ? "incomplete" : "complete"}`}
-            title={card.completedAt ? "Mark incomplete" : "Mark complete"}
-            checked={!!card.completedAt}
-            disabled={completionPending}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onToggleComplete(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
-          />
-        ) : card.completedAt ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : null}
+        {card.completedAt && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
         <p className={`text-sm font-medium leading-snug ${card.completedAt ? "line-through text-muted-foreground" : ""}`}>{card.title}</p>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
@@ -126,7 +115,7 @@ function CardChip({ card, onClick, onToggleComplete, completionPending }: { card
 
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 
-function SortableCard({ card, onClick, onToggleComplete, completionPending }: { card: Card; onClick: () => void; onToggleComplete: (completed: boolean) => void; completionPending: boolean }) {
+function SortableCard({ card, onClick }: { card: Card; onClick: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   });
@@ -150,7 +139,7 @@ function SortableCard({ card, onClick, onToggleComplete, completionPending }: { 
         <GripVertical className="h-3.5 w-3.5" />
       </div>
       <div className="pl-5">
-        <CardChip card={card} onClick={onClick} onToggleComplete={onToggleComplete} completionPending={completionPending} />
+        <CardChip card={card} onClick={onClick} />
       </div>
     </div>
   );
@@ -166,8 +155,6 @@ function KanbanColumn({
   onAddCard,
   onDeleteColumn,
   onRenameColumn,
-  onToggleComplete,
-  completionPending,
   isDraggingColumn,
 }: {
   column: Column;
@@ -177,8 +164,6 @@ function KanbanColumn({
   onAddCard: (columnId: number, title: string) => void;
   onDeleteColumn: (id: number) => void;
   onRenameColumn: (id: number, name: string) => void;
-  onToggleComplete: (id: number, completed: boolean) => void;
-  completionPending: boolean;
   isDraggingColumn: boolean;
 }) {
   // Sortable for the column itself (drag to reorder columns)
@@ -303,7 +288,7 @@ function KanbanColumn({
           >
             {cardIds.map((id) =>
               cardMap[id] ? (
-                <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} onToggleComplete={(completed) => onToggleComplete(id, completed)} completionPending={completionPending} />
+                <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} />
               ) : null,
             )}
           </div>
@@ -542,16 +527,6 @@ function CardDetailPanel({
         </div>
 
         <div className="flex-1 p-5 space-y-6">
-          <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!card.completedAt}
-              disabled={completionPending}
-              onChange={(e) => onToggleComplete(card.id, e.target.checked)}
-              className="h-4 w-4 accent-primary"
-            />
-            Complete
-          </label>
           {/* Title */}
           <div>
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">Title</label>
@@ -583,9 +558,10 @@ function CardDetailPanel({
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" /> Due Date
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
               <input
                 type="date"
+                data-testid="input-card-due-date"
                 className="border rounded-lg px-3 py-1.5 text-sm bg-background outline-none focus:ring-1 focus:ring-primary"
                 value={dueDate}
                 onChange={(e) => {
@@ -593,6 +569,17 @@ function CardDetailPanel({
                   onUpdate(card.id, { dueDate: e.target.value || null });
                 }}
               />
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  data-testid="checkbox-card-complete"
+                  checked={!!card.completedAt}
+                  disabled={completionPending}
+                  onChange={(e) => onToggleComplete(card.id, e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                Complete
+              </label>
               {dueDate && (
                 <button
                   type="button"
@@ -1042,8 +1029,6 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
                     onAddCard={(colId, title) => addCard.mutate({ columnId: colId, title })}
                     onDeleteColumn={(id) => deleteColumn.mutate(id)}
                     onRenameColumn={(id, name) => renameColumn.mutate({ id, name })}
-                    onToggleComplete={(id, completed) => toggleCardCompletion.mutate({ id, completed })}
-                    completionPending={toggleCardCompletion.isPending}
                     isDraggingColumn={isDraggingColumn}
                   />
                 );
