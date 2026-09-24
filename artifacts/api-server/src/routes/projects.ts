@@ -791,11 +791,18 @@ router.patch("/cards/:cardId", requireAuth, async (req, res) => {
   if (!projectId) { res.status(404).json({ error: "Card not found" }); return; }
   const { canAccess } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
-  const { title, description, dueDate } = req.body as { title?: string; description?: string; dueDate?: string | null };
+  const { title, description, dueDate, completed } = req.body as { title?: string; description?: string; dueDate?: string | null; completed?: unknown };
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (title !== undefined) updates.title = title.trim();
   if (description !== undefined) updates.description = description;
   if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
+  if (completed !== undefined) {
+    if (typeof completed !== "boolean") {
+      res.status(400).json({ error: "completed must be a boolean" });
+      return;
+    }
+    updates.completedAt = completed ? new Date() : null;
+  }
   const [updated] = await db.update(boardCardsTable).set(updates).where(eq(boardCardsTable.id, cardId)).returning();
   res.json(updated);
 });

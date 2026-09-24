@@ -773,7 +773,7 @@ type RestoreTask = {
 };
 type RestoreTaskList = { name: string; owner: RestoreOwner | null; createdAt?: Date; tasks: RestoreTask[] };
 type RestoreCard = {
-  title: string; description: string; dueDate: Date | null; position: number; createdAt?: Date; updatedAt?: Date;
+  title: string; description: string; dueDate: Date | null; completedAt: Date | null; position: number; createdAt?: Date; updatedAt?: Date;
   members: RestoreOwner[];
 };
 type RestoreColumn = { name: string; position: number; createdAt?: Date; cards: RestoreCard[] };
@@ -926,6 +926,7 @@ function parseRestoreBackup(value: unknown): RestoreBackup {
             title: restoreString(card.title, `projects[${projectIndex}].boards[${boardIndex}].columns[${columnIndex}].cards[${cardIndex}].title`)!,
             description: restoreString(card.description, "card.description", false) ?? "",
             dueDate: (restoreDate(card.dueDate, "card.dueDate", true) ?? null) as Date | null,
+            completedAt: (restoreDate(card.completedAt, "card.completedAt", true) ?? null) as Date | null,
             position: restorePosition(card.position, cardIndex, "card.position"),
             createdAt: restoreDate(card.createdAt, "card.createdAt") as Date | undefined,
             updatedAt: restoreDate(card.updatedAt, "card.updatedAt") as Date | undefined,
@@ -1102,7 +1103,7 @@ router.post("/admin/restore", requireAuth, requireRole("admin"), upload.single("
             result.imported.columns++;
             for (const card of column.cards) {
               const [insertedCard] = await tx.insert(boardCardsTable).values({
-                columnId: insertedColumn.id, title: card.title, description: card.description, dueDate: card.dueDate,
+                columnId: insertedColumn.id, title: card.title, description: card.description, dueDate: card.dueDate, completedAt: card.completedAt,
                 position: card.position, createdById: projectOwnerId, createdAt: card.createdAt, updatedAt: card.updatedAt,
               }).returning({ id: boardCardsTable.id });
               for (const member of card.members) {
@@ -1282,6 +1283,7 @@ router.get("/admin/export/projects", requireAuth, requireRole("admin"), async (_
                   title: card.title,
                   description: card.description || null,
                   dueDate: card.dueDate ?? null,
+                  completedAt: card.completedAt ?? null,
                   position: card.position,
                   assignedTo: (cardMembersMap.get(card.id) ?? []).map((user) => user.name),
                   assigneeRefs: cardMembersMap.get(card.id) ?? [],

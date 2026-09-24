@@ -63,6 +63,7 @@ export const boardCardsTable = pgTable("board_cards", {
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   dueDate: timestamp("due_date", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   position: integer("position").notNull().default(0),
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",

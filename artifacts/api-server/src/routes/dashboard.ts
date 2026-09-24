@@ -126,6 +126,7 @@ router.get("/dashboard", requireAuth, async (req, res) => {
           and(
             eq(boardCardMembersTable.userId, userId),
             isNotNull(boardCardsTable.dueDate),
+            isNull(boardCardsTable.completedAt),
             inArray(boardsTable.projectId, accessibleProjectIds),
           ),
         )

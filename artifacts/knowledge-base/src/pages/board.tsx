@@ -27,6 +27,7 @@ import {
   MessageSquare, Send,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, isPast, isToday } from "date-fns";
@@ -48,6 +49,7 @@ type Card = {
   title: string;
   description: string;
   dueDate: string | null;
+  completedAt: string | null;
   position: number;
   members: CardMember[];
 };
@@ -62,7 +64,7 @@ const isColKey = (id: string | number): id is string =>
 
 // ─── Card chip (used in both board and drag overlay) ─────────────────────────
 
-function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
+function CardChip({ card, onClick, onToggleComplete, completionPending }: { card: Card; onClick?: () => void; onToggleComplete?: (completed: boolean) => void; completionPending?: boolean }) {
   const overdue =
     card.dueDate &&
     !isToday(new Date(card.dueDate)) &&
@@ -73,7 +75,21 @@ function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
       onClick={onClick}
       className="bg-card border rounded-lg p-3 shadow-sm space-y-2 cursor-pointer hover:shadow-md transition-shadow select-none"
     >
-      <p className="text-sm font-medium leading-snug">{card.title}</p>
+      <div className="flex items-start gap-2">
+        {onToggleComplete ? (
+          <input
+            type="checkbox"
+            aria-label={`Mark ${card.title} ${card.completedAt ? "incomplete" : "complete"}`}
+            title={card.completedAt ? "Mark incomplete" : "Mark complete"}
+            checked={!!card.completedAt}
+            disabled={completionPending}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onToggleComplete(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          />
+        ) : card.completedAt ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : null}
+        <p className={`text-sm font-medium leading-snug ${card.completedAt ? "line-through text-muted-foreground" : ""}`}>{card.title}</p>
+      </div>
       <div className="flex items-center gap-2 flex-wrap">
         {card.dueDate && (
           <span
@@ -110,7 +126,7 @@ function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
 
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 
-function SortableCard({ card, onClick }: { card: Card; onClick: () => void }) {
+function SortableCard({ card, onClick, onToggleComplete, completionPending }: { card: Card; onClick: () => void; onToggleComplete: (completed: boolean) => void; completionPending: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   });
@@ -134,7 +150,7 @@ function SortableCard({ card, onClick }: { card: Card; onClick: () => void }) {
         <GripVertical className="h-3.5 w-3.5" />
       </div>
       <div className="pl-5">
-        <CardChip card={card} onClick={onClick} />
+        <CardChip card={card} onClick={onClick} onToggleComplete={onToggleComplete} completionPending={completionPending} />
       </div>
     </div>
   );
@@ -150,6 +166,8 @@ function KanbanColumn({
   onAddCard,
   onDeleteColumn,
   onRenameColumn,
+  onToggleComplete,
+  completionPending,
   isDraggingColumn,
 }: {
   column: Column;
@@ -159,6 +177,8 @@ function KanbanColumn({
   onAddCard: (columnId: number, title: string) => void;
   onDeleteColumn: (id: number) => void;
   onRenameColumn: (id: number, name: string) => void;
+  onToggleComplete: (id: number, completed: boolean) => void;
+  completionPending: boolean;
   isDraggingColumn: boolean;
 }) {
   // Sortable for the column itself (drag to reorder columns)
@@ -283,7 +303,7 @@ function KanbanColumn({
           >
             {cardIds.map((id) =>
               cardMap[id] ? (
-                <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} />
+                <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} onToggleComplete={(completed) => onToggleComplete(id, completed)} completionPending={completionPending} />
               ) : null,
             )}
           </div>
@@ -437,6 +457,8 @@ function CardDetailPanel({
   onUpdate,
   onDelete,
   onToggleMember,
+  onToggleComplete,
+  completionPending,
 }: {
   card: Card;
   projectMembers: ProjectMember[];
@@ -444,6 +466,8 @@ function CardDetailPanel({
   onUpdate: (id: number, updates: { title?: string; description?: string; dueDate?: string | null }) => void;
   onDelete: (id: number) => void;
   onToggleMember: (cardId: number, userId: number, add: boolean) => void;
+  onToggleComplete: (cardId: number, completed: boolean) => void;
+  completionPending: boolean;
 }) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -518,6 +542,16 @@ function CardDetailPanel({
         </div>
 
         <div className="flex-1 p-5 space-y-6">
+          <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!card.completedAt}
+              disabled={completionPending}
+              onChange={(e) => onToggleComplete(card.id, e.target.checked)}
+              className="h-4 w-4 accent-primary"
+            />
+            Complete
+          </label>
           {/* Title */}
           <div>
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">Title</label>
@@ -669,6 +703,7 @@ function CardDetailPanel({
 // ─── Board Page ───────────────────────────────────────────────────────────────
 
 export default function BoardPage({ params }: { params: { projectId: string; boardId: string } }) {
+  const { toast } = useToast();
   const boardId = Number(params.boardId);
   const projectId = Number(params.projectId);
   const qc = useQueryClient();
@@ -890,6 +925,32 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
     onSuccess: invalidateBoard,
   });
 
+  const toggleCardCompletion = useMutation({
+    mutationFn: async ({ id, completed }: { id: number; completed: boolean }) => {
+      const response = await fetch(`/api/cards/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed }),
+      });
+      if (!response.ok) throw new Error("Could not update card completion. Please try again.");
+      return response.json() as Promise<Card>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData<BoardData>(["board", boardId], (previous) =>
+        previous ? {
+          ...previous,
+          columns: previous.columns.map((column) => ({
+            ...column,
+            cards: column.cards.map((card) => card.id === updated.id ? { ...card, completedAt: updated.completedAt } : card),
+          })),
+        } : previous,
+      );
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      invalidateBoard();
+    },
+    onError: (error: Error) => toast({ title: "Card not updated", description: error.message, variant: "destructive" }),
+  });
+
   const deleteCard = useMutation({
     mutationFn: (id: number) => fetch(`/api/cards/${id}`, { method: "DELETE" }),
     onSuccess: invalidateBoard,
@@ -981,6 +1042,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
                     onAddCard={(colId, title) => addCard.mutate({ columnId: colId, title })}
                     onDeleteColumn={(id) => deleteColumn.mutate(id)}
                     onRenameColumn={(id, name) => renameColumn.mutate({ id, name })}
+                    onToggleComplete={(id, completed) => toggleCardCompletion.mutate({ id, completed })}
+                    completionPending={toggleCardCompletion.isPending}
                     isDraggingColumn={isDraggingColumn}
                   />
                 );
@@ -1052,6 +1115,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
           onUpdate={(id, updates) => updateCard.mutate({ id, updates })}
           onDelete={(id) => deleteCard.mutate(id)}
           onToggleMember={(cardId, userId, add) => toggleMember.mutate({ cardId, userId, add })}
+          onToggleComplete={(cardId, completed) => toggleCardCompletion.mutate({ id: cardId, completed })}
+          completionPending={toggleCardCompletion.isPending}
         />
       )}
     </div>
