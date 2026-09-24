@@ -2,6 +2,7 @@
  * Thin typed wrapper around the Memex REST API.
  * Each instance uses only the token from its own authenticated MCP request.
  */
+import { convert } from "html-to-text";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -217,23 +218,12 @@ export function createApiClient(token: string) {
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
-/** Strip HTML tags and decode common entities for plain-text output. */
+/** Parse HTML once into plain text; never treat decoded text as HTML. */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<\/(h[1-6]|div|section|article|blockquote|li|tr)>/gi, "\n")
-    .replace(/<h([1-6])[^>]*>/gi, (_, n) => "#".repeat(Number(n)) + " ")
-    .replace(/<li[^>]*>/gi, "• ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return convert(html, {
+    wordwrap: false,
+    selectors: [{ selector: "a", options: { ignoreHref: true } }],
+  }).trim();
 }
 
 export function formatDate(iso: string): string {

@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { diffWords } from "diff";
+import DOMPurify from "dompurify";
 
 type VersionSummary = {
   id: number;
@@ -53,18 +54,14 @@ function restoreVersion(slug: string, versionId: number): Promise<void> {
 }
 
 function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<\/div>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  // This is only used as React text in the version diff, never as HTML.
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  parsed.body.querySelectorAll("script, style, template, noscript").forEach((node) => node.remove());
+  parsed.body.querySelectorAll("br, p, li, div").forEach((node) => {
+    if (node.tagName === "BR") node.replaceWith(parsed.createTextNode("\n"));
+    else node.append(parsed.createTextNode("\n"));
+  });
+  return (parsed.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function WordDiff({ a, b }: { a: string; b: string }) {
@@ -283,7 +280,7 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
             ) : viewingVersion ? (
               <div
                 className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-2 prose-th:bg-muted max-h-[60vh] overflow-auto"
-                dangerouslySetInnerHTML={{ __html: viewingVersion.content }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(viewingVersion.content, { USE_PROFILES: { html: true } }) }}
               />
             ) : null}
           </CardContent>

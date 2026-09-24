@@ -25,6 +25,7 @@ import {
 import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
+import { convert } from "html-to-text";
 import { slugify, extractWikilinks, rewriteWikilinksForSlug } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
 import TurndownService from "turndown";
@@ -46,10 +47,16 @@ interface PdfInfoboxData {
 }
 
 function parsePdfInfobox(htmlFragment: string): PdfInfoboxData {
+  // Infobox values go to PDFKit's text API. Parse HTML rather than stripping
+  // tags with a regex, which can join malformed input into a new tag.
+  const plainText = (fragment: string) => convert(fragment, {
+    wordwrap: false,
+    selectors: [{ selector: "a", options: { ignoreHref: true } }],
+  }).trim();
   // Title: prefer data-title attribute (new format), fall back to <caption> (legacy)
   const dataTitleMatch = htmlFragment.match(/data-title=["']([^"']*)["']/i);
   const captionMatch = htmlFragment.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
-  const title = dataTitleMatch?.[1] ?? (captionMatch ? captionMatch[1].replace(/<[^>]+>/g, "").trim() : "");
+  const title = dataTitleMatch?.[1] ?? (captionMatch ? plainText(captionMatch[1]) : "");
 
   // Image: prefer data-image attribute (new format), fall back to first <img src> (legacy)
   const dataImageMatch = htmlFragment.match(/data-image=["']([^"']+)["']/i);
@@ -60,8 +67,8 @@ function parsePdfInfobox(htmlFragment: string): PdfInfoboxData {
   const rowRe = /<tr[^>]*>[\s\S]*?<th[^>]*>([\s\S]*?)<\/th>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/gi;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(htmlFragment)) !== null) {
-    const label = m[1].replace(/<[^>]+>/g, "").trim();
-    const value = m[2].replace(/<[^>]+>/g, "").trim();
+    const label = plainText(m[1]);
+    const value = plainText(m[2]);
     if (label || value) rows.push({ label, value });
   }
   return { title, rows, image };
@@ -625,7 +632,7 @@ router.post("/articles", requireAuth, async (req, res) => {
 
     await attachReferencedArticleImages(
       tx,
-      content ?? "",
+      sanitizedContent,
       createdArticle.id,
       req.session.userId,
       req.session.userRole,
@@ -1043,18 +1050,19 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
 
   const updates: Record<string, unknown> = { updatedAt: new Date(), updatedById: req.session.userId ?? null };
   if (title !== undefined) updates.title = title;
-  if (content !== undefined) updates.content = sanitizeArticleHtml(content);
+  const sanitizedContent = content !== undefined ? sanitizeArticleHtml(content) : undefined;
+  if (sanitizedContent !== undefined) updates.content = sanitizedContent;
   if (visibilityUpdate) updates.visibility = visibilityUpdate;
   if (isStatic !== undefined) updates.isStatic = isStatic;
   let article;
   let versionCreated = false;
-  if (content !== undefined) {
+  if (sanitizedContent !== undefined) {
     try {
       article = await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
         await attachReferencedArticleImages(
           tx,
-          content,
+          sanitizedContent,
           existing.id,
           req.session.userId,
           req.session.userRole,
@@ -1831,7 +1839,7 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
           const [ibRow] = await db
             .select({ data: articleImagesTable.data, mimeType: articleImagesTable.mimeType })
             .from(articleImagesTable)
-            .where(eq(articleImagesTable.id, ibImageId))
+            .where(and(eq(articleImagesTable.id, ibImageId), eq(articleImagesTable.articleId, article.id)))
             .limit(1);
           if (ibRow) {
             ibImgBuffer = Buffer.from(ibRow.data, "base64");
@@ -1857,7 +1865,7 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
         const [imgRow] = await db
           .select({ data: articleImagesTable.data, mimeType: articleImagesTable.mimeType })
           .from(articleImagesTable)
-          .where(eq(articleImagesTable.id, imageId))
+          .where(and(eq(articleImagesTable.id, imageId), eq(articleImagesTable.articleId, article.id)))
           .limit(1);
         if (imgRow) {
           imgBuffer = Buffer.from(imgRow.data, "base64");
@@ -2029,14 +2037,15 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (r
       .limit(1);
     if (!currentVersion) return { status: "version_missing" as const };
 
+    const restoredContent = sanitizeArticleHtml(currentVersion.content);
     const [updatedArticle] = await tx
       .update(articlesTable)
-      .set({ title: currentVersion.title, content: currentVersion.content, updatedAt: new Date(), updatedById: req.session.userId ?? null })
+      .set({ title: currentVersion.title, content: restoredContent, updatedAt: new Date(), updatedById: req.session.userId ?? null })
       .where(and(eq(articlesTable.id, currentArticle.id), eq(articlesTable.slug, slug)))
       .returning();
 
     await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, currentArticle.id));
-    const wikilinks = extractWikilinks(currentVersion.content);
+    const wikilinks = extractWikilinks(restoredContent);
     if (wikilinks.length > 0) {
       await tx
         .insert(articleLinksTable)
