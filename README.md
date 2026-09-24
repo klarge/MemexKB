@@ -108,20 +108,14 @@ For backward compatibility, the local Compose file still has insecure developmen
    curl -f http://localhost:3000/api/healthz
    ```
 
-The app applies the bundled SQL migrations before it starts listening. A connection or migration failure stops that attempt to start; check the app logs and database network/credentials rather than running `drizzle-kit push` against production. To use the optional stdio MCP service with this configuration, use `docker compose -f docker-compose.external-db.yml run --rm -T mcp`.
+The app applies the bundled SQL migrations before it starts listening. A connection or migration failure stops that attempt to start; check the app logs and database network/credentials rather than running `drizzle-kit push` against production. To use the optional stdio MCP service with this configuration, have your MCP client supply its own `MEMEX_TOKEN` environment variable and run `docker compose -f docker-compose.external-db.yml run --rm -T -e MEMEX_TOKEN mcp` (see below).
 
 ### Use the MCP server from Compose
 
 The image includes the MCP server automatically, but the current MCP transport is **stdio**, not an HTTP endpoint. Do not start it as a detached service: it must stay attached to the MCP client that reads and writes its protocol messages.
 
-1. Create an API key in **Settings → API Keys**. For an LLM, use **Read-only** unless the integration genuinely needs to make changes.
-2. Add the token to your local `.env` file:
-
-   ```dotenv
-   MEMEX_TOKEN=replace-with-your-read-only-api-token
-   ```
-
-3. Configure Claude Desktop, Cursor, or another MCP client to launch the Compose service:
+1. Each user logs in to Memex and creates their own **Read-only** API key in **Settings → API Keys**. MCP requests use the key owner's article and group permissions, not the permissions of whoever is logged in to the web UI at the time.
+2. Configure each user's MCP client to supply **their own** `MEMEX_TOKEN` in its local environment and launch the Compose service. For example, in Claude Desktop:
 
    ```json
    {
@@ -133,16 +127,21 @@ The image includes the MCP server automatically, but the current MCP transport i
            "-f",
            "/absolute/path/to/memex/docker-compose.yml",
            "run",
-           "--rm",
-           "-T",
+            "--rm",
+            "-T",
+            "-e",
+            "MEMEX_TOKEN",
            "mcp"
-         ]
+          ],
+          "env": {
+            "MEMEX_TOKEN": "paste-your-own-read-only-api-key-here"
+          }
        }
      }
    }
    ```
 
-The `mcp` service uses `http://app:3000` inside the Compose network and reads `MEMEX_TOKEN` from `.env`. A normal `docker compose up -d` still starts only PostgreSQL and the web application. See `artifacts/mcp-server/README.md` for client-specific configuration and local non-Docker setup.
+The `mcp` service uses `http://app:3000` inside the Compose network. The `-e MEMEX_TOKEN` flag forwards the key from **that MCP client's process environment** into its own MCP container; neither Compose file stores a shared key. Keep each client's configuration private, and remove any old `MEMEX_TOKEN` entry from the shared Compose `.env` file. A normal `docker compose up -d` still starts only PostgreSQL and the web application. See `artifacts/mcp-server/README.md` for client-specific configuration and local non-Docker setup.
 
 ### Environment variables
 

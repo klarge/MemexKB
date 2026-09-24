@@ -52,12 +52,12 @@ The compiled server lands at `dist/index.js`.
 
 The published Memex image includes the compiled MCP server and its production dependencies. The MCP server currently uses **stdio**, so it is not a detached network service. Start it through Compose only when an MCP client launches it:
 
-1. Copy `.env.example` to `.env` in the repository containing `docker-compose.yml`.
-2. Set `MEMEX_TOKEN` in `.env`, preferably to a Read-only API key created in Memex.
-3. Configure your MCP client to run:
+1. The Memex app must be running with either Compose file; its `.env` is for the app, **not** for a shared MCP token.
+2. Each user creates their own Read-only API key and sets `MEMEX_TOKEN` in **their own MCP client's local environment**.
+3. Configure the client to forward that variable to its MCP container:
 
 ```text
-docker compose -f /absolute/path/to/memex/docker-compose.yml run --rm -T mcp
+docker compose -f /absolute/path/to/memex/docker-compose.yml run --rm -T -e MEMEX_TOKEN mcp
 ```
 
 For Claude Desktop:
@@ -74,14 +74,19 @@ For Claude Desktop:
         "run",
         "--rm",
         "-T",
+        "-e",
+        "MEMEX_TOKEN",
         "mcp"
-      ]
+      ],
+      "env": {
+        "MEMEX_TOKEN": "paste-your-own-read-only-api-key-here"
+      }
     }
   }
 }
 ```
 
-The Compose service supplies `MEMEX_URL=http://app:3000` and reads `MEMEX_TOKEN` from `.env`. A regular `docker compose up -d` does not start the MCP process. If you want to run the MCP server locally instead, continue with the Node-based client configuration below.
+The Compose service supplies `MEMEX_URL=http://app:3000` but **no token**. Docker's `-e MEMEX_TOKEN` forwards the variable supplied by the client into the MCP container. Keep the client config private; anyone with access to it or the Docker daemon may be able to read the key. If an older shared Compose `.env` contains `MEMEX_TOKEN`, remove it so it cannot be used as a fallback. A regular `docker compose up -d` does not start the MCP process. For an external database, replace the Compose filename above with `docker-compose.external-db.yml`. If you want to run the MCP server locally instead, continue with the Node-based client configuration below.
 
 ## Step 4 — Add to Claude Desktop
 

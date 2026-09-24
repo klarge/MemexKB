@@ -29,7 +29,6 @@ services:
     command: ["node", "/app/mcp/dist/index.js"]
     environment:
       MEMEX_URL: http://app:3000
-      MEMEX_TOKEN: ${MEMEX_TOKEN:-}
     depends_on:
       app:
         condition: service_started

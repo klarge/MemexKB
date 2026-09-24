@@ -64,10 +64,6 @@ services:
     command: ["node", "/app/mcp/dist/index.js"]
     environment:
       MEMEX_URL: http://app:3000
-      # Set MEMEX_TOKEN in .env. The MCP process reports a clear error if it is
-      # omitted; keeping this optional lets `docker compose config` work for the
-      # normal app-only stack.
-      MEMEX_TOKEN: ${MEMEX_TOKEN:-}
     depends_on:
       app:
         condition: service_started
