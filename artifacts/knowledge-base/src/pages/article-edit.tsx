@@ -133,6 +133,12 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const [isProjectSaving, setIsProjectSaving] = useState(false);
   const [slugDialogOpen, setSlugDialogOpen] = useState(false);
   const [slugDraft, setSlugDraft] = useState("");
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [imageSource, setImageSource] = useState<"upload" | "url">("upload");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const imageSelectionRef = useRef<{ from: number; to: number } | null>(null);
 
   // ── Autosave state ──────────────────────────────────────────────────────────
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("idle");
@@ -684,6 +690,61 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     }
   };
 
+  const insertImage = (src: string) => {
+    if (!editor) return;
+    const selection = imageSelectionRef.current;
+    const chain = editor.chain().focus();
+    if (selection) chain.setTextSelection(selection);
+    chain.setImage({ src }).run();
+    setImageDialogOpen(false);
+    setImageFile(null);
+    setImageUrl("");
+  };
+
+  const handleInsertImage = async () => {
+    if (!editor) return;
+    if (imageSource === "url") {
+      const src = imageUrl.trim();
+      try {
+        if (!src.startsWith("/") || src.startsWith("//")) {
+          const url = new URL(src);
+          if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Invalid protocol");
+        }
+      } catch {
+        toast({ title: "Enter a valid image URL", variant: "destructive" });
+        return;
+      }
+      insertImage(src);
+      return;
+    }
+
+    if (!imageFile) return;
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(imageFile.type)) {
+      toast({ title: "Choose a JPEG, PNG, GIF, or WebP image", variant: "destructive" });
+      return;
+    }
+    if (imageFile.size > 10 * 1024 * 1024) {
+      toast({ title: "Image must be 10 MB or smaller", variant: "destructive" });
+      return;
+    }
+
+    setIsImageUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", imageFile);
+      const response = await fetch("/api/articles/images", { method: "POST", body: form });
+      const result = await response.json().catch(() => null) as { url?: string; error?: string } | null;
+      if (!response.ok || !result?.url) {
+        throw new Error(result?.error || "Could not upload image.");
+      }
+      insertImage(result.url);
+    } catch (error) {
+      toast({ title: "Image upload failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setIsImageUploading(false);
+    }
+  };
+
   const toggleGroup = (id: number) => {
     setSelectedGroups((prev) => (prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]));
   };
@@ -852,10 +913,47 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                   const url = window.prompt("URL");
                   if (url) editor.chain().focus().setLink({ href: url }).run();
                 }} className={editor.isActive("link") ? "bg-muted" : ""}><LinkIcon className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="sm" onClick={() => {
-                  const url = window.prompt("Image URL");
-                  if (url) editor.chain().focus().setImage({ src: url }).run();
-                }}><ImageIcon className="h-4 w-4" /></Button>
+                <Dialog open={imageDialogOpen} onOpenChange={(open) => { if (!isImageUploading) setImageDialogOpen(open); }}>
+                  <Button type="button" variant="ghost" size="sm" title="Add image" aria-label="Add image" onClick={() => {
+                    const { from, to } = editor.state.selection;
+                    imageSelectionRef.current = { from, to };
+                    setImageSource("upload");
+                    setImageFile(null);
+                    setImageUrl("");
+                    setImageDialogOpen(true);
+                  }}><ImageIcon className="h-4 w-4" /></Button>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add image</DialogTitle>
+                      <DialogDescription>Upload an image from your computer or add one by URL.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={(event) => { event.preventDefault(); void handleInsertImage(); }} className="space-y-4">
+                      <div className="flex gap-2" role="group" aria-label="Image source">
+                        <Button type="button" size="sm" variant={imageSource === "upload" ? "default" : "outline"} onClick={() => setImageSource("upload")} disabled={isImageUploading}>Upload from computer</Button>
+                        <Button type="button" size="sm" variant={imageSource === "url" ? "default" : "outline"} onClick={() => setImageSource("url")} disabled={isImageUploading}>Image URL</Button>
+                      </div>
+                      {imageSource === "upload" ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="article-image-file">Choose image</Label>
+                          <Input id="article-image-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} disabled={isImageUploading} />
+                          <p className="text-xs text-muted-foreground">JPEG, PNG, GIF or WebP. Maximum 10 MB.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor="article-image-url">Image URL</Label>
+                          <Input id="article-image-url" type="text" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://example.com/image.jpg" />
+                        </div>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => setImageDialogOpen(false)} disabled={isImageUploading}>Cancel</Button>
+                        <Button type="submit" disabled={isImageUploading || (imageSource === "upload" ? !imageFile : !imageUrl.trim())}>
+                          {isImageUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          {imageSource === "upload" ? "Upload and insert" : "Insert image"}
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
                 <div className="w-px h-6 bg-border mx-0.5" />
                 <Button
                   variant="ghost"
