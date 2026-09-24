@@ -234,12 +234,19 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
 
 router.patch("/projects/:projectId", requireAuth, async (req, res) => {
   const projectId = Number(req.params.projectId);
-  const { canAccess, isOwner } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  const { canAccess, isOwner, project } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
   if (!isOwner) { res.status(403).json({ error: "Only the project owner can edit project settings" }); return; }
   const { name, description, archived } = req.body as { name?: string; description?: string; archived?: boolean };
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (name !== undefined) updates.name = name.trim();
+  if (name !== undefined) {
+    if (typeof name !== "string" || !name.trim()) {
+      res.status(400).json({ error: "Project name is required" });
+      return;
+    }
+    updates.name = name.trim();
+  }
   if (description !== undefined) updates.description = description.trim();
   if (archived !== undefined) updates.archivedAt = archived ? new Date() : null;
   const [updated] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, projectId)).returning();

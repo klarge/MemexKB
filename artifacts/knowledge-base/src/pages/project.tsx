@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import {
   Plus, Trash2, LayoutGrid, ArrowLeft, Loader2, X, Users, Shield, FolderKanban,
-  Archive, ArchiveRestore, ChevronDown, ChevronRight, FileText,
+  Archive, ArchiveRestore, ChevronDown, ChevronRight, FileText, Pencil,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -42,6 +42,9 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | "">("");
   const [showArchivedBoards, setShowArchivedBoards] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [renameError, setRenameError] = useState("");
 
   const { data: project, isLoading } = useQuery<ProjectDetail>({
     queryKey: ["project", projectId],
@@ -64,6 +67,31 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["project", projectId] });
+
+  const renameProject = useMutation({
+    mutationFn: async (name: string) => {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? "Unable to rename project.");
+      }
+      return response.json() as Promise<ProjectDetail>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData<ProjectDetail>(["project", projectId], (previous) =>
+        previous ? { ...previous, name: updated.name } : previous,
+      );
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["projects-archived"] });
+      setRenameError("");
+      setRenaming(false);
+    },
+    onError: (error: Error) => setRenameError(error.message),
+  });
 
   const createBoard = useMutation({
     mutationFn: () =>
@@ -144,11 +172,54 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           </button>
         </Link>
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <FolderKanban className="h-6 w-6" />
-              {project.name}
-            </h1>
+          <div className="min-w-0 flex-1">
+            {renaming ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    autoFocus
+                    aria-label="Project name"
+                    className="max-w-sm"
+                    value={projectName}
+                    onChange={(e) => { setProjectName(e.target.value); setRenameError(""); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && projectName.trim() && !renameProject.isPending) {
+                        renameProject.mutate(projectName.trim());
+                      }
+                      if (e.key === "Escape" && !renameProject.isPending) {
+                        setRenaming(false);
+                        setRenameError("");
+                      }
+                    }}
+                    maxLength={200}
+                    disabled={renameProject.isPending}
+                  />
+                  <Button size="sm" disabled={!projectName.trim() || renameProject.isPending} onClick={() => renameProject.mutate(projectName.trim())}>
+                    {renameProject.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={renameProject.isPending} onClick={() => { setRenaming(false); setRenameError(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+                {renameError && <p role="alert" className="text-sm text-destructive">{renameError}</p>}
+              </div>
+            ) : (
+              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <FolderKanban className="h-6 w-6 shrink-0" />
+                {project.name}
+                {project.isOwner && (
+                  <button
+                    type="button"
+                    aria-label="Rename project"
+                    title="Rename project"
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                    onClick={() => { setProjectName(project.name); setRenameError(""); setRenaming(true); }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
+              </h1>
+            )}
             {project.description && (
               <p className="text-muted-foreground text-sm mt-1">{project.description}</p>
             )}
