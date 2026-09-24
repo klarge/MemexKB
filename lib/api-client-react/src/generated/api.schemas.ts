@@ -247,6 +247,8 @@ export interface Article {
   ownerId: number | null;
   /** HTML content of the article */
   content: string;
+  /** Does not require future review */
+  isStatic?: boolean;
   updatedAt: string;
   createdAt: string;
   /** @nullable */
@@ -292,6 +294,8 @@ export interface ArticleInput {
   title: string;
   /** HTML content */
   content: string;
+  /** Does not require future review */
+  isStatic?: boolean;
   visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];
@@ -303,6 +307,8 @@ export interface ArticleUpdate {
   /** @minLength 1 */
   title?: string;
   content?: string;
+  /** Does not require future review */
+  isStatic?: boolean;
   visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];

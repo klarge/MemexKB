@@ -6,6 +6,7 @@ import {
   useGetLogEntry,
   getGetLogEntryQueryKey,
   getGetArticleQueryKey,
+  getGetArticleStatsQueryKey,
   useCreateArticle,
   useUpdateArticle,
   useUpdateArticleSlug,
@@ -125,6 +126,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const [title, setTitle] = useState(prefillTitle);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [visibility, setVisibility] = useState<"personal" | "group" | "public">("personal");
+  const [isStatic, setIsStatic] = useState(false);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [isLogSaving, setIsLogSaving] = useState(false);
@@ -438,6 +440,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     setTitle(article.title);
     setSelectedGroups(article.groups?.map((g) => g.id) || []);
     setVisibility(article.visibility ?? (article.groups?.length ? "group" : "personal"));
+    setIsStatic(article.isStatic ?? false);
     setSelectedTags(article.tags?.map((t) => t.id) || []);
     if (editor.getHTML() !== article.content) {
       // Pass false as emitUpdate so this programmatic load does NOT fire
@@ -647,10 +650,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
     if (isNew) {
       createMutation.mutate(
-        { data: { title, content, groupIds: isLog ? undefined : selectedGroups, visibility: isLog ? undefined : visibility, tagIds: selectedTags } },
+        { data: { title, content, groupIds: isLog ? undefined : selectedGroups, visibility: isLog ? undefined : visibility, isStatic: isLog ? undefined : isStatic, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
             localStorage.removeItem(draftKey);
+            queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
             toast({ title: "Article created" });
             setLocation(`/knowledge/${data.slug}`);
           },
@@ -661,12 +665,13 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       );
     } else if (articleSlug) {
       updateMutation.mutate(
-        { slug: articleSlug, data: { title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, visibility: isLog || isProjectDocument ? undefined : visibility, tagIds: selectedTags } },
+        { slug: articleSlug, data: { title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, visibility: isLog || isProjectDocument ? undefined : visibility, isStatic: isLog || isProjectDocument ? undefined : isStatic, tagIds: selectedTags } },
         {
           onSuccess: async (data) => {
             lastSavedRef.current = { title, content };
             setAutosaveStatus("idle");
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
+            queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
             toast({ title: "Article updated" });
             await releaseLock();
             setLocation(isLogRoute || isProjectDocument ? articlePath : `/knowledge/${data.slug}`);
@@ -1020,6 +1025,20 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                 </div>
                 )}
               </div>
+              )}
+              {!isLog && !isProjectDocument && (
+                <label className="flex items-start gap-3 cursor-pointer border-t pt-4">
+                  <input
+                    type="checkbox"
+                    checked={isStatic}
+                    onChange={(e) => setIsStatic(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-primary"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">Static article</span>
+                    <span className="block text-xs text-muted-foreground mt-1">Does not need future review. Excluded from Needs Review after you save.</span>
+                  </span>
+                </label>
               )}
               {isProjectDocument && (
                 <div>

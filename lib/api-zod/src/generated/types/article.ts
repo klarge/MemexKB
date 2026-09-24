@@ -24,6 +24,8 @@ export interface Article {
   ownerId: number | null;
   /** HTML content of the article */
   content: string;
+  /** Does not require future review */
+  isStatic?: boolean;
   updatedAt: Date;
   createdAt: Date;
   /** @nullable */

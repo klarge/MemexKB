@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: memexkb
       POSTGRES_USER: memexkb
-      POSTGRES_PASSWORD: changeme        # ← change this password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme} # Replace for real deployments.
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,14 +22,13 @@ services:
     image: ghcr.io/klarge/memexkb:latest
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # Keep the password here in sync with POSTGRES_PASSWORD above.
-      DATABASE_URL: postgres://memexkb:changeme@db:5432/memexkb
-      # Generate a strong random value: openssl rand -hex 32
-      SESSION_SECRET: replace-with-a-strong-secret
+      # Use a URL-safe POSTGRES_PASSWORD (or percent-encode special characters).
+      DATABASE_URL: postgres://memexkb:${POSTGRES_PASSWORD:-changeme}@db:5432/memexkb
+      SESSION_SECRET: ${SESSION_SECRET:-replace-with-a-strong-secret} # Replace for real deployments.
       STATIC_DIR: /app/public
       MIGRATIONS_DIR: /app/migrations
       # ── Cookie / session ────────────────────────────────────────────────────
@@ -37,17 +36,18 @@ services:
       # a TLS-terminating reverse proxy). Leave "false" or remove for plain HTTP
       # deployments such as Docker Desktop direct port-mapping — browsers will
       # silently reject a Secure cookie over http://localhost.
-      COOKIE_SECURE: "false"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # COOKIE_SAMESITE: "lax" (default) | "strict" | "none".
       # Use "none" only with HTTPS; it automatically enables the Secure flag.
       # COOKIE_SAMESITE: "lax"
       # TRUST_PROXY: Number of trusted reverse-proxy hops. Default is 1.
       # Set to 0 when running without any reverse proxy (direct port-mapping).
-      # TRUST_PROXY: "1"
+      TRUST_PROXY: ${TRUST_PROXY:-0}
       # Optional — uncomment to seed an initial admin account on first boot:
-      # RUN_SEED: "true"
-      # SEED_ADMIN_EMAIL: admin@example.com
-      # SEED_ADMIN_PASSWORD: changeme123
+      RUN_SEED: ${RUN_SEED:-false}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
     depends_on:
       db:
         condition: service_healthy

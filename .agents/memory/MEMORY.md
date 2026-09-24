@@ -7,3 +7,4 @@
 - [Web login navigation](web-login-navigation.md) — after local login or initial setup, reload the destination so a fresh browser starts with the new session.
 - [Infobox textarea sizing](infobox-textarea-sizing.md) — node-view textareas need a nonzero first-line height before auto-grow can measure them.
 - [Article visibility policy](article-visibility-policy.md) — visibility is explicit; authorization, counts, pagination, stats, caches, and derived surfaces must all use the same policy.
+- [Docker database modes](docker-database-modes.md) — external-DB Compose is standalone so local DB dependencies cannot leak into external deployments.

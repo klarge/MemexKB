@@ -16,6 +16,7 @@ export const articlesTable = pgTable("articles", {
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   isLogEntry: boolean("is_log_entry").notNull().default(false),
+  isStatic: boolean("is_static").notNull().default(false),
   visibility: text("visibility").$type<ArticleVisibility>().notNull().default("personal"),
   projectId: integer("project_id").references(() => projectsTable.id, {
     onDelete: "cascade",

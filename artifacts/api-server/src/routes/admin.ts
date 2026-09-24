@@ -330,6 +330,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
     const meta = {
       slug: article.slug,
       title: article.title,
+      isStatic: article.isStatic,
       visibility: article.visibility,
       createdByEmail: article.createdById === null ? null : (ownerEmailById.get(article.createdById) ?? null),
       createdAt: article.createdAt,
@@ -513,6 +514,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       const meta = JSON.parse(metaBuf.toString("utf-8")) as {
         slug: string;
         title: string;
+        isStatic?: boolean;
         groups?: string[];
         tags?: string[];
         visibility?: "personal" | "group" | "public";
@@ -531,6 +533,10 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         : metaGroupNames.length > 0
           ? "group"
           : "personal";
+      if (meta.isStatic !== undefined && typeof meta.isStatic !== "boolean") {
+        throw new Error("Article isStatic must be a boolean");
+      }
+      const isStatic = meta.isStatic ?? false;
       const metaTagNames: string[] = Array.isArray(meta.tags)
         ? meta.tags.filter((t) => typeof t === "string")
         : [];
@@ -595,7 +601,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         }
         await db
           .update(articlesTable)
-          .set({ title, content: articleContent, visibility, createdById: ownerId, updatedAt: new Date() })
+          .set({ title, content: articleContent, visibility, isStatic, createdById: ownerId, updatedAt: new Date() })
           .where(eq(articlesTable.slug, slug));
         articleId = existing.id;
         await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, articleId));
@@ -608,7 +614,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       } else {
         const [article] = await db
           .insert(articlesTable)
-          .values({ slug, title, content: articleContent, visibility, createdById: ownerId })
+          .values({ slug, title, content: articleContent, visibility, isStatic, createdById: ownerId })
           .returning();
         articleId = article.id;
         if (wikilinksPass1.length > 0) {

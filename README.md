@@ -83,15 +83,32 @@ cd memex
 
 # 2. Create your environment file
 cp .env.example .env
-#    Edit .env — at minimum set SESSION_SECRET and POSTGRES_PASSWORD.
+#    Set SESSION_SECRET and a strong, URL-safe POSTGRES_PASSWORD.
 
-# 3. Start everything (Postgres + migration + app)
+# 3. Start PostgreSQL and the app (the app applies migrations at startup)
 docker compose up -d
 
-# 4. Open http://localhost:3000
+# 4. Open http://localhost:3000 (or the PORT set in .env)
 ```
 
-On first boot, set `RUN_SEED=true` in `.env` together with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` to create the initial admin account. Remove the seed variables after the first successful start.
+On first boot, use the in-app initial setup, or set `RUN_SEED=true` in `.env` together with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` to create an initial admin account. Remove the seed variables after the first successful start. Never commit `.env`.
+For backward compatibility, the local Compose file still has insecure development defaults if `.env` is absent; set both values before exposing the app. On an existing `pgdata` volume, changing `POSTGRES_PASSWORD` in `.env` does **not** change the already-created PostgreSQL user's password; rotate that password in PostgreSQL too before changing the Compose setting.
+
+### Use an external PostgreSQL database instead
+
+`docker-compose.external-db.yml` runs the same app image **without** starting a local `db` container or creating a `pgdata` volume. This is a standalone Compose file, not an override to combine with `docker-compose.yml`. The default `docker compose up -d` command above remains the local-Postgres option.
+
+1. Provision an empty, reachable PostgreSQL database and a user with permission to create and alter tables. Back it up before connecting an existing installation. Allow connections from the app host on port 5432.
+2. Copy `.env.example` to an untracked `.env`. Set `SESSION_SECRET` and uncomment `DATABASE_URL` with your database's hostname, database name, username, and password. Percent-encode special characters in connection-string credentials. For a remote database requiring TLS (including RDS), use a URL such as `postgres://dbuser:encoded-password@db.example.com:5432/memexkb?sslmode=require`. Do **not** use `db` as the hostname: that name only works with the local Compose service. `POSTGRES_PASSWORD` is unused in external mode.
+3. Start and check the app:
+
+   ```bash
+   docker compose -f docker-compose.external-db.yml up -d
+   docker compose -f docker-compose.external-db.yml logs -f app
+   curl -f http://localhost:3000/api/healthz
+   ```
+
+The app applies the bundled SQL migrations before it starts listening. A connection or migration failure stops that attempt to start; check the app logs and database network/credentials rather than running `drizzle-kit push` against production. To use the optional stdio MCP service with this configuration, use `docker compose -f docker-compose.external-db.yml run --rm -T mcp`.
 
 ### Use the MCP server from Compose
 
@@ -134,22 +151,42 @@ See `.env.example` for the full list. Minimum required:
 | Variable | Description |
 |---|---|
 | `SESSION_SECRET` | Long random string for signing session cookies |
-| `POSTGRES_PASSWORD` | Password for the `memex` Postgres user |
-| `DATABASE_URL` | Postgres connection string (auto-set by compose) |
+| `POSTGRES_PASSWORD` | Password for the local Compose `memexkb` Postgres user (local mode only; use URL-safe characters) |
+| `DATABASE_URL` | PostgreSQL URL; constructed from `POSTGRES_PASSWORD` in local Compose, required in external Compose and ECS |
+| `COOKIE_SECURE`, `TRUST_PROXY` | Set to `true` and `1` respectively behind one HTTPS-terminating proxy such as an ALB |
 
 ### Schema migrations
 
-`docker compose up` automatically runs `drizzle-kit push` before starting the app. For upgrades with schema conflicts, run the migration manually:
+The Docker image includes `lib/db/migrations` and sets `MIGRATIONS_DIR=/app/migrations`. On **every** container startup the API runs the ordered Drizzle migrations before listening; already-applied migrations are not rerun. This works for either Compose file and for ECS. Review new migration SQL and take a database backup before upgrading. If a database already has application tables created outside the migration history (for example, by a previous `drizzle-kit push`), do **not** point a new container at it and assume the migrations can replay safely. Reconcile its migration history and schema first.
 
-```bash
-docker compose run --rm migrate \
-  pnpm --filter @workspace/db run push
-```
+### Deploy to AWS ECS with Amazon RDS
+
+ECS does not run Docker Compose. Build the same `Dockerfile` image, supply the external database URL and session secret to the ECS task, and put an Application Load Balancer (ALB) in front of the app. A basic single-task Fargate deployment:
+
+1. **Network and database:** In one AWS Region, create a VPC with public subnets for the ALB and private subnets for ECS and RDS. Create an RDS for PostgreSQL 16 instance (or compatible version), a database named `memexkb`, and an application user with schema-creation/migration permissions. Keep RDS **not publicly accessible**. Permit inbound TCP 5432 on the RDS security group **only from the ECS task security group**; permit ALB-to-task TCP 3000. Arrange outbound access for ECS to ECR, Secrets Manager, and CloudWatch Logs via a NAT gateway or the appropriate VPC endpoints.
+2. **Image:** Create a private ECR repository and push an image built for your Fargate architecture. For example, with the AWS CLI configured for the target account and Region:
+
+   ```bash
+   export AWS_REGION=us-east-1
+   export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   export IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/memexkb:latest"
+   aws ecr create-repository --repository-name memexkb --region "$AWS_REGION"
+   aws ecr get-login-password --region "$AWS_REGION" |
+     docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+   docker buildx build --platform linux/amd64 -t "$IMAGE" --push .
+   ```
+
+   Choose `ARM64` in the task definition and build for `linux/arm64` instead if using ARM-based Fargate. Reuse the repository on subsequent pushes (skip `create-repository`).
+3. **Secrets and IAM:** In AWS Secrets Manager, store the full RDS `DATABASE_URL` (including `?sslmode=require` for TLS) and a separately generated `SESSION_SECRET` as two secrets. URL-encode credential characters. Never place either value in the task definition's plain `environment` array, image, source control, or ECS service command. Give the **task execution role** the managed `AmazonECSTaskExecutionRolePolicy` plus `secretsmanager:GetSecretValue` for those secret ARNs (and `kms:Decrypt` if using a customer-managed key). Configure an `awslogs` log group. The task role does not need database credentials when they are injected by the execution role.
+4. **Task definition:** Create a Fargate task using the pushed ECR image, `awsvpc` networking, `X86_64`/Linux for the example build, at least 0.5 vCPU / 1 GB RAM, and container port **3000**. Map the secrets to environment variables named `DATABASE_URL` and `SESSION_SECRET`. Set plain environment variables `NODE_ENV=production`, `PORT=3000`, `STATIC_DIR=/app/public`, `MIGRATIONS_DIR=/app/migrations`, `COOKIE_SECURE=true`, and `TRUST_PROXY=1`. Configure CloudWatch `awslogs` and, optionally, a container health check against `http://localhost:3000/api/healthz`. The task's entrypoint is already defined by the image; do not override it.
+5. **Service and HTTPS:** Create an ECS service in the private subnets with **one task** initially. Create an ALB in the public subnets, an IP-type target group for port 3000 with health-check path `/api/healthz`, and an HTTPS listener with an ACM certificate forwarding to that target group. Redirect HTTP to HTTPS. Point DNS at the ALB. Check CloudWatch logs for “Database migrations complete” before opening the app and completing initial admin setup. The health endpoint checks HTTP availability, not RDS connectivity; use logs and app operations to confirm the database works.
+
+   The app currently migrates on every start, so avoid concurrent fresh tasks during a schema upgrade. Keep the service at one task until you have a separate, coordinated migration process for scale-out or zero-downtime rolling deployments. Back up RDS before upgrading the image. To seed an admin instead of using in-app setup, supply `RUN_SEED=true` and `SEED_ADMIN_EMAIL` plus `SEED_ADMIN_PASSWORD` (as a secret) for the first start only, then remove them. Use the **same** `SESSION_SECRET` across restarts/tasks so existing sessions remain valid.
 
 ### Published images
 
 ```bash
-docker pull ghcr.io/<your-org>/memex:latest   # amd64 + arm64
+docker pull ghcr.io/klarge/memexkb:latest   # amd64 + arm64
 ```
 
 ---

@@ -12,6 +12,8 @@ export interface ArticleInput {
   title: string;
   /** HTML content */
   content: string;
+  /** Does not require future review */
+  isStatic?: boolean;
   visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];

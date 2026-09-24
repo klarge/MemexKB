@@ -11,6 +11,8 @@ export interface ArticleUpdate {
   /** @minLength 1 */
   title?: string;
   content?: string;
+  /** Does not require future review */
+  isStatic?: boolean;
   visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];

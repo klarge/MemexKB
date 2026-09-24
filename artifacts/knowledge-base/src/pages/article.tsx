@@ -495,6 +495,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
                    {displayedArticle.visibility === "personal" ? "Personal" : displayedArticle.visibility === "group" ? <><Lock className="w-3 h-3 mr-1" />Group</> : "Public"}
                 </Badge>
               )}
+               {displayedArticle.isStatic && <Badge variant="secondary" title="Does not require future review">Static</Badge>}
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span>Last updated: {format(new Date(displayedArticle.updatedAt), "MMMM d, yyyy 'at' h:mm a")}</span>

@@ -496,12 +496,12 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
     db.select({ count: count() }).from(articlesTable).where(and(accessibleArticles, eq(articlesTable.visibility, "group"))),
   ]);
 
-  const fetchAndFilter = async (orderFn: typeof desc) => {
+  const fetchAndFilter = async (orderFn: typeof desc, needsReview = false) => {
     const rows = await db
       .select({ id: articlesTable.id, slug: articlesTable.slug, title: articlesTable.title, visibility: articlesTable.visibility, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name })
       .from(articlesTable)
       .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
-      .where(accessibleArticles)
+      .where(needsReview ? and(accessibleArticles, eq(articlesTable.isStatic, false)) : accessibleArticles)
       .orderBy(orderFn(articlesTable.updatedAt))
       .limit(5);
 
@@ -519,7 +519,7 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
 
   const [recentlyUpdated, oldestUpdated] = await Promise.all([
     fetchAndFilter(desc),
-    fetchAndFilter(asc),
+    fetchAndFilter(asc, true),
   ]);
 
   res.json({
@@ -533,9 +533,13 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
 });
 
 router.post("/articles", requireAuth, async (req, res) => {
-  const { title, content, groupIds, tagIds, isLogEntry, visibility: requestedVisibility } = req.body;
+  const { title, content, groupIds, tagIds, isLogEntry, isStatic, visibility: requestedVisibility } = req.body;
   if (!title) {
     res.status(400).json({ error: "Title required" });
+    return;
+  }
+  if (isStatic !== undefined && (typeof isStatic !== "boolean" || isLogEntry)) {
+    res.status(400).json({ error: "Static must be a boolean on a regular article" });
     return;
   }
 
@@ -616,7 +620,7 @@ router.post("/articles", requireAuth, async (req, res) => {
     if (slugConflict) throw new Error("INTERNAL_LOG_SLUG_CONFLICT");
     const [createdArticle] = await tx
       .insert(articlesTable)
-      .values({ slug, logSlug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), visibility, createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
+      .values({ slug, logSlug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), isStatic: isStatic ?? false, visibility, createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
       .returning();
 
     await attachReferencedArticleImages(
@@ -671,7 +675,7 @@ router.post("/articles", requireAuth, async (req, res) => {
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
-  res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
+  res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
 });
 
 router.get("/logs/:userId/:logSlug", requireAuth, async (req, res) => {
@@ -778,7 +782,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     return;
   }
   const [article] = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, visibility: articlesTable.visibility, projectId: articlesTable.projectId, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
+    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, isStatic: articlesTable.isStatic, visibility: articlesTable.visibility, projectId: articlesTable.projectId, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(eq(articlesTable.slug, slug))
@@ -832,7 +836,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     }))).filter((article): article is NonNullable<typeof article> => article !== null);
   }
 
-  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: true, canEdit: await canEditArticleRecord(article, userId, userRole), groups, tags, backlinks, ...logUrlFields(article) });
+  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: true, canEdit: await canEditArticleRecord(article, userId, userRole), groups, tags, backlinks, ...logUrlFields(article) });
 });
 
 router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (req, res) => {
@@ -976,7 +980,7 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
 
 router.patch("/articles/:slug", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
-  const { title, content, groupIds, tagIds, visibility: requestedVisibility } = req.body;
+  const { title, content, groupIds, tagIds, isStatic, visibility: requestedVisibility } = req.body;
   if (!(await hasLogSlugColumn())) {
     const [legacyArticle] = await db
       .select({ isLogEntry: articlesTable.isLogEntry })
@@ -1019,6 +1023,10 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Personal log entries cannot be shared with groups" });
     return;
   }
+  if (isStatic !== undefined && (typeof isStatic !== "boolean" || existing.isLogEntry || existing.projectId !== null)) {
+    res.status(400).json({ error: "Static must be a boolean on a regular article" });
+    return;
+  }
 
   let groupUpdate: number[] | undefined;
   let visibilityUpdate: "personal" | "group" | "public" | undefined;
@@ -1037,6 +1045,7 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
   if (title !== undefined) updates.title = title;
   if (content !== undefined) updates.content = sanitizeArticleHtml(content);
   if (visibilityUpdate) updates.visibility = visibilityUpdate;
+  if (isStatic !== undefined) updates.isStatic = isStatic;
   let article;
   let versionCreated = false;
   if (content !== undefined) {
@@ -1128,7 +1137,7 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
-  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.projectId !== null || article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
+  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.projectId !== null || article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
 });
 
 // ─── Log Entries ─────────────────────────────────────────────────────────────
