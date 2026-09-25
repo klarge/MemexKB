@@ -19,7 +19,7 @@ import {
   siteSettingsTable,
 } from "@workspace/db";
 import { eq, and, inArray, asc, desc, count, max, or, sql, isNull, isNotNull } from "drizzle-orm";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
@@ -211,7 +211,7 @@ router.get("/projects", requireAuth, async (req, res) => {
   });
 });
 
-router.post("/projects", requireAuth, async (req, res) => {
+router.post("/projects", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const { name, description } = req.body as { name?: string; description?: string };
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
   const [project] = await db

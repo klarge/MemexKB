@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, FolderKanban, Loader2, X, LayoutGrid, Archive, ArchiveRestore, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
+import { useAuth } from "@/lib/auth";
 
 type Project = {
   id: number;
@@ -19,6 +20,8 @@ type Project = {
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const canCreateProject = user?.role === "admin" || user?.role === "editor";
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -97,7 +100,7 @@ export default function ProjectsPage() {
             Kanban boards for collaborative project work.
           </p>
         </div>
-        {!showForm && (
+        {canCreateProject && !showForm && (
           <Button onClick={() => setShowForm(true)}>
             <Plus className="mr-2 h-4 w-4" /> New Project
           </Button>
@@ -105,7 +108,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* New project form */}
-      {showForm && (
+      {canCreateProject && showForm && (
         <div className="rounded-xl border bg-card p-5 space-y-3 shadow-sm">
           <h2 className="font-semibold text-sm">New Project</h2>
           <Input

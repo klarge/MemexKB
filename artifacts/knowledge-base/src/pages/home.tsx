@@ -223,7 +223,7 @@ export default function Home() {
   const { user } = useAuth();
   const { data: siteSettings } = useSiteSettings();
 
-  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const canWriteLog = Boolean(user);
   const logEnabled = siteSettings?.logEntriesEnabled === true;
   const tasksEnabled = siteSettings?.tasksEnabled !== false;
   const projectsEnabled = siteSettings?.projectsEnabled !== false;
@@ -455,7 +455,7 @@ export default function Home() {
               loading={logLoading}
               empty={!logLoading && recentLogs.length === 0}
               action={
-                canEdit ? (
+                canWriteLog ? (
                   <Button size="sm" onClick={handleTodayLog} className="gap-1.5">
                     {todayEntry ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                     {todayEntry ? "Edit Today's Entry" : "Today's Log"}

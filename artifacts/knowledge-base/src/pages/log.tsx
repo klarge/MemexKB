@@ -23,7 +23,7 @@ type LogEntry = {
 export default function LogPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const canEdit = Boolean(user);
   const { data: siteSettings, isLoading: settingsLoading } = useSiteSettings();
 
   const [offset, setOffset] = useState(0);

@@ -62,7 +62,7 @@ export default function Articles() {
           <h1 className="text-3xl font-bold tracking-tight text-primary">Knowledge</h1>
           <p className="text-muted-foreground mt-1">Browse and search all knowledge base articles.</p>
         </div>
-        {user && (
+        {(user?.role === "admin" || user?.role === "editor") && (
           <Button onClick={() => setLocation("/knowledge/new")} data-testid="button-new-article">
             <Plus className="mr-2 h-4 w-4" />
             New Article

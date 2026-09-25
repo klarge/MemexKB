@@ -283,6 +283,7 @@ async function canAccessArticleRecord(
 async function canEditArticleRecord(article: VisibilityArticle, userId: number | undefined, userRole: string | undefined): Promise<boolean> {
   if (article.projectId !== null && article.projectId !== undefined) return canEditProjectDocument(article.projectId, userId, userRole);
   if (article.isLogEntry) return isAdmin(userRole) || article.createdById === userId;
+  if (userRole !== "admin" && userRole !== "editor") return false;
   const groups = (await getArticleGroups(article.id)).map((group) => group.id);
   const userGroups = await getUserGroupIds(userId);
   if (!userId) return false;
@@ -541,6 +542,10 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
 
 router.post("/articles", requireAuth, async (req, res) => {
   const { title, content, groupIds, tagIds, isLogEntry, isStatic, visibility: requestedVisibility } = req.body;
+  if (isLogEntry !== true && req.session.userRole !== "admin" && req.session.userRole !== "editor") {
+    res.status(403).json({ error: "Editor access is required to create articles" });
+    return;
+  }
   if (!title) {
     res.status(400).json({ error: "Title required" });
     return;

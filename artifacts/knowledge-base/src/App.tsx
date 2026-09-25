@@ -114,6 +114,11 @@ function PublicLayout({ children }: { children: ReactNode }) {
   return <MainLayout>{children}</MainLayout>;
 }
 
+function NewArticleRoute() {
+  const isLog = new URLSearchParams(window.location.search).get("log") === "1";
+  return <AuthRoute editorOnly={!isLog}><ArticleEdit /></AuthRoute>;
+}
+
 function LegacyWikiRedirect({ to }: { to: string }) {
   const [, setLocation] = useLocation();
 
@@ -145,20 +150,16 @@ function Router() {
       </Route>
 
       <Route path="/knowledge/new">
-        <AuthRoute>
-          <ArticleEdit />
-        </AuthRoute>
+        <NewArticleRoute />
       </Route>
 
       <Route path="/knowledge/new/edit">
-        <AuthRoute>
-          <ArticleEdit />
-        </AuthRoute>
+        <NewArticleRoute />
       </Route>
 
       <Route path="/logs/:userId/:logSlug/edit">
         {(params: Record<string, string>) => (
-          <AuthRoute editorOnly>
+          <AuthRoute>
             <ArticleEdit params={params} />
           </AuthRoute>
         )}
@@ -166,7 +167,7 @@ function Router() {
 
       <Route path="/logs/:userId/:logSlug/history">
         {(params: Record<string, string>) => (
-          <AuthRoute editorOnly>
+          <AuthRoute>
             <ArticleHistory params={params} />
           </AuthRoute>
         )}
@@ -182,7 +183,7 @@ function Router() {
 
       <Route path="/knowledge/:slug/edit">
         {(params: Record<string, string>) => (
-          <AuthRoute>
+          <AuthRoute editorOnly>
             <ArticleEdit params={params} />
           </AuthRoute>
         )}
@@ -317,7 +318,7 @@ function Router() {
       <Route path="/projects/:projectId">
         {(params: Record<string, string>) => (
           <AuthRoute>
-            <ProjectPage params={params} />
+            <ProjectPage params={{ projectId: params.projectId }} />
           </AuthRoute>
         )}
       </Route>
@@ -325,7 +326,7 @@ function Router() {
       <Route path="/projects/:projectId/boards/:boardId">
         {(params: Record<string, string>) => (
           <AuthRoute>
-            <BoardPage params={params} />
+            <BoardPage params={{ projectId: params.projectId, boardId: params.boardId }} />
           </AuthRoute>
         )}
       </Route>
