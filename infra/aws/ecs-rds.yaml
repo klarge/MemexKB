@@ -1,0 +1,432 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Memex knowledge base on ECS Fargate with private PostgreSQL RDS, HTTPS ALB,
+  and per-request authenticated MCP. Uses an existing VPC and subnets.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing VPC containing the public and private subnets.
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two public subnets in different AZs for the internet-facing ALB.
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two private subnets in different AZs for ECS and RDS. ECS needs NAT or VPC endpoints for ECR, Secrets Manager, and CloudWatch Logs.
+  CertificateArn:
+    Type: String
+    Description: Existing ACM certificate ARN in this Region covering DomainName.
+  DomainName:
+    Type: String
+    Description: HTTPS hostname for the site, such as wiki.example.com.
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: Optional existing Route 53 public hosted zone ID; leave blank to manage DNS yourself.
+  RepositoryName:
+    Type: String
+    Default: memexkb
+    AllowedPattern: '[a-z0-9]+(?:[._/-][a-z0-9]+)*'
+    Description: Name of the new private ECR repository (must not already exist).
+  ImageTag:
+    Type: String
+    Default: v1
+    Description: Unique pushed image tag. Use a new tag on each update.
+  DeployRuntime:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['false', 'true']
+    Description: First deploy with false to create only ECR. Push the image, then update to true.
+  ProtectDatabase:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['false', 'true']
+    Description: Enable only after the first runtime deployment succeeds, so CloudFormation can roll back failed initial launches.
+  DbEngineVersion:
+    Type: String
+    Description: Available PostgreSQL 16.x engine version in this Region (for example, 16.8).
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+  DbAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+    Description: RDS storage in GiB.
+  McpAllowedOrigins:
+    Type: String
+    Default: ''
+    Description: Optional comma-separated exact browser client origins. Desktop clients usually do not need this.
+
+Conditions:
+  RuntimeEnabled: !Equals [!Ref DeployRuntime, 'true']
+  DbProtectionEnabled: !Equals [!Ref ProtectDatabase, 'true']
+  CreateDns: !And
+    - !Condition RuntimeEnabled
+    - !Not [!Equals [!Ref HostedZoneId, '']]
+
+Resources:
+  Repository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    Properties:
+      RepositoryName: !Ref RepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: RuntimeEnabled
+    Properties:
+      GroupDescription: Public HTTPS and HTTP redirect for Memex
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: RuntimeEnabled
+    Properties:
+      GroupDescription: Only the ALB can reach the app and MCP containers
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: RuntimeEnabled
+    Properties:
+      GroupDescription: PostgreSQL accessible only from Memex tasks
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref TaskSecurityGroup
+
+  DbPassword:
+    Type: AWS::SecretsManager::Secret
+    Condition: RuntimeEnabled
+    DeletionPolicy: Retain
+    Properties:
+      Description: Generated RDS password for the Memex application and migrations
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  SessionSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: RuntimeEnabled
+    Properties:
+      Description: Generated stable session signing secret for Memex
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Condition: RuntimeEnabled
+    Properties:
+      DBSubnetGroupDescription: Existing private subnets for Memex PostgreSQL
+      SubnetIds: !Ref PrivateSubnetIds
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    Condition: RuntimeEnabled
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      Engine: postgres
+      EngineVersion: !Ref DbEngineVersion
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: !Ref DbAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: memexkb
+      MasterUsername: memexapp
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbPassword}:SecretString}}'
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSecurityGroup
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 7
+      CopyTagsToSnapshot: true
+      DeletionProtection: !If [DbProtectionEnabled, true, false]
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: RuntimeEnabled
+    Properties:
+      LogGroupName: !Sub '/ecs/${AWS::StackName}/memex'
+      RetentionInDays: 30
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: RuntimeEnabled
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+      Policies:
+        - PolicyName: ReadTaskSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DbPassword
+                  - !Ref SessionSecret
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Condition: RuntimeEnabled
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: RuntimeEnabled
+    Properties:
+      Family: !Sub '${AWS::StackName}-memex'
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: '1024'
+      Memory: '2048'
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: app
+          Essential: true
+          Image: !Sub '${Repository.RepositoryUri}:${ImageTag}'
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '3000'
+            - Name: STATIC_DIR
+              Value: /app/public
+            - Name: MIGRATIONS_DIR
+              Value: /app/migrations
+            - Name: COOKIE_SECURE
+              Value: 'true'
+            - Name: TRUST_PROXY
+              Value: '1'
+            - Name: DB_HOST
+              Value: !GetAtt Database.Endpoint.Address
+            - Name: MCP_ALLOWED_ORIGINS
+              Value: !Ref McpAllowedOrigins
+          Secrets:
+            - Name: DB_PASSWORD
+              ValueFrom: !Ref DbPassword
+            - Name: SESSION_SECRET
+              ValueFrom: !Ref SessionSecret
+          # Build DATABASE_URL inside the container so it is never stored in a
+          # plaintext task definition. URL properties encode credentials safely.
+          Command:
+            - node
+            - --enable-source-maps
+            - -e
+            - |
+              const url = new URL("postgresql://localhost");
+              url.hostname = process.env.DB_HOST;
+              url.port = "5432";
+              url.pathname = "/memexkb";
+              url.username = "memexapp";
+              url.password = process.env.DB_PASSWORD;
+              url.searchParams.set("sslmode", "require");
+              process.env.DATABASE_URL = url.toString();
+              import("/app/dist/index.mjs");
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: app
+        - Name: mcp
+          Essential: true
+          Image: !Sub '${Repository.RepositoryUri}:${ImageTag}'
+          Command: [node, /app/mcp/dist/index.js]
+          DependsOn:
+            - ContainerName: app
+              Condition: START
+          PortMappings:
+            - ContainerPort: 3001
+              Protocol: tcp
+          Environment:
+            - Name: MEMEX_URL
+              Value: http://127.0.0.1:3000
+            - Name: MCP_HOST
+              Value: 0.0.0.0
+            - Name: MCP_PORT
+              Value: '3001'
+            - Name: MCP_ALLOWED_ORIGINS
+              Value: !Ref McpAllowedOrigins
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: mcp
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: RuntimeEnabled
+    Properties:
+      Scheme: internet-facing
+      Type: application
+      Subnets: !Ref PublicSubnetIds
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+
+  AppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: RuntimeEnabled
+    Properties:
+      VpcId: !Ref VpcId
+      TargetType: ip
+      Protocol: HTTP
+      Port: 3000
+      HealthCheckPath: /api/healthz
+      Matcher:
+        HttpCode: '200'
+
+  McpTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: RuntimeEnabled
+    Properties:
+      VpcId: !Ref VpcId
+      TargetType: ip
+      Protocol: HTTP
+      Port: 3001
+      HealthCheckPath: /healthz
+      Matcher:
+        HttpCode: '200'
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: RuntimeEnabled
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: '443'
+            StatusCode: HTTP_301
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: RuntimeEnabled
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AppTargetGroup
+
+  McpListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: RuntimeEnabled
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 10
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values: [/mcp, '/mcp/*']
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref McpTargetGroup
+
+  Service:
+    Type: AWS::ECS::Service
+    Condition: RuntimeEnabled
+    DependsOn: [HttpsListener, McpListenerRule]
+    Properties:
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 300
+      DeploymentConfiguration:
+        # Stop the previous task before launching the next so concurrent
+        # startup migrations cannot run. Upgrades briefly interrupt service.
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref TaskSecurityGroup
+          Subnets: !Ref PrivateSubnetIds
+      LoadBalancers:
+        - ContainerName: app
+          ContainerPort: 3000
+          TargetGroupArn: !Ref AppTargetGroup
+        - ContainerName: mcp
+          ContainerPort: 3001
+          TargetGroupArn: !Ref McpTargetGroup
+
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+
+Outputs:
+  RepositoryUri:
+    Description: Push the Docker image here before enabling the runtime.
+    Value: !GetAtt Repository.RepositoryUri
+  HttpsUrl:
+    Condition: RuntimeEnabled
+    Value: !Sub 'https://${DomainName}'
+  McpUrl:
+    Condition: RuntimeEnabled
+    Value: !Sub 'https://${DomainName}/mcp'
+  LoadBalancerDnsName:
+    Condition: RuntimeEnabled
+    Description: Use this as a DNS alias target if HostedZoneId was left blank.
+    Value: !GetAtt LoadBalancer.DNSName
+  DbPasswordSecretArn:
+    Condition: RuntimeEnabled
+    Description: Retained on stack deletion to allow recovery of the RDS snapshot.
+    Value: !Ref DbPassword

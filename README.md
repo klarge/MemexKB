@@ -152,27 +152,59 @@ The Docker image includes `lib/db/migrations` and sets `MIGRATIONS_DIR=/app/migr
 
 ### Deploy to AWS ECS with Amazon RDS
 
-ECS does not run Docker Compose. Build the same `Dockerfile` image, supply the external database URL and session secret to the ECS task, and put an Application Load Balancer (ALB) in front of the app. A basic single-task Fargate deployment:
+The [CloudFormation template](infra/aws/ecs-rds.yaml) provisions a single-task ECS Fargate service, private RDS PostgreSQL database, ECR repository, generated Secrets Manager credentials, IAM execution role, CloudWatch logs, and an HTTPS ALB routing `/mcp` separately from the app. **It creates billable AWS resources; nothing is provisioned by this repository until you deploy the stack.** It assumes an existing VPC with at least two public and two private subnets in different Availability Zones, an ACM certificate for your hostname in the same Region, and an optional existing Route 53 public hosted zone. The public subnets need an internet gateway route; the private subnets need NAT or VPC endpoints for ECR (including S3), Secrets Manager, and CloudWatch Logs. RDS is not publicly accessible.
 
-1. **Network and database:** In one AWS Region, create a VPC with public subnets for the ALB and private subnets for ECS and RDS. Create an RDS for PostgreSQL 16 instance (or compatible version), a database named `memexkb`, and an application user with schema-creation/migration permissions. Keep RDS **not publicly accessible**. Permit inbound TCP 5432 on the RDS security group **only from the ECS task security group**; permit ALB-to-task TCP 3000 for the app and 3001 for MCP. Arrange outbound access for ECS to ECR, Secrets Manager, and CloudWatch Logs via a NAT gateway or the appropriate VPC endpoints.
-2. **Image:** Create a private ECR repository and push an image built for your Fargate architecture. For example, with the AWS CLI configured for the target account and Region:
+CloudFormation cannot push the image it is about to run, so deployment has two stages. With AWS CLI credentials configured and a PostgreSQL 16.x version available in your Region:
 
-   ```bash
-   export AWS_REGION=us-east-1
-   export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-   export IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/memexkb:latest"
-   aws ecr create-repository --repository-name memexkb --region "$AWS_REGION"
-   aws ecr get-login-password --region "$AWS_REGION" |
-     docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-   docker buildx build --platform linux/amd64 -t "$IMAGE" --push .
-   ```
+```bash
+export AWS_REGION=us-east-1
+export STACK=memexkb
+export VPC_ID=vpc-REPLACE_ME
+export PUBLIC_SUBNETS=subnet-PUBLIC_A,subnet-PUBLIC_B
+export PRIVATE_SUBNETS=subnet-PRIVATE_A,subnet-PRIVATE_B
+export ACM_CERTIFICATE_ARN=arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERTIFICATE_ID
+export DOMAIN_NAME=wiki.example.com
+export POSTGRES_VERSION=16.8  # choose a PostgreSQL 16.x version supported in your Region
+PARAMS=(
+  VpcId="$VPC_ID" PublicSubnetIds="$PUBLIC_SUBNETS" PrivateSubnetIds="$PRIVATE_SUBNETS"
+  CertificateArn="$ACM_CERTIFICATE_ARN" DomainName="$DOMAIN_NAME"
+  DbEngineVersion="$POSTGRES_VERSION"
+)
+# If using Route 53, add HostedZoneId=YOUR_PUBLIC_ZONE_ID to PARAMS.
 
-   Choose `ARM64` in the task definition and build for `linux/arm64` instead if using ARM-based Fargate. Reuse the repository on subsequent pushes (skip `create-repository`).
-3. **Secrets and IAM:** In AWS Secrets Manager, store the full RDS `DATABASE_URL` (including `?sslmode=require` for TLS) and a separately generated `SESSION_SECRET` as two secrets. URL-encode credential characters. Never place either value in the task definition's plain `environment` array, image, source control, or ECS service command. Give the **task execution role** the managed `AmazonECSTaskExecutionRolePolicy` plus `secretsmanager:GetSecretValue` for those secret ARNs (and `kms:Decrypt` if using a customer-managed key). Configure an `awslogs` log group. The task role does not need database credentials when they are injected by the execution role.
-4. **Task definition:** Create a Fargate task using the pushed ECR image, `awsvpc` networking, `X86_64`/Linux for the example build, and enough task CPU/memory for **two containers** (for example, 1 vCPU / 2 GB RAM). The `app` container maps port **3000**, receives the `DATABASE_URL` and `SESSION_SECRET` secrets, and sets plain environment variables `NODE_ENV=production`, `PORT=3000`, `STATIC_DIR=/app/public`, `MIGRATIONS_DIR=/app/migrations`, `COOKIE_SECURE=true`, and `TRUST_PROXY=1`. Keep its image-defined command. Add an `mcp` container **using the same image**, mapping port **3001**, overriding its command to `["node", "/app/mcp/dist/index.js"]`, and setting `MEMEX_URL=http://127.0.0.1:3000`, `MCP_HOST=0.0.0.0`, `MCP_PORT=3001`. Containers in the same Fargate task share localhost. Do not inject any user's API key into either container. Configure CloudWatch `awslogs` for both.
-5. **Service and HTTPS:** Create an ECS service in the private subnets with **one task** initially. Create an ALB in the public subnets with two IP-type target groups: port 3000 (`/api/healthz` health check) for the app and port 3001 (`/healthz` health check) for MCP. On its ACM-backed HTTPS listener, route path `/mcp` to the MCP target group and other paths to the app target group; redirect HTTP to HTTPS. Point DNS at the ALB. Check CloudWatch logs for “Database migrations complete” before opening the app and completing initial admin setup. Each MCP request authenticates its own bearer key with the app over localhost; the health endpoints only check HTTP availability, not RDS connectivity.
+aws cloudformation validate-template --region "$AWS_REGION" \
+  --template-body file://infra/aws/ecs-rds.yaml
 
-   The app currently migrates on every start, so avoid concurrent fresh tasks during a schema upgrade. Keep the service at one task until you have a separate, coordinated migration process for scale-out or zero-downtime rolling deployments. Back up RDS before upgrading the image. To seed an admin instead of using in-app setup, supply `RUN_SEED=true` and `SEED_ADMIN_EMAIL` plus `SEED_ADMIN_PASSWORD` (as a secret) for the first start only, then remove them. Use the **same** `SESSION_SECRET` across restarts/tasks so existing sessions remain valid.
+# Stage 1: create only the ECR repository (no running services yet).
+aws cloudformation deploy --region "$AWS_REGION" --stack-name "$STACK" \
+  --template-file infra/aws/ecs-rds.yaml --capabilities CAPABILITY_IAM \
+  --parameter-overrides "${PARAMS[@]}" DeployRuntime=false
+
+IMAGE_URI=$(aws cloudformation describe-stacks --region "$AWS_REGION" \
+  --stack-name "$STACK" \
+  --query "Stacks[0].Outputs[?OutputKey=='RepositoryUri'].OutputValue | [0]" --output text)
+aws ecr get-login-password --region "$AWS_REGION" |
+  docker login --username AWS --password-stdin "${IMAGE_URI%/*}"
+docker buildx build --platform linux/amd64 -t "$IMAGE_URI:v1" --push .
+
+# Stage 2: create RDS, ECS, secrets, and the HTTPS load balancer.
+# Keep deletion protection off until the first deployment is healthy so a
+# failed rollout can be rolled back automatically.
+aws cloudformation deploy --region "$AWS_REGION" --stack-name "$STACK" \
+  --template-file infra/aws/ecs-rds.yaml --capabilities CAPABILITY_IAM \
+  --parameter-overrides "${PARAMS[@]}" DeployRuntime=true ProtectDatabase=false ImageTag=v1
+
+# After the service is healthy, protect the database from accidental deletion.
+aws cloudformation deploy --region "$AWS_REGION" --stack-name "$STACK" \
+  --template-file infra/aws/ecs-rds.yaml --capabilities CAPABILITY_IAM \
+  --parameter-overrides "${PARAMS[@]}" DeployRuntime=true ProtectDatabase=true ImageTag=v1
+```
+
+If you did not supply `HostedZoneId`, point your hostname at the `LoadBalancerDnsName` stack output yourself. Use the hostname covered by the ACM certificate, not the ALB hostname, to browse the site. Check the app's CloudWatch log stream for “Database migrations complete” before completing initial admin setup in the browser; ALB health checks only confirm HTTP availability, not database connectivity. Each MCP request still uses its caller's own Read-only API key—no API keys are stored in the task.
+
+The task builds its TLS-enabled `DATABASE_URL` in memory from the generated database password; neither it nor `SESSION_SECRET` appears as a plaintext value in the task definition. For simplicity this stack uses the RDS master user for application migrations. Consider a separately provisioned least-privilege application user if your security policy requires one. The database has backups and, after the final update, deletion protection. Before deleting the stack or replacing RDS, first update with `ProtectDatabase=false`; the RDS snapshot, database password secret, and ECR repository are retained on stack deletion and must be cleaned up deliberately. If the initial runtime rollout fails, inspect the ECS service events and CloudWatch logs, fix the networking/image issue, and retry with `ProtectDatabase=false`.
+
+The service stops the old task before starting a replacement so startup migrations cannot run concurrently. **This causes a short outage on image updates.** Back up RDS before schema upgrades, build and push a **new immutable image tag**, then update `ImageTag` in the stack. Do not increase the task count or use overlapping deployments until migrations run in a separate coordinated process. The session secret remains stable across stack updates.
 
 ### Published images
 
