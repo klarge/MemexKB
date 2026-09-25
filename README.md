@@ -435,6 +435,23 @@ The `artifacts/mcp-server` package exposes Memex as a set of tools for MCP-compa
 
 **Connection:** Use the HTTPS `/mcp` endpoint and a per-user Read-only API key in an MCP client that supports Streamable HTTP with a custom Authorization header. All tools are view-only and retain the API's project/group permissions and personal log/task ownership rules. See the [Compose HTTPS instructions](#use-the-mcp-server-from-compose) and `artifacts/mcp-server/README.md`. There is no local stdio launcher or shared server-side token.
 
+**Cursor example:** Add this to your personal Cursor MCP config at `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "memex": {
+      "url": "https://wiki.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_OWN_READ_ONLY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+Replace the example hostname with your HTTPS domain and the placeholder with a Read-only key you created in **Settings → API Keys**. Keep the key in your personal config; do not commit it in a project's `.cursor/mcp.json` or share it with other users.
+
 ---
 
 ## Tags
