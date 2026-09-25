@@ -214,6 +214,19 @@ docker pull ghcr.io/klarge/memexkb:latest   # amd64 + arm64
 
 ---
 
+## Configure SAML SSO
+
+Use your installation's **public HTTPS hostname** when setting up SSO. Behind an HTTPS-terminating proxy, set `COOKIE_SECURE=true` and `TRUST_PROXY=1`. If the metadata shows an internal hostname or `http://` instead of the public URL, set `APP_BASE_URL` to the public origin (for example, `https://wiki.example.com`) and reload the metadata. Do not use the container's internal address in the IdP.
+
+1. Sign in as an admin, open **SSO / Identity**, and select **Add Provider → SAML 2.0**. Enter the IdP's SSO URL and its **current SAML signing X.509 certificate** in PEM format (`-----BEGIN CERTIFICATE-----` through `-----END CERTIFICATE-----`). The optional **SP Entity ID / Issuer** defaults to the app's public origin. Save the provider; new providers start disabled.
+2. On the provider card, open the **MD** link to view the installation's SP metadata XML, or give that URL to an IdP that supports metadata import. The URL is `https://wiki.example.com/api/auth/saml/PROVIDER_ID/metadata`. If configuring manually, set the IdP's **ACS / Reply URL** to the XML's `AssertionConsumerService Location` (a **POST** endpoint ending in `/api/auth/saml/PROVIDER_ID/callback`). Set the IdP's **Audience URI / SP Entity ID / Relying Party Identifier** to the XML's `entityID` **exactly**, including any trailing slash. The audience is not the ACS URL or the IdP's own entity ID.
+3. Configure the IdP to **sign both the SAML Response and the Assertion** with the private key matching the IdP signing certificate entered in Memex. Its assertion must include a `Conditions` → `AudienceRestriction` → `Audience` value equal to that exact SP `entityID`. Provide an email address as an `email` attribute, the standard email-address claim, or the NameID so Memex can identify the user.
+4. Enable the provider with the switch on its card, then start a fresh sign-in from the Memex login page. Local login remains available. If you rotate the IdP signing certificate or change the public hostname/issuer, update the Memex provider and re-import the new metadata in the IdP.
+
+Common failures: `Cannot POST /` means the IdP is posting to the site root instead of the ACS URL; `Invalid document signature` or `Invalid signature` means the required response/assertion signature is missing or cannot be verified with the configured IdP signing certificate; `SAML assertion has no AudienceRestriction` means the IdP omitted the audience, while an audience mismatch means it does not exactly match the SP `entityID`. Do not disable signature or audience validation to bypass these errors, and do not share raw SAML responses in logs or support requests.
+
+---
+
 ## API basics
 
 The API is served under `/api`. Create an API token in **Settings → API Keys**, then use it as a bearer token. The examples below assume:
