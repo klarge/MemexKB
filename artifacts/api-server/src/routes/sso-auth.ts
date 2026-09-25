@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { ssoConfigsTable, usersTable, groupMembersTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { frontendUrl } from "../lib/frontend-url";
 
 const router = Router();
 
@@ -116,11 +117,6 @@ async function syncSamlGroups(
         ),
       );
   }
-}
-
-function frontendUrl(req: { protocol: string; get: (h: string) => string | undefined }, path = "/") {
-  const base = process.env.APP_BASE_URL ?? `${req.protocol}://${req.get("host")}`;
-  return base.replace(/\/$/, "") + path;
 }
 
 // ── SAML ─────────────────────────────────────────────────────────────────────
