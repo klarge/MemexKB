@@ -36,6 +36,15 @@ const PDFDocument = _require("pdfkit") as typeof import("pdfkit");
 const router = Router();
 const WIKILINK_MUTATION_LOCK = 824199;
 
+function articleSearchRelevance(term: string) {
+  const pattern = `%${term}%`;
+  return sql<number>`CASE
+    WHEN lower(trim(${articlesTable.title})) = lower(${term}) THEN 2
+    WHEN ${articlesTable.title} ILIKE ${pattern} THEN 1
+    ELSE 0
+  END`;
+}
+
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
 // ─── PDF infobox helpers ──────────────────────────────────────────────────────
@@ -422,15 +431,8 @@ router.get("/articles", requireAuth, async (req, res) => {
 
   const sortCol = sort === "updated_at" ? articlesTable.updatedAt : sort === "created_at" ? articlesTable.createdAt : articlesTable.title;
   if (searchTerm) {
-    const searchPattern = `%${searchTerm}%`;
-    // Keep substring search compatibility while ranking a title match above a
-    // content-only match. The requested sort remains the tie-breaker.
-    const relevance = sql<number>`
-      CASE WHEN ${articlesTable.title} ILIKE ${searchPattern} THEN 2 ELSE 0 END
-      + CASE WHEN ${articlesTable.content} ILIKE ${searchPattern} THEN 1 ELSE 0 END
-    `;
     query = query.orderBy(
-      desc(relevance),
+      desc(articleSearchRelevance(searchTerm)),
       order === "desc" ? desc(sortCol) : asc(sortCol),
     );
   } else {
@@ -1267,7 +1269,7 @@ router.get("/search", requireAuth, async (req, res) => {
       normalArticleVisibilityCondition(userId!, userRole, userGroupIds),
       searchCond!,
     ))
-    .orderBy(desc(articlesTable.updatedAt))
+    .orderBy(desc(articleSearchRelevance(term)), desc(articlesTable.updatedAt))
     .limit(8);
 
   const articles = rawArticles
