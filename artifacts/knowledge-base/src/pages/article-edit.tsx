@@ -123,6 +123,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const refreshLogLists = () => {
+    queryClient.removeQueries({ queryKey: ["log-entries-home"] });
+    void queryClient.invalidateQueries({ queryKey: ["log-entries"] });
+  };
+
   const [title, setTitle] = useState(prefillTitle);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [visibility, setVisibility] = useState<"personal" | "group" | "public">("personal");
@@ -619,6 +624,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         localStorage.removeItem(draftKey);
         toast({ title: "Log entry created" });
         if (!data.logSlug || !data.logOwnerId) throw new Error("The server did not return the new log URL");
+        refreshLogLists();
         setLocation(`/logs/${data.logOwnerId}/${data.logSlug}`);
       } catch {
         toast({ title: "Network error", variant: "destructive" });
@@ -678,6 +684,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             setAutosaveStatus("idle");
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
             queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
+            if (isLogRoute) refreshLogLists();
             toast({ title: "Article updated" });
             await releaseLock();
             setLocation(isLogRoute || isProjectDocument ? articlePath : `/knowledge/${data.slug}`);

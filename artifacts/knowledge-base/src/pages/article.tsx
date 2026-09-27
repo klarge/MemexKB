@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
   useGetArticle,
@@ -97,6 +98,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const isHome = !slug || slug === "home";
   const actualSlug = slug || "home";
@@ -250,6 +252,10 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
       { slug: apiSlug },
       {
         onSuccess: () => {
+          if (isLogRoute) {
+            queryClient.removeQueries({ queryKey: ["log-entries-home"] });
+            void queryClient.invalidateQueries({ queryKey: ["log-entries"] });
+          }
           toast({ title: isProjectDocument ? "Document deleted" : "Article deleted" });
           setLocation(isProjectDocument ? `/projects/${projectId}` : "/");
         },

@@ -455,7 +455,7 @@ export default function Home() {
               loading={logLoading}
               empty={!logLoading && recentLogs.length === 0}
               action={
-                canWriteLog ? (
+                canWriteLog && logData ? (
                   <Button size="sm" onClick={handleTodayLog} className="gap-1.5">
                     {todayEntry ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                     {todayEntry ? "Edit Today's Entry" : "Today's Log"}
