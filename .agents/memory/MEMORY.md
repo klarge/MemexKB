@@ -21,3 +21,4 @@
 - [Nested Node test runners](nested-node-tests.md) — unset inherited NODE_TEST_CONTEXT and require an execution signal; a child runner can otherwise exit zero without running tests.
 - [Content list display](content-list-display.md) — content areas default to 20 entries, with a bottom Load more... button for additional batches.
 - [Favorites policy](favorites-policy.md) — favorites are personal; hide inaccessible bookmarks without erasing the user's saved preference.
+- [Board drag gestures](board-drag-gestures.md) — suppression must survive cross-column remounts; pointer and touch activation must not compete.

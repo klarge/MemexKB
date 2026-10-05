@@ -4,8 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
-  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -30,6 +28,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { setBoardArchived } from "@/lib/board-archive";
 import { RenameBoard } from "@/components/rename-board";
+import { BoardPointerSensor, BoardTouchSensor, CardDragClickGuard, isInteractiveCardTarget } from "@/lib/board-drag-interaction";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, isPast, isToday } from "date-fns";
@@ -66,7 +65,7 @@ const isColKey = (id: string | number): id is string =>
 
 // ─── Card chip (used in both board and drag overlay) ─────────────────────────
 
-function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
+function CardChip({ card }: { card: Card }) {
   const overdue =
     card.dueDate &&
     !isToday(new Date(card.dueDate)) &&
@@ -74,8 +73,7 @@ function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
 
   return (
     <div
-      onClick={onClick}
-      className="bg-card border rounded-lg p-3 shadow-sm space-y-2 cursor-pointer hover:shadow-md transition-shadow select-none"
+      className="bg-card border rounded-lg p-3 shadow-sm space-y-2 cursor-inherit hover:shadow-md transition-shadow select-none"
     >
       <div className="flex items-start gap-2">
         {card.completedAt && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
@@ -117,7 +115,9 @@ function CardChip({ card, onClick }: { card: Card; onClick?: () => void }) {
 
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 
-function SortableCard({ card, onClick }: { card: Card; onClick: () => void }) {
+function SortableCard({ card, onClick, onBeginInteraction }: {
+  card: Card; onClick: (keyboard?: boolean) => void; onBeginInteraction: () => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   });
@@ -130,18 +130,31 @@ function SortableCard({ card, onClick }: { card: Card; onClick: () => void }) {
         transition,
         opacity: isDragging ? 0.35 : 1,
       }}
-      className="relative group/card"
+      {...attributes}
+      {...listeners}
+      aria-label={`Open card: ${card.title}`}
+      aria-roledescription="draggable card"
+      aria-describedby="board-card-interaction-help"
+      className={`relative group/card rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isDragging ? "cursor-grabbing" : "cursor-grab active:cursor-grabbing"}`}
+      onPointerDownCapture={onBeginInteraction}
+      onTouchStartCapture={onBeginInteraction}
+      onClick={(event) => {
+        if (!isInteractiveCardTarget(event.target, event.currentTarget)) onClick();
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        if (!event.repeat) onClick(true);
+      }}
     >
       <div
-        {...attributes}
-        {...listeners}
-        className="absolute top-2.5 left-1.5 z-10 opacity-0 group-hover/card:opacity-40 hover:!opacity-100 cursor-grab active:cursor-grabbing text-muted-foreground p-0.5 rounded transition-opacity"
-        onClick={(e) => e.stopPropagation()}
+        aria-hidden="true"
+        className="absolute top-2.5 left-1.5 z-10 opacity-0 group-hover/card:opacity-40 group-focus-within/card:opacity-40 pointer-events-none text-muted-foreground p-0.5 rounded transition-opacity"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </div>
       <div className="pl-5">
-        <CardChip card={card} onClick={onClick} />
+        <CardChip card={card} />
       </div>
     </div>
   );
@@ -154,6 +167,7 @@ function KanbanColumn({
   cardIds,
   cardMap,
   onOpenCard,
+  onBeginCardInteraction,
   onAddCard,
   onDeleteColumn,
   onRenameColumn,
@@ -162,7 +176,8 @@ function KanbanColumn({
   column: Column;
   cardIds: number[];
   cardMap: Record<number, Card>;
-  onOpenCard: (id: number) => void;
+  onOpenCard: (id: number, keyboard?: boolean) => void;
+  onBeginCardInteraction: () => void;
   onAddCard: (columnId: number, title: string) => void;
   onDeleteColumn: (id: number) => void;
   onRenameColumn: (id: number, name: string) => void;
@@ -290,7 +305,7 @@ function KanbanColumn({
           >
             {cardIds.map((id) =>
               cardMap[id] ? (
-                <SortableCard key={id} card={cardMap[id]} onClick={() => onOpenCard(id)} />
+                <SortableCard key={id} card={cardMap[id]} onClick={(keyboard) => onOpenCard(id, keyboard)} onBeginInteraction={onBeginCardInteraction} />
               ) : null,
             )}
           </div>
@@ -729,6 +744,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   const [activeCardId, setActiveCardId] = useState<number | null>(null);
   const [activeColumnKey, setActiveColumnKey] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
+  const cardClickGuard = useRef(new CardDragClickGuard());
+  const dragSnapshot = useRef<{ items: Record<string, number[]>; columnOrder: number[] } | null>(null);
 
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
@@ -778,20 +795,26 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   const findContainer = useCallback(
     (id: number | string): string | null => {
       const key = String(id);
-      if (key in items) return key;
+      const current = itemsRef.current;
+      if (key in current) return key;
       const numId = Number(id);
-      return Object.keys(items).find((k) => items[k].includes(numId)) ?? null;
+      return Object.keys(current).find((k) => current[k].includes(numId)) ?? null;
     },
-    [items],
+    [],
   );
 
   // ── DnD handlers ──
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(BoardPointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(BoardTouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
 
   function onDragStart({ active }: DragStartEvent) {
+    cardClickGuard.current.beginDrag();
+    dragSnapshot.current = {
+      items: Object.fromEntries(Object.entries(itemsRef.current).map(([key, ids]) => [key, [...ids]])),
+      columnOrder: [...columnOrderRef.current],
+    };
     const id = active.id;
     if (isColKey(id)) {
       setActiveColumnKey(id);
@@ -809,20 +832,39 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
     const oc = findContainer(over.id as number | string) ?? (isColKey(over.id) ? String(over.id) : null);
     if (!ac || !oc || ac === oc) return;
 
-    setItems((prev) => {
-      const activeItems = prev[ac].filter((id) => id !== active.id);
-      const overItems = [...(prev[oc] ?? [])];
-      const overIndex = overItems.indexOf(over.id as number);
-      const insertAt = overIndex >= 0 ? overIndex : overItems.length;
-      return {
-        ...prev,
-        [ac]: activeItems,
-        [oc]: [...overItems.slice(0, insertAt), active.id as number, ...overItems.slice(insertAt)],
-      };
-    });
+    const current = itemsRef.current;
+    const activeItems = current[ac].filter((id) => id !== active.id);
+    const overItems = [...(current[oc] ?? [])];
+    const overIndex = overItems.indexOf(over.id as number);
+    const insertAt = overIndex >= 0 ? overIndex : overItems.length;
+    const next = {
+      ...current,
+      [ac]: activeItems,
+      [oc]: [...overItems.slice(0, insertAt), active.id as number, ...overItems.slice(insertAt)],
+    };
+    itemsRef.current = next;
+    setItems(next);
+  }
+
+  function onDragCancel() {
+    cardClickGuard.current.finishDrag();
+    const snapshot = dragSnapshot.current;
+    dragSnapshot.current = null;
+    skipNextSyncRef.current = true;
+    if (snapshot) {
+      itemsRef.current = snapshot.items;
+      columnOrderRef.current = snapshot.columnOrder;
+      setItems(snapshot.items);
+      setColumnOrder(snapshot.columnOrder);
+    }
+    setActiveCardId(null);
+    setActiveColumnKey(null);
   }
 
   function onDragEnd({ active, over }: DragEndEvent) {
+    if (!over) { onDragCancel(); return; }
+    cardClickGuard.current.finishDrag();
+    dragSnapshot.current = null;
     skipNextSyncRef.current = true;
 
     // ── Column reorder ──
@@ -850,13 +892,14 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
     if (!ac || !oc) return;
 
     if (ac === oc) {
-      const activeIndex = items[ac].indexOf(active.id as number);
-      const overIndex = items[oc].indexOf(over.id as number);
+      const current = itemsRef.current;
+      const activeIndex = current[ac].indexOf(active.id as number);
+      const targetIndex = current[oc].indexOf(over.id as number);
+      const overIndex = targetIndex < 0 ? current[oc].length - 1 : targetIndex;
       if (activeIndex !== overIndex) {
-        setItems((prev) => ({
-          ...prev,
-          [ac]: arrayMove(prev[ac], activeIndex, overIndex),
-        }));
+        const next = { ...current, [ac]: arrayMove(current[ac], activeIndex, overIndex) };
+        itemsRef.current = next;
+        setItems(next);
       }
     }
     setTimeout(() => persistReorder(), 0);
@@ -1043,7 +1086,9 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
+          onDragCancel={onDragCancel}
         >
+          <span id="board-card-interaction-help" className="sr-only">Press Enter or Space to open card details. Drag anywhere on a card to move it. On touch screens, hold briefly before dragging; swipe normally to scroll.</span>
           {/* Outer SortableContext for column order */}
           <SortableContext items={columnOrder.map(colKey)} strategy={horizontalListSortingStrategy}>
             <div className="flex gap-4 items-start h-full p-6">
@@ -1056,7 +1101,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
                     column={col}
                     cardIds={items[colKey(cId)] ?? []}
                     cardMap={cardMap}
-                    onOpenCard={setSelectedCardId}
+                    onOpenCard={(id, keyboard) => { if (cardClickGuard.current.canOpen(keyboard)) setSelectedCardId(id); }}
+                    onBeginCardInteraction={() => cardClickGuard.current.beginInteraction()}
                     onAddCard={(colId, title) => addCard.mutate({ columnId: colId, title })}
                     onDeleteColumn={(id) => deleteColumn.mutate(id)}
                     onRenameColumn={(id, name) => renameColumn.mutate({ id, name })}
@@ -1099,7 +1145,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
 
           <DragOverlay>
             {activeCardId && cardMap[activeCardId] ? (
-              <div className="w-64 rotate-1 shadow-xl opacity-95">
+              <div className="w-64 rotate-1 shadow-xl opacity-95 cursor-grabbing">
                 <CardChip card={cardMap[activeCardId]} />
               </div>
             ) : activeColumnKey ? (
