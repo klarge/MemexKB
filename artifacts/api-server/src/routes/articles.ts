@@ -259,12 +259,12 @@ async function canAccessProject(
 ): Promise<boolean> {
   if (!userId) return false;
   const [project] = await db
-    .select({ createdById: projectsTable.createdById })
+    .select({ createdById: projectsTable.createdById, managerId: projectsTable.managerId })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId))
     .limit(1);
   if (!project) return false;
-  if (userRole === "admin" || project.createdById === userId) return true;
+  if (userRole === "admin" || project.createdById === userId || project.managerId === userId) return true;
   const groupIds = await getUserGroupIds(userId);
   if (groupIds.length === 0) return false;
   const shared = await db
@@ -331,11 +331,11 @@ async function canEditProjectDocument(
   if (userRole === "admin") return true;
   if (userRole === "editor") return true;
   const [project] = await db
-    .select({ createdById: projectsTable.createdById })
+    .select({ createdById: projectsTable.createdById, managerId: projectsTable.managerId })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId))
     .limit(1);
-  return project?.createdById === userId;
+  return project?.createdById === userId || project?.managerId === userId;
 }
 
 function logUrlFields(article: { isLogEntry: boolean; logSlug: string | null; createdById: number | null }) {
@@ -421,7 +421,7 @@ router.post("/articles/:slug/run", requireAuth, requireRole("admin", "editor"), 
     const steps = validateSteps(current.procedureSteps);
     const [project] = await tx.insert(projectsTable).values({
       name: name.trim(), description: `Created from procedure: ${current.title}\n/procedures/${current.slug}`,
-      createdById: req.session.userId!,
+      createdById: req.session.userId!, managerId: req.session.userId!,
     }).returning();
     const [board] = await tx.insert(boardsTable).values({ projectId: project.id, name: current.title, position: 1000 }).returning();
     const columns = await tx.insert(boardColumnsTable).values(
@@ -1474,7 +1474,7 @@ router.get("/search", requireAuth, async (req, res) => {
     const ownProjects = await db
       .select({ id: projectsTable.id })
       .from(projectsTable)
-      .where(eq(projectsTable.createdById, userId!));
+      .where(or(eq(projectsTable.createdById, userId!), eq(projectsTable.managerId, userId!)));
     let groupProjectIds: number[] = [];
     if (userGroupIds.length > 0) {
       const pgRows = await db

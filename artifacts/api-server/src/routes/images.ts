@@ -91,13 +91,14 @@ router.get("/articles/images/:id", requireAuth, async (req, res) => {
     let canAccess = userRole === "admin" || article.createdById === userId;
     if (!canAccess && article.isLogEntry) {
       canAccess = false;
-    } else if (!canAccess && article.projectId !== null) {
+    } else if (userRole !== "admin" && article.projectId !== null) {
+      canAccess = false;
       const [project] = await db
-        .select({ createdById: projectsTable.createdById })
+        .select({ createdById: projectsTable.createdById, managerId: projectsTable.managerId })
         .from(projectsTable)
         .where(eq(projectsTable.id, article.projectId))
         .limit(1);
-      if (project?.createdById === userId) {
+      if (project?.createdById === userId || project?.managerId === userId) {
         canAccess = true;
       } else {
         const userGroups = await db

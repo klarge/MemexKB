@@ -8,6 +8,8 @@
 import type { AuthUserRole } from './authUserRole';
 
 export interface AuthUser {
+  /** Password sign-in and password recovery are disabled when true. */
+  ssoOnly: boolean;
   id: number;
   email: string;
   name: string;

@@ -1,9 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
-import { usersTable, groupsTable, groupMembersTable } from "@workspace/db";
+import { usersTable, groupsTable, groupMembersTable, passwordResetTokensTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
+import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
+import { SSO_ONLY_PASSWORD_HASH, SSO_ONLY_PASSWORD_MESSAGE } from "../lib/login-mode";
 
 const router = Router();
 
@@ -26,6 +28,7 @@ router.get("/users", requireAuth, requireRole("admin"), async (_req, res) => {
       email: u.email,
       name: u.name,
       role: u.role,
+      ssoOnly: u.ssoOnly,
       createdAt: u.createdAt,
       groups: userGroups,
     };
@@ -34,9 +37,14 @@ router.get("/users", requireAuth, requireRole("admin"), async (_req, res) => {
 });
 
 router.post("/users", requireAuth, requireRole("admin"), async (req, res) => {
-  const { email, name, password, role } = req.body;
-  if (!email || !name || !password || !role) {
-    res.status(400).json({ error: "All fields required" });
+  const parsed = CreateUserBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Provide a valid email, name, role, SSO Only option, and a password of at least 8 characters when using password sign-in." });
+    return;
+  }
+  const { email, name, password, role, ssoOnly = false } = parsed.data;
+  if (!name.trim() || (!ssoOnly && !password) || (ssoOnly && password !== undefined)) {
+    res.status(400).json({ error: ssoOnly ? "Do not supply a local password for an SSO-only account." : "Name and a password of at least 8 characters are required." });
     return;
   }
   const existing = await db
@@ -48,12 +56,12 @@ router.post("/users", requireAuth, requireRole("admin"), async (req, res) => {
     res.status(409).json({ error: "Email already in use" });
     return;
   }
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = ssoOnly ? SSO_ONLY_PASSWORD_HASH : await bcrypt.hash(password!, 12);
   const [user] = await db
     .insert(usersTable)
-    .values({ email: email.toLowerCase(), name, passwordHash, role })
+    .values({ email: email.toLowerCase(), name: name.trim(), passwordHash, role, ssoOnly })
     .returning();
-  res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt, groups: [] });
+  res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role, ssoOnly: user.ssoOnly, createdAt: user.createdAt, groups: [] });
 });
 
 router.get("/users/:id", requireAuth, requireRole("admin"), async (req, res) => {
@@ -73,25 +81,45 @@ router.get("/users/:id", requireAuth, requireRole("admin"), async (req, res) => 
       .where(inArray(groupsTable.id, members.map((m) => m.groupId)));
     userGroups = groups.map((g) => ({ id: g.id, name: g.name, description: g.description }));
   }
-  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt, groups: userGroups });
+  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, ssoOnly: user.ssoOnly, createdAt: user.createdAt, groups: userGroups });
 });
 
 router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
-  const { email, name, role, password } = req.body;
-  const updates: Record<string, unknown> = {};
-  if (email) updates.email = email.toLowerCase();
-  if (name) updates.name = name;
-  if (role) updates.role = role;
-  if (password) updates.passwordHash = await bcrypt.hash(password, 12);
-  updates.updatedAt = new Date();
-  const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
+  const parsed = UpdateUserBody.safeParse(req.body);
+  if (!parsed.success || (parsed.data.name !== undefined && !parsed.data.name.trim())) {
+    res.status(400).json({ error: "Provide valid user fields; a new password must have at least 8 characters." });
     return;
   }
-  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt, groups: [] });
+  const { email, name, role, password, ssoOnly } = parsed.data;
+  const result = await db.transaction(async (tx) => {
+    const [existing] = await tx.select().from(usersTable).where(eq(usersTable.id, id)).for("update");
+    if (!existing) return { status: 404, error: "User not found" } as const;
+    const nextSsoOnly = ssoOnly ?? existing.ssoOnly;
+    if (nextSsoOnly && password !== undefined) return { status: 400, error: SSO_ONLY_PASSWORD_MESSAGE } as const;
+    if (existing.ssoOnly && !nextSsoOnly && !password) {
+      return { status: 400, error: "Supply a new password of at least 8 characters when disabling SSO Only." } as const;
+    }
+    const updates: Partial<typeof usersTable.$inferInsert> = { updatedAt: new Date() };
+    if (email !== undefined) updates.email = email.toLowerCase();
+    if (name !== undefined) updates.name = name.trim();
+    if (role !== undefined) updates.role = role;
+    if (ssoOnly !== undefined) updates.ssoOnly = ssoOnly;
+    if (nextSsoOnly) {
+      updates.passwordHash = SSO_ONLY_PASSWORD_HASH;
+      updates.mustResetPassword = false;
+      await tx.delete(passwordResetTokensTable).where(eq(passwordResetTokensTable.userId, id));
+    } else if (password !== undefined) {
+      updates.passwordHash = await bcrypt.hash(password, 12);
+      updates.mustResetPassword = false;
+    }
+    const [user] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+    return { user } as const;
+  });
+  if (result.status !== undefined) { res.status(result.status).json({ error: result.error }); return; }
+  const { user } = result;
+  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, ssoOnly: user.ssoOnly, createdAt: user.createdAt, groups: [] });
 });
 
 router.delete("/users/:id", requireAuth, requireRole("admin"), async (req, res) => {

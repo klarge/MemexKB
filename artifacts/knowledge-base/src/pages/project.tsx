@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { setBoardArchived } from "@/lib/board-archive";
+import { ProjectManager } from "@/components/project-manager";
 import {
   Plus, Trash2, LayoutGrid, ArrowLeft, Loader2, X, Users, Shield, FolderKanban,
   Archive, ArchiveRestore, ChevronDown, ChevronRight, FileText, Pencil,
@@ -18,6 +19,8 @@ type ProjectDetail = {
   name: string;
   description: string;
   createdById: number | null;
+  managerId: number | null;
+  manager: { id: number; name: string } | null;
   boards: Board[];
   groups: Group[];
   isOwner: boolean;
@@ -47,9 +50,17 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
   const [projectName, setProjectName] = useState("");
   const [renameError, setRenameError] = useState("");
 
-  const { data: project, isLoading } = useQuery<ProjectDetail>({
-    queryKey: ["project", projectId],
-    queryFn: () => fetch(`/api/projects/${projectId}`).then((r) => r.json()),
+  const { data: project, isLoading, isError, error: projectError } = useQuery<ProjectDetail>({
+    queryKey: ["project", projectId, user?.id],
+    retry: false,
+    queryFn: async () => {
+      const response = await fetch(`/api/projects/${projectId}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? "Unable to load project.");
+      }
+      return response.json();
+    },
   });
 
   const { data: allGroups = [] } = useQuery<GroupItem[]>({
@@ -83,7 +94,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
       return response.json() as Promise<ProjectDetail>;
     },
     onSuccess: (updated) => {
-      qc.setQueryData<ProjectDetail>(["project", projectId], (previous) =>
+      qc.setQueryData<ProjectDetail>(["project", projectId, user?.id], (previous) =>
         previous ? { ...previous, name: updated.name } : previous,
       );
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -156,6 +167,9 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
     );
   }
 
+  if (isError) {
+    return <div className="space-y-3"><p role="alert">{projectError.message}</p><Link href="/projects" className="text-primary hover:underline">Back to projects</Link></div>;
+  }
   if (!project) {
     return <div className="text-center py-20 text-muted-foreground">Project not found.</div>;
   }
@@ -250,6 +264,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
             </Button>
           )}
         </div>
+        <ProjectManager projectId={projectId} manager={project.manager} canManage={project.isOwner} />
       </div>
 
       {/* Documents */}

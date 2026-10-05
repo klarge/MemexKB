@@ -12,7 +12,7 @@ import {
   groupMembersTable,
   siteSettingsTable,
 } from "@workspace/db";
-import { eq, and, inArray, asc, isNull, isNotNull } from "drizzle-orm";
+import { eq, or, and, inArray, asc, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -88,7 +88,7 @@ router.get("/dashboard", requireAuth, async (req, res) => {
       db
         .select({ id: projectsTable.id })
         .from(projectsTable)
-        .where(eq(projectsTable.createdById, userId)),
+        .where(or(eq(projectsTable.createdById, userId), eq(projectsTable.managerId, userId))),
       getUserGroupIds(userId),
     ]);
 

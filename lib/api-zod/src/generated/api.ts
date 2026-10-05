@@ -26,6 +26,7 @@ export const LoginBody = zod.object({
 })
 
 export const LoginResponse = zod.object({
+  "ssoOnly": zod.boolean().describe('Password sign-in and password recovery are disabled when true.'),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),
@@ -45,6 +46,7 @@ export const LogoutResponse = zod.object({
  * @summary Get the currently authenticated user
  */
 export const GetMeResponse = zod.object({
+  "ssoOnly": zod.boolean().describe('Password sign-in and password recovery are disabled when true.'),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),
@@ -395,6 +397,50 @@ export const ListArticlesMaintenanceResponse = zod.object({
 })),
   "total": zod.number().int()
 })
+
+
+/**
+ * @summary Update project settings or assign its manager
+ */
+export const UpdateProjectParams = zod.object({
+  "projectId": zod.coerce.number().int()
+})
+
+
+
+
+
+export const UpdateProjectBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "description": zod.string().optional(),
+  "archived": zod.boolean().optional(),
+  "managerId": zod.number().int().min(1).optional()
+})
+
+export const UpdateProjectResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "createdById": zod.number().int().nullable(),
+  "managerId": zod.number().int().nullable(),
+  "archivedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List individuals available for manager assignment
+ */
+export const ListProjectManagerCandidatesParams = zod.object({
+  "projectId": zod.coerce.number().int()
+})
+
+export const ListProjectManagerCandidatesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string()
+})
+export const ListProjectManagerCandidatesResponse = zod.array(ListProjectManagerCandidatesResponseItem)
 
 
 /**
@@ -1335,6 +1381,7 @@ export const DeleteTagResponse = zod.object({
  * @summary List all users (admin only)
  */
 export const ListUsersResponseItem = zod.object({
+  "ssoOnly": zod.boolean(),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),
@@ -1352,19 +1399,21 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem)
 /**
  * @summary Create a user (admin only)
  */
-
+export const createUserBodySsoOnlyDefault = false;
 export const createUserBodyPasswordMin = 8;
 
 
 
 export const CreateUserBody = zod.object({
+  "ssoOnly": zod.boolean().default(createUserBodySsoOnlyDefault).describe('Requires an enabled SSO provider with a matching email identity; disables password sign-in.'),
   "email": zod.string().email(),
   "name": zod.string().min(1),
-  "password": zod.string().min(createUserBodyPasswordMin),
+  "password": zod.string().min(createUserBodyPasswordMin).optional().describe('Required unless ssoOnly is true. Must be omitted for SSO-only accounts.'),
   "role": zod.enum(['admin', 'editor', 'user'])
 })
 
 export const CreateUserResponse = zod.object({
+  "ssoOnly": zod.boolean(),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),
@@ -1386,6 +1435,7 @@ export const GetUserParams = zod.object({
 })
 
 export const GetUserResponse = zod.object({
+  "ssoOnly": zod.boolean(),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),
@@ -1412,6 +1462,7 @@ export const updateUserBodyPasswordMin = 8;
 
 
 export const UpdateUserBody = zod.object({
+  "ssoOnly": zod.boolean().optional().describe('Disabling SSO Only requires a new password in the same request. Enabling removes password sign-in.'),
   "email": zod.string().email().optional(),
   "name": zod.string().min(1).optional(),
   "role": zod.enum(['admin', 'editor', 'user']).optional(),
@@ -1419,6 +1470,7 @@ export const UpdateUserBody = zod.object({
 })
 
 export const UpdateUserResponse = zod.object({
+  "ssoOnly": zod.boolean(),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),
@@ -1507,6 +1559,7 @@ export const GetGroupResponse = zod.object({
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "members": zod.array(zod.object({
+  "ssoOnly": zod.boolean(),
   "id": zod.number().int(),
   "email": zod.string(),
   "name": zod.string(),

@@ -12,6 +12,7 @@ export const usersTable = pgTable("users", {
   role: roleEnum("role").notNull().default("user"),
   ssoProvider: text("sso_provider"),
   ssoId: text("sso_id"),
+  ssoOnly: boolean("sso_only").notNull().default(false),
   mustResetPassword: boolean("must_reset_password").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

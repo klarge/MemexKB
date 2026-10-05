@@ -8,6 +8,8 @@
 import type { UserUpdateRole } from './userUpdateRole';
 
 export interface UserUpdate {
+  /** Disabling SSO Only requires a new password in the same request. Enabling removes password sign-in. */
+  ssoOnly?: boolean;
   email?: string;
   /** @minLength 1 */
   name?: string;

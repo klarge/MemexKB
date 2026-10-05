@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { db } from "@workspace/db";
 import { ssoConfigsTable, usersTable, groupMembersTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import { SSO_ONLY_PASSWORD_HASH } from "../lib/login-mode";
 import { frontendUrl } from "../lib/frontend-url";
 
 const router = Router();
@@ -20,7 +20,7 @@ async function getEnabledConfig(id: number) {
 }
 
 /** Find user by email or create them (JIT provisioning). */
-async function provisionUser(email: string, name: string, ssoProvider: string, ssoId: string) {
+export async function provisionUser(email: string, name: string, ssoProvider: string, ssoId: string) {
   const [existing] = await db
     .select()
     .from(usersTable)
@@ -38,14 +38,14 @@ async function provisionUser(email: string, name: string, ssoProvider: string, s
     return existing;
   }
 
-  // Create new SSO user with an unguessable password hash (prevents local login)
-  const dummyPasswordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
+  // New SSO identities are explicitly restricted; existing choices above are preserved.
   const [created] = await db
     .insert(usersTable)
     .values({
       email: email.toLowerCase(),
       name: name || email.split("@")[0],
-      passwordHash: dummyPasswordHash,
+      passwordHash: SSO_ONLY_PASSWORD_HASH,
+      ssoOnly: true,
       role: "user",
       ssoProvider,
       ssoId,

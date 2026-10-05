@@ -16,6 +16,9 @@ export const projectsTable = pgTable("projects", {
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),
+  managerId: integer("manager_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

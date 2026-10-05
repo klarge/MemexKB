@@ -834,6 +834,7 @@ type RestoreColumn = { name: string; position: number; createdAt?: Date; cards: 
 type RestoreBoard = { name: string; position: number; archivedAt: Date | null; createdAt?: Date; columns: RestoreColumn[] };
 type RestoreProject = {
   name: string; description: string; owner: RestoreOwner | null; archivedAt: Date | null; createdAt?: Date; updatedAt?: Date;
+  manager?: RestoreOwner | null;
   groupNames: string[]; boards: RestoreBoard[];
 };
 type RestoreBackup =
@@ -1011,6 +1012,7 @@ function parseRestoreBackup(value: unknown): RestoreBackup {
       name: restoreString(project.name, `projects[${projectIndex}].name`)!,
       description: restoreString(project.description, `projects[${projectIndex}].description`, false) ?? "",
       owner: restoreOwner(project.createdByRef ?? project.createdBy, `projects[${projectIndex}].createdBy`),
+      manager: project.managerRef === undefined ? undefined : restoreOwner(project.managerRef, `projects[${projectIndex}].managerRef`),
       archivedAt: (restoreDate(project.archivedAt, `projects[${projectIndex}].archivedAt`, true) ?? null) as Date | null,
       createdAt: restoreDate(project.createdAt, `projects[${projectIndex}].createdAt`) as Date | undefined,
       updatedAt: restoreDate(project.updatedAt, `projects[${projectIndex}].updatedAt`) as Date | undefined,
@@ -1020,6 +1022,7 @@ function parseRestoreBackup(value: unknown): RestoreBackup {
   });
   const owners = uniqueRestoreOwners(projects.flatMap((project) => [
     project.owner,
+    project.manager ?? null,
     ...project.boards.flatMap((board) => board.columns.flatMap((column) => column.cards.flatMap((card) => card.members))),
   ]));
   return { kind: "projects", projects, owners, warnings: [] };
@@ -1137,6 +1140,7 @@ router.post("/admin/restore", requireAuth, requireRole("admin"), upload.single("
         const projectOwnerId = mappedOwnerId(project.owner);
         const [insertedProject] = await tx.insert(projectsTable).values({
           name: project.name, description: project.description, createdById: projectOwnerId,
+          managerId: project.manager === undefined ? projectOwnerId : project.manager ? mappedOwnerId(project.manager) : null,
           archivedAt: project.archivedAt, createdAt: project.createdAt, updatedAt: project.updatedAt,
         }).returning({ id: projectsTable.id });
         result.imported.projects++;
@@ -1302,6 +1306,11 @@ router.get("/admin/export/projects", requireAuth, requireRole("admin"), async (_
       id: project.id,
       name: project.name,
       description: project.description || null,
+      managerRef: project.managerId !== null && userMap.get(project.managerId) ? {
+        id: project.managerId,
+        name: userMap.get(project.managerId)!.name,
+        email: userMap.get(project.managerId)!.email,
+      } : null,
       createdBy: userMap.get(project.createdById ?? -1)?.name ?? null,
       createdByRef: project.createdById !== null && userMap.get(project.createdById) ? {
         id: project.createdById,

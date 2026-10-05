@@ -66,6 +66,9 @@ import type {
   ProjectDocument,
   ProjectDocumentInput,
   ProjectDocumentListResponse,
+  ProjectManagerPerson,
+  ProjectMetadata,
+  ProjectUpdate,
   Tag,
   TagInput,
   TagUpdate,
@@ -1400,6 +1403,164 @@ export function useListArticlesMaintenance<TData = Awaited<ReturnType<typeof lis
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListArticlesMaintenanceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateProjectUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}`
+}
+
+/**
+ * @summary Update project settings or assign its manager
+ */
+export const updateProject = async (projectId: number,
+    projectUpdate: ProjectUpdate, options?: Parameters<typeof customFetch>[1]): Promise<ProjectMetadata> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ProjectMetadata>(getUpdateProjectUrl(projectId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateProjectMutationKey = () => ['updateProject'] as const;
+
+export const getUpdateProjectMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProject>>, TError,UpdateProjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProject>>, TError,UpdateProjectMutationVariables, TContext> => {
+
+const mutationKey = getUpdateProjectMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProject>>, UpdateProjectMutationVariables> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  updateProject(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProjectMutationResult = NonNullable<Awaited<ReturnType<typeof updateProject>>>
+    export type UpdateProjectMutationBody = BodyType<ProjectUpdate>
+    export type UpdateProjectMutationError = ErrorType<void>
+    export type UpdateProjectMutationVariables = {projectId: number;data: BodyType<ProjectUpdate>}
+
+    /**
+ * @summary Update project settings or assign its manager
+ */
+export const useUpdateProject = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProject>>, TError,UpdateProjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProject>>,
+        TError,
+        UpdateProjectMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateProjectMutationOptions(options));
+    }
+
+export const getListProjectManagerCandidatesUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/manager-candidates`
+}
+
+/**
+ * @summary List individuals available for manager assignment
+ */
+export const listProjectManagerCandidates = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectManagerPerson[]> => {
+
+  return customFetch<ProjectManagerPerson[]>(getListProjectManagerCandidatesUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectManagerCandidatesQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/manager-candidates`
+    ] as const;
+    }
+
+
+export const getListProjectManagerCandidatesQueryOptions = <TData = Awaited<ReturnType<typeof listProjectManagerCandidates>>, TError = ErrorType<void>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectManagerCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectManagerCandidatesQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectManagerCandidates>>> = ({ signal }) => listProjectManagerCandidates(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectManagerCandidates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectManagerCandidatesQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectManagerCandidates>>>
+export type ListProjectManagerCandidatesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List individuals available for manager assignment
+ */
+
+export function useListProjectManagerCandidates<TData = Awaited<ReturnType<typeof listProjectManagerCandidates>>, TError = ErrorType<void>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectManagerCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectManagerCandidatesQueryOptions(projectId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

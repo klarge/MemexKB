@@ -155,6 +155,20 @@
       "when": 1791158400000,
       "tag": "0021_add_policies_procedures",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0022_add_sso_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791244800001,
+      "tag": "0023_add_project_managers",
+      "breakpoints": true
     }
   ]
 }

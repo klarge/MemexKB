@@ -20,6 +20,7 @@ import {
 } from "@workspace/db";
 import { eq, and, inArray, asc, desc, count, max, or, sql, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
+import { UpdateProjectBody } from "@workspace/api-zod";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
@@ -61,7 +62,7 @@ async function checkProjectAccess(
     .limit(1);
   if (!project) return { canAccess: false, isOwner: false, project: null };
   if (!userId) return { canAccess: false, isOwner: false, project };
-  const isOwner = project.createdById === userId || userRole === "admin";
+  const isOwner = project.createdById === userId || project.managerId === userId || userRole === "admin";
   if (isOwner) return { canAccess: true, isOwner, project };
 
   const userGroupIds = await getUserGroupIds(userId);
@@ -176,7 +177,7 @@ router.get("/projects", requireAuth, async (req, res) => {
           AND pg.group_id IN ${sql.raw("(" + userGroupIds.join(",") + ")")}
         )`
       : sql`false`;
-    const accessFilter = or(eq(projectsTable.createdById, userId), groupAccessClause)!;
+    const accessFilter = or(eq(projectsTable.createdById, userId), eq(projectsTable.managerId, userId), groupAccessClause)!;
     // No DISTINCT needed: the correlated EXISTS cannot produce duplicate project rows,
     const rawRows = await db
       .select({ id: projectsTable.id })
@@ -202,10 +203,15 @@ router.get("/projects", requireAuth, async (req, res) => {
       .groupBy(boardsTable.projectId),
   ]);
 
+  const managerIds = [...new Set(projects.map((p) => p.managerId).filter((id): id is number => id !== null))];
+  const managers = managerIds.length
+    ? await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(inArray(usersTable.id, managerIds))
+    : [];
   res.json({
     truncated,
     projects: projects.map((p) => ({
       ...p,
+      managerName: managers.find((manager) => manager.id === p.managerId)?.name ?? null,
       boardCount: Number(boardCounts.find((bc) => bc.projectId === p.id)?.count ?? 0),
     })),
   });
@@ -216,7 +222,7 @@ router.post("/projects", requireAuth, requireRole("admin", "editor"), async (req
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
   const [project] = await db
     .insert(projectsTable)
-    .values({ name: name.trim(), description: description?.trim() ?? "", createdById: req.session.userId! })
+    .values({ name: name.trim(), description: description?.trim() ?? "", createdById: req.session.userId!, managerId: req.session.userId! })
     .returning();
   res.status(201).json(project);
 });
@@ -244,8 +250,12 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
       .from(groupsTable)
       .where(inArray(groupsTable.id, projectGroupRows.map((r) => r.groupId)));
   }
+  const [manager] = project.managerId
+    ? await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, project.managerId))
+    : [];
   res.json({
     ...project,
+    manager: manager ?? null,
     boards: page ? fetchedBoards.slice(0, page.limit) : fetchedBoards,
     boardsHasMore: page ? fetchedBoards.length > page.limit : false,
     groups,
@@ -259,8 +269,18 @@ router.patch("/projects/:projectId", requireAuth, async (req, res) => {
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
   if (!isOwner) { res.status(403).json({ error: "Only the project owner can edit project settings" }); return; }
-  const { name, description, archived } = req.body as { name?: string; description?: string; archived?: boolean };
+  const parsed = UpdateProjectBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Provide valid project settings and a valid Project Manager account." }); return; }
+  const { name, description, archived, managerId } = parsed.data;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (managerId !== undefined) {
+    if (!Number.isSafeInteger(managerId) || managerId < 1) {
+      res.status(400).json({ error: "Choose a valid Project Manager." }); return;
+    }
+    const [manager] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, managerId));
+    if (!manager) { res.status(400).json({ error: "Project Manager account not found." }); return; }
+    updates.managerId = managerId;
+  }
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim()) {
       res.status(400).json({ error: "Project name is required" });
@@ -284,6 +304,12 @@ router.delete("/projects/:projectId", requireAuth, async (req, res) => {
 
 // ─── Project Members & Groups ─────────────────────────────────────────────────
 
+router.get("/projects/:projectId/manager-candidates", requireAuth, async (req, res) => {
+  const { isOwner, project } = await checkProjectAccess(Number(req.params.projectId), req.session.userId, req.session.userRole);
+  if (!project || !isOwner) { res.status(403).json({ error: "Project management access required." }); return; }
+  res.json(await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).orderBy(asc(usersTable.name)));
+});
+
 router.get("/projects/:projectId/members", requireAuth, async (req, res) => {
   const projectId = Number(req.params.projectId);
   const { canAccess, project } = await checkProjectAccess(projectId, req.session.userId, req.session.userRole);
@@ -295,9 +321,10 @@ router.get("/projects/:projectId/members", requireAuth, async (req, res) => {
   }
 
   const memberMap = new Map<number, { id: number; name: string; email: string }>();
-  if (project.createdById) {
-    const [creator] = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, project.createdById)).limit(1);
-    if (creator) memberMap.set(creator.id, creator);
+  const responsibleIds = [...new Set([project.createdById, project.managerId].filter((id): id is number => id !== null))];
+  if (responsibleIds.length) {
+    const responsible = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable).where(inArray(usersTable.id, responsibleIds));
+    for (const member of responsible) memberMap.set(member.id, member);
   }
   const pgRows = await db.select({ groupId: projectGroupsTable.groupId }).from(projectGroupsTable).where(eq(projectGroupsTable.projectId, projectId));
   if (pgRows.length > 0) {

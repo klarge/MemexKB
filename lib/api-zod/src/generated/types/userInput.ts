@@ -8,10 +8,15 @@
 import type { UserInputRole } from './userInputRole';
 
 export interface UserInput {
+  /** Requires an enabled SSO provider with a matching email identity; disables password sign-in. */
+  ssoOnly?: boolean;
   email: string;
   /** @minLength 1 */
   name: string;
-  /** @minLength 8 */
-  password: string;
+  /**
+     * Required unless ssoOnly is true. Must be omitted for SSO-only accounts.
+     * @minLength 8
+     */
+  password?: string;
   role: UserInputRole;
 }

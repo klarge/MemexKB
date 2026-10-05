@@ -5,15 +5,14 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
-import type { GroupSummary } from './groupSummary';
-import type { UserRole } from './userRole';
 
-export interface User {
-  ssoOnly: boolean;
+export interface ProjectMetadata {
   id: number;
-  email: string;
   name: string;
-  role: UserRole;
+  description: string;
+  createdById: number | null;
+  managerId: number | null;
+  archivedAt: Date | null;
   createdAt: Date;
-  groups?: GroupSummary[];
+  updatedAt: Date;
 }

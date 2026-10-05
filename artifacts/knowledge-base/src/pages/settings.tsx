@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, KeyRound, Plus, Trash2, Copy, Check, TriangleAlert } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 // ── Password change ───────────────────────────────────────────────────────────
 
@@ -364,10 +365,17 @@ function ApiKeysCard() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Settings() {
+  const { user } = useAuth();
   return (
     <div className="max-w-2xl space-y-6">
       <h1 className="text-3xl font-bold tracking-tight text-primary">Settings</h1>
-      <ChangePasswordCard />
+      {user?.ssoOnly ? <Card>
+        <CardHeader>
+          <CardTitle>SSO Only</CardTitle>
+          <CardDescription>This account must sign in through a configured SSO provider.</CardDescription>
+        </CardHeader>
+        <CardContent><p className="text-sm text-muted-foreground">Passwords are managed through your identity provider. Local password changes and password recovery are disabled. Contact an administrator if you need to enable password sign-in.</p></CardContent>
+      </Card> : <ChangePasswordCard />}
       <ApiKeysCard />
     </div>
   );

@@ -16,3 +16,4 @@
 - [Policies and procedures](policies-procedures.md) — policies are categorized, procedures are ordered; editor/admin runs create independent projects without card dependency gating.
 - [Backup verification safety](backup-verification.md) — exercise destructive backup restores with isolated fixtures, never over current development or production data.
 - [Project managers](project-managers.md) — projects need a designated manager, defaulting to their creator and assignable to another individual.
+- [SSO-only policy](sso-only-policy.md) — SSO linkage does not imply password exclusion; restrictions must survive recovery without changing roles or API-key access.

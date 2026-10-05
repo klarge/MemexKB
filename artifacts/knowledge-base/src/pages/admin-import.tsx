@@ -30,11 +30,15 @@ type FullBackupPreview = {
   sections: Record<string, { count: number; checksum: string }>;
   excluded: string[];
   destinationHasData: boolean;
+  ssoOnlyUserCount: number;
+  hasLocalAdministrator: boolean;
+  needsInitialSetup: boolean;
   warning: string;
 };
 type FullBackupResult = {
   restored: Record<string, number>;
   recoveryLinks: Array<{ userId: number; recoveryUrl: string; email?: string; name?: string }>;
+  ssoOnlyUsers: Array<{ userId: number; email?: string; name?: string }>;
   warning: string;
 };
 
@@ -185,7 +189,7 @@ export default function AdminImport() {
       if (!response.ok) throw new Error(result.error ?? "Could not restore full backup.");
       setFullBackupResult(result);
       setFullRestoreAcknowledged(false);
-      toast({ title: "Environment restored", description: "Everyone has been signed out. Copy and distribute the one-time recovery links below." });
+      toast({ title: "Environment restored", description: "Everyone has been signed out. Distribute recovery links only to password-enabled accounts; SSO-only accounts require SSO provider reconfiguration." });
     } catch (error) {
       toast({ title: "Full restore failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
@@ -358,7 +362,7 @@ export default function AdminImport() {
             Restore full environment
           </CardTitle>
           <CardDescription>
-            Decrypt and inspect a full backup before restoring it. On a populated environment this replaces supported data, signs out all users, and creates one-time password recovery links.
+            Decrypt and inspect a full backup before restoring it. On a populated environment this replaces supported data, signs out all users, and creates password recovery links only for password-enabled accounts. SSO-only restrictions are preserved.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -389,6 +393,8 @@ export default function AdminImport() {
                 {Object.entries(fullBackupPreview.sections).filter(([, section]) => section.count > 0).map(([name, section]) => <span key={name}>{section.count} {name}</span>)}
               </div>
               <p className="rounded-md bg-background/60 p-3 text-sm font-medium text-destructive">{fullBackupPreview.warning}</p>
+              {fullBackupPreview.ssoOnlyUserCount > 0 && <p className="text-sm text-destructive">{fullBackupPreview.ssoOnlyUserCount} SSO-only accounts will receive no password recovery link. A password-enabled administrator must recover their account and reconfigure SSO before these users can sign in.</p>}
+              {!fullBackupPreview.hasLocalAdministrator && !fullBackupPreview.needsInitialSetup && <p role="alert" className="text-sm font-medium text-destructive">Restore is blocked: this backup has no password-enabled administrator to re-enable SSO. Use infrastructure-level recovery that preserves SSO configuration.</p>}
               {fullBackupPreview.destinationHasData && (
                 <div className="space-y-2">
                   <Label htmlFor="full-restore-confirmation">Type RESTORE to replace the current environment</Label>
@@ -397,9 +403,9 @@ export default function AdminImport() {
               )}
               <div className="flex items-start gap-2">
                 <Checkbox id="confirm-full-restore" checked={fullRestoreAcknowledged} onCheckedChange={(checked) => setFullRestoreAcknowledged(checked === true)} />
-                <Label htmlFor="confirm-full-restore" className="text-sm font-normal leading-5">I understand that this will sign out every user, revoke API tokens, disable restored SSO providers, and require each restored user to choose a new password.</Label>
+                  <Label htmlFor="confirm-full-restore" className="text-sm font-normal leading-5">I understand that this will sign out every user, revoke API tokens, and disable restored SSO providers. Password-enabled users must choose a new password; SSO-only users must wait for an administrator to reconfigure SSO.</Label>
               </div>
-              <Button type="button" variant="destructive" onClick={restoreFullBackup} disabled={!fullRestoreAcknowledged || (fullBackupPreview.destinationHasData && fullRestoreConfirmation !== "RESTORE") || isRestoringFullBackup}>
+              <Button type="button" variant="destructive" onClick={restoreFullBackup} disabled={(!fullBackupPreview.hasLocalAdministrator && !fullBackupPreview.needsInitialSetup) || !fullRestoreAcknowledged || (fullBackupPreview.destinationHasData && fullRestoreConfirmation !== "RESTORE") || isRestoringFullBackup}>
                 {isRestoringFullBackup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
                 {isRestoringFullBackup ? "Restoring environment…" : "Restore environment"}
               </Button>
@@ -414,6 +420,7 @@ export default function AdminImport() {
                 {Object.entries(fullBackupResult.restored).filter(([, total]) => total > 0).map(([name, total]) => <span key={name}>{total} {name}</span>)}
               </div>
               <div>
+                {!!fullBackupResult.ssoOnlyUsers?.length && <p className="mb-3 text-sm">SSO-only users ({fullBackupResult.ssoOnlyUsers.map((user) => user.name || user.email || `User ${user.userId}`).join(", ")}) have no local recovery links. Recover a password-enabled administrator first, then reconfigure SSO for their matching email identities.</p>}
                 <div className="font-medium">One-time password recovery links</div>
                 <p className="mt-1 text-xs text-muted-foreground">Copy these now and distribute them securely. They expire after 7 days and are shown only once.</p>
                 <ul className="mt-2 space-y-1 break-all text-xs">

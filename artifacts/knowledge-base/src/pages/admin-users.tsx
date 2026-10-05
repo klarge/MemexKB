@@ -8,12 +8,13 @@ import {
   type User,
   type UserUpdate,
   type UserUpdateRole,
+  getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Edit, Trash2, ShieldAlert } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
@@ -21,6 +22,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -36,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const ROLES = ["user", "editor", "admin"] as const;
 type RoleValue = typeof ROLES[number];
@@ -48,6 +51,15 @@ export default function AdminUsers() {
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
+  const { data: providers, isError: providerError, isLoading: providersLoading } = useQuery<Array<{ id: number; name: string }>>({
+    queryKey: ["auth-providers"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/providers");
+      if (!response.ok) throw new Error("Unable to check configured SSO providers.");
+      return response.json();
+    },
+    staleTime: 0,
+  });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -57,6 +69,7 @@ export default function AdminUsers() {
     email: "",
     password: "",
     role: "user" as RoleValue,
+    ssoOnly: false,
   });
 
   const handleOpenDialog = (user?: User) => {
@@ -67,34 +80,46 @@ export default function AdminUsers() {
         email: user.email,
         password: "",
         role: user.role as RoleValue,
+        ssoOnly: user.ssoOnly,
       });
     } else {
       setEditingUser(null);
-      setFormData({ name: "", email: "", password: "", role: "user" });
+      setFormData({ name: "", email: "", password: "", role: "user", ssoOnly: false });
     }
     setIsDialogOpen(true);
   };
 
   const handleSave = () => {
+    const needsPassword = !formData.ssoOnly && (!editingUser || editingUser.ssoOnly || !!formData.password);
+    if (!formData.name.trim() || !formData.email.trim()) {
+      toast({ title: "Check the user details", description: "Name and email are required.", variant: "destructive" });
+      return;
+    }
+    if (needsPassword && formData.password.length < 8) {
+      toast({ title: "New password required", description: "Supply a new password of at least 8 characters to enable password sign-in.", variant: "destructive" });
+      return;
+    }
     if (editingUser) {
       const updateData: UserUpdate = {
         name: formData.name,
         email: formData.email,
         role: formData.role as UserUpdateRole,
+        ssoOnly: formData.ssoOnly,
       };
-      if (formData.password) {
+      if (!formData.ssoOnly && formData.password) {
         updateData.password = formData.password;
       }
       updateMutation.mutate({ id: editingUser.id, data: updateData }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           toast({ title: "User updated" });
           setIsDialogOpen(false);
         },
         onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
       });
     } else {
-      createMutation.mutate({ data: { name: formData.name, email: formData.email, password: formData.password, role: formData.role } }, {
+      createMutation.mutate({ data: { name: formData.name, email: formData.email, password: formData.ssoOnly ? undefined : formData.password, role: formData.role, ssoOnly: formData.ssoOnly } }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
           toast({ title: "User created" });
@@ -136,19 +161,22 @@ export default function AdminUsers() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingUser ? "Edit User" : "Create User"}</DialogTitle>
+            <DialogDescription>Choose the user's role and whether they sign in with a password or single sign-on.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[65vh] overflow-y-auto">
             <div className="space-y-2">
-              <Label>Name</Label>
+              <Label htmlFor="user-name">Name</Label>
               <Input
+                id="user-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Jane Doe"
               />
             </div>
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label htmlFor="user-email">Email</Label>
               <Input
+                id="user-email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="jane@example.com"
@@ -171,14 +199,28 @@ export default function AdminUsers() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>{editingUser ? "New Password (leave blank to keep current)" : "Password"}</Label>
+            <div className="rounded-md border p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox id="user-sso-only" checked={formData.ssoOnly} onCheckedChange={(checked) => setFormData({ ...formData, ssoOnly: checked === true, password: "" })} />
+                <Label htmlFor="user-sso-only">SSO Only</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">Enabling SSO Only removes password sign-in and local password recovery. This account must use a configured SSO provider with a matching email identity.</p>
+              {formData.ssoOnly && (
+                providersLoading ? <p className="text-xs text-muted-foreground">Checking SSO providers…</p> :
+                providerError ? <p role="alert" className="text-xs text-destructive">Could not verify whether an SSO provider is enabled. Check SSO configuration before removing password sign-in.</p> :
+                !providers?.length ? <p role="alert" className="text-xs text-destructive">No SSO provider is enabled. This account will not be able to sign in until an administrator enables a matching provider.</p> : null
+              )}
+            </div>
+            {!formData.ssoOnly && <div className="space-y-2">
+              <Label htmlFor="user-password">{editingUser?.ssoOnly ? "New Password (required to enable password sign-in)" : editingUser ? "New Password (leave blank to keep current)" : "Password"}</Label>
               <Input
+                id="user-password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 type="password"
               />
-            </div>
+              {editingUser?.ssoOnly && <p className="text-xs text-muted-foreground">A new password of at least 8 characters is required. Previous passwords are never reactivated.</p>}
+            </div>}
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
@@ -209,6 +251,7 @@ export default function AdminUsers() {
                   <tr key={user.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="font-medium text-foreground">{user.name}</div>
+                      {user.ssoOnly && <Badge variant="outline" className="mt-1">SSO Only</Badge>}
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                     </td>
                     <td className="px-6 py-4">
@@ -225,7 +268,7 @@ export default function AdminUsers() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(user)}>
+                        <Button variant="ghost" size="icon" aria-label={`Edit ${user.name}`} onClick={() => handleOpenDialog(user)}>
                           <Edit className="h-4 w-4" />
                         </Button>
                         <AlertDialog>

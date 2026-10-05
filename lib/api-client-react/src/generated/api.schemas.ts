@@ -5,6 +5,31 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface ProjectManagerPerson {
+  id: number;
+  name: string;
+}
+
+export interface ProjectUpdate {
+  /** @minLength 1 */
+  name?: string;
+  description?: string;
+  archived?: boolean;
+  /** @minimum 1 */
+  managerId?: number;
+}
+
+export interface ProjectMetadata {
+  id: number;
+  name: string;
+  description: string;
+  createdById: number | null;
+  managerId: number | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PasswordRecoveryInput {
   token: string;
   /** @minLength 8 */
@@ -181,6 +206,8 @@ export const AuthUserRole = {
 } as const;
 
 export interface AuthUser {
+  /** Password sign-in and password recovery are disabled when true. */
+  ssoOnly: boolean;
   id: number;
   email: string;
   name: string;
@@ -431,6 +458,7 @@ export const UserRole = {
 } as const;
 
 export interface User {
+  ssoOnly: boolean;
   id: number;
   email: string;
   name: string;
@@ -449,11 +477,16 @@ export const UserInputRole = {
 } as const;
 
 export interface UserInput {
+  /** Requires an enabled SSO provider with a matching email identity; disables password sign-in. */
+  ssoOnly?: boolean;
   email: string;
   /** @minLength 1 */
   name: string;
-  /** @minLength 8 */
-  password: string;
+  /**
+     * Required unless ssoOnly is true. Must be omitted for SSO-only accounts.
+     * @minLength 8
+     */
+  password?: string;
   role: UserInputRole;
 }
 
@@ -467,6 +500,8 @@ export const UserUpdateRole = {
 } as const;
 
 export interface UserUpdate {
+  /** Disabling SSO Only requires a new password in the same request. Enabling removes password sign-in. */
+  ssoOnly?: boolean;
   email?: string;
   /** @minLength 1 */
   name?: string;

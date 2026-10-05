@@ -5,6 +5,7 @@ import { usersTable, passwordResetTokensTable } from "@workspace/db";
 import { eq, count, and, gt, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { requireAuth } from "../lib/auth";
+import { SSO_ONLY_PASSWORD_MESSAGE } from "../lib/login-mode";
 
 const router = Router();
 
@@ -55,7 +56,7 @@ router.post("/auth/setup", async (req, res) => {
         res.status(500).json({ error: "Failed to create session" });
         return;
       }
-      res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+      res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role, ssoOnly: user.ssoOnly });
     });
   });
 });
@@ -74,8 +75,8 @@ router.post("/auth/login", async (req, res) => {
 
   // Always run bcrypt to prevent user-enumeration via timing differences.
   const DUMMY_HASH = "$2a$12$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-  const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  if (!user || !passwordOk) {
+  const passwordOk = await bcrypt.compare(password, user && !user.ssoOnly ? user.passwordHash : DUMMY_HASH);
+  if (!user || user.ssoOnly || !passwordOk) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
@@ -84,25 +85,35 @@ router.post("/auth/login", async (req, res) => {
     return;
   }
 
-  // Regenerate the session ID before writing identity to prevent session fixation.
-  req.session.regenerate((regenErr) => {
-    if (regenErr) {
-      res.status(500).json({ error: "Failed to create session" });
-      return;
+  try {
+    const [current] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+    if (!current || current.ssoOnly || current.mustResetPassword || current.passwordHash !== user.passwordHash) {
+      res.status(401).json({ error: "Invalid email or password" }); return;
     }
-    req.session.userId = user.id;
-    req.session.userRole = user.role;
-    req.session.userEmail = user.email;
-    req.session.userName = user.name;
-
-    req.session.save((saveErr) => {
-      if (saveErr) {
-        res.status(500).json({ error: "Failed to create session" });
-        return;
-      }
-      res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    // Session storage uses the database pool too: never hold a transaction
+    // connection while waiting for regenerate/save, or pool exhaustion deadlocks.
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((error) => {
+        if (error) { reject(error); return; }
+        req.session.userId = current.id;
+        req.session.userRole = current.role;
+        req.session.userEmail = current.email;
+        req.session.userName = current.name;
+        req.session.save((saveError) => saveError ? reject(saveError) : resolve());
+      });
     });
-  });
+    // Revalidate after persistence as well. A mode/password/role change during
+    // bcrypt or session-store I/O must revoke this attempted password session.
+    const [latest] = await db.select().from(usersTable).where(eq(usersTable.id, current.id));
+    if (!latest || latest.ssoOnly || latest.mustResetPassword || latest.passwordHash !== current.passwordHash || latest.role !== current.role) {
+      await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+      res.status(401).json({ error: "Invalid email or password" }); return;
+    }
+    res.json({ id: latest.id, email: latest.email, name: latest.name, role: latest.role, ssoOnly: latest.ssoOnly });
+  } catch {
+    req.session?.destroy(() => undefined);
+    res.status(500).json({ error: "Failed to create session" });
+  }
 });
 
 router.post("/auth/logout", (req, res) => {
@@ -119,6 +130,11 @@ router.post("/auth/recovery/reset", async (req, res): Promise<void> => {
   }
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const reset = await db.transaction(async (tx) => {
+    const [candidate] = await tx.select().from(passwordResetTokensTable).where(eq(passwordResetTokensTable.tokenHash, tokenHash));
+    if (!candidate) return null;
+    // Lock in the same order as administrator edits: user first, then token.
+    const [account] = await tx.select().from(usersTable).where(eq(usersTable.id, candidate.userId)).for("update");
+    if (!account || account.ssoOnly) return null;
     const [claimed] = await tx
       .update(passwordResetTokensTable)
       .set({ usedAt: new Date() })
@@ -133,7 +149,7 @@ router.post("/auth/recovery/reset", async (req, res): Promise<void> => {
     await tx
       .update(usersTable)
       .set({ passwordHash, mustResetPassword: false, updatedAt: new Date() })
-      .where(eq(usersTable.id, claimed.userId));
+      .where(and(eq(usersTable.id, claimed.userId), eq(usersTable.ssoOnly, false)));
     return claimed;
   });
   if (!reset) {
@@ -154,7 +170,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
     res.status(401).json({ error: "User not found" });
     return;
   }
-  res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, ssoOnly: user.ssoOnly });
 });
 
 router.post("/auth/change-password", requireAuth, async (req, res) => {
@@ -174,16 +190,19 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
     .where(eq(usersTable.id, req.session.userId!))
     .limit(1);
 
+  if (user?.ssoOnly) { res.status(403).json({ error: SSO_ONLY_PASSWORD_MESSAGE }); return; }
   if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
     res.status(400).json({ error: "Current password is incorrect" });
     return;
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await db
+  const changed = await db
     .update(usersTable)
     .set({ passwordHash })
-    .where(eq(usersTable.id, user.id));
+    .where(and(eq(usersTable.id, user.id), eq(usersTable.ssoOnly, false)))
+    .returning({ id: usersTable.id });
+  if (!changed.length) { res.status(403).json({ error: SSO_ONLY_PASSWORD_MESSAGE }); return; }
 
   // Rotate the session ID after a password change so that any stolen session
   // cookie from before the change can no longer be used.  Fail closed: if

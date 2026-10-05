@@ -41,6 +41,7 @@ import {
 } from "@workspace/db";
 import { requireAuth, requireRole } from "../lib/auth";
 import { validateBackupContent } from "../lib/backup-content-validation";
+import { SSO_ONLY_PASSWORD_HASH } from "../lib/login-mode";
 
 const router = Router();
 const upload = multer({
@@ -156,6 +157,11 @@ function validateBackup(value: unknown): asserts value is EnvironmentBackup {
       throw new Error(`Backup section "${section}" failed its integrity check.`);
     }
   }
+  for (const user of data.users) {
+    if (user.ssoOnly !== undefined && typeof user.ssoOnly !== "boolean") {
+      throw new Error("Backup contains an invalid SSO Only login restriction.");
+    }
+  }
   validateBackupContent(data);
 }
 
@@ -180,7 +186,7 @@ function redactSsoConfig(config: unknown): Record<string, string> {
 
 async function buildBackup(): Promise<EnvironmentBackup> {
   return db.transaction(async (tx) => {
-    const users = await tx.select({ id: usersTable.id, email: usersTable.email, name: usersTable.name, role: usersTable.role, ssoProvider: usersTable.ssoProvider, ssoId: usersTable.ssoId, createdAt: usersTable.createdAt, updatedAt: usersTable.updatedAt }).from(usersTable);
+    const users = await tx.select({ id: usersTable.id, email: usersTable.email, name: usersTable.name, role: usersTable.role, ssoOnly: usersTable.ssoOnly, ssoProvider: usersTable.ssoProvider, ssoId: usersTable.ssoId, createdAt: usersTable.createdAt, updatedAt: usersTable.updatedAt }).from(usersTable);
     const groups = await tx.select().from(groupsTable);
     const groupMembers = await tx.select().from(groupMembersTable);
     const tags = await tx.select().from(tagsTable);
@@ -330,6 +336,9 @@ router.post("/admin/full-backup/preview", requireAuth, requireRole("admin"), upl
       sections: backup.manifest.sections,
       excluded: backup.manifest.excluded,
       destinationHasData: await hasExistingData(),
+      ssoOnlyUserCount: backup.data.users.filter((row) => row.ssoOnly === true).length,
+      hasLocalAdministrator: backup.data.users.some((row) => row.role === "admin" && row.ssoOnly !== true),
+      needsInitialSetup: backup.data.users.length === 0,
       warning: "A full restore replaces supported application data and signs out every user.",
     });
   } catch (error) {
@@ -343,6 +352,10 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
     assertPassphrase(req.body.passphrase);
     const backup = decrypt(req.file.buffer, req.body.passphrase);
     validateBackup(backup);
+    if (backup.data.users.length > 0 && !backup.data.users.some((row) => row.role === "admin" && row.ssoOnly !== true)) {
+      res.status(400).json({ error: "This backup has no password-enabled administrator. Restore would disable SSO providers and lock out every administrator. Use an infrastructure-level recovery that preserves SSO configuration instead." });
+      return;
+    }
     const populated = await hasExistingData();
     if (populated && req.body.mode !== "replace") {
       res.status(409).json({ error: "This environment already has data. Choose replace mode after reviewing the warning." });
@@ -354,10 +367,11 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
     }
 
     const randomPasswordHash = await bcrypt.hash(randomBytes(32).toString("base64url"), 12);
-    const restoredUserIds = backup.data.users.map((row) => Number(row.id));
+    const restoredUserIds = backup.data.users.filter((row) => row.ssoOnly !== true).map((row) => Number(row.id));
     const recoveryTokens = prepareRecoveryTokens(restoredUserIds);
     const users = backup.data.users.map((row) => ({
-      ...restoreDates(row), passwordHash: randomPasswordHash, mustResetPassword: true,
+      ...restoreDates(row), passwordHash: row.ssoOnly === true ? SSO_ONLY_PASSWORD_HASH : randomPasswordHash,
+      ssoOnly: row.ssoOnly === true, mustResetPassword: row.ssoOnly !== true,
       ssoProvider: null, ssoId: null,
     }));
     await db.transaction(async (tx) => {
@@ -370,7 +384,9 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
       // Project documents reference their owning project, so restore projects
       // before article rows. Backups created before project documents simply omit
       // projectId and remain valid.
-      if (backup.data.projects.length) await tx.insert(projectsTable).values(backup.data.projects.map(restoreDates) as any);
+      if (backup.data.projects.length) await tx.insert(projectsTable).values(backup.data.projects.map((row) => ({
+        ...restoreDates(row), managerId: row.managerId === undefined ? row.createdById : row.managerId,
+      })) as any);
       if (backup.data.projectGroups.length) await tx.insert(projectGroupsTable).values(backup.data.projectGroups.map(restoreDates) as any);
       if (backup.data.policySubjects.length) await tx.insert(policySubjectsTable).values(backup.data.policySubjects as any);
       if (backup.data.articles.length) await tx.insert(articlesTable).values(backup.data.articles.map(restoreDates) as any);
@@ -407,6 +423,9 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
     res.json({
       restored: Object.fromEntries(sectionNames.map((section) => [section, backup.data[section].length])),
       recoveryLinks,
+      ssoOnlyUsers: backup.data.users.filter((row) => row.ssoOnly === true).map((row) => ({
+        userId: Number(row.id), name: row.name, email: row.email,
+      })),
       warning: "All sessions, API tokens, edit locks, and SSO secrets were intentionally invalidated.",
     });
   } catch (error) {

@@ -423,6 +423,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ArticleListResponse"
 
+  /projects/{projectId}:
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update project settings or assign its manager
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMetadata"
+        "403":
+          description: Creator, manager or administrator access required
+  /projects/{projectId}/manager-candidates:
+    get:
+      operationId: listProjectManagerCandidates
+      tags: [projects]
+      summary: List individuals available for manager assignment
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Account names, available only to project managers, creators and administrators
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectManagerPerson"
+        "403":
+          description: Project management access required
+
   /projects/{projectId}/documents:
     get:
       operationId: listProjectDocuments
@@ -1417,6 +1458,53 @@ components:
         type: integer
 
   schemas:
+    ProjectManagerPerson:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        archived:
+          type: boolean
+        managerId:
+          type: integer
+          minimum: 1
+    ProjectMetadata:
+      type: object
+      required: [id, name, description, createdById, managerId, archivedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        createdById:
+          type: integer
+          nullable: true
+        managerId:
+          type: integer
+          nullable: true
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     PasswordRecoveryInput:
       type: object
       required: [token, newPassword]
@@ -1667,8 +1755,11 @@ components:
 
     AuthUser:
       type: object
-      required: [id, email, role, name]
+      required: [id, email, role, name, ssoOnly]
       properties:
+        ssoOnly:
+          type: boolean
+          description: Password sign-in and password recovery are disabled when true.
         id:
           type: integer
         email:
@@ -2033,8 +2124,10 @@ components:
     # ─── Users ─────────────────────────────────────────────────────────────────
     User:
       type: object
-      required: [id, email, name, role, createdAt]
+      required: [id, email, name, role, createdAt, ssoOnly]
       properties:
+        ssoOnly:
+          type: boolean
         id:
           type: integer
         email:
@@ -2054,8 +2147,12 @@ components:
 
     UserInput:
       type: object
-      required: [email, name, password, role]
+      required: [email, name, role]
       properties:
+        ssoOnly:
+          type: boolean
+          default: false
+          description: Requires an enabled SSO provider with a matching email identity; disables password sign-in.
         email:
           type: string
           format: email
@@ -2065,6 +2162,7 @@ components:
         password:
           type: string
           minLength: 8
+          description: Required unless ssoOnly is true. Must be omitted for SSO-only accounts.
         role:
           type: string
           enum: [admin, editor, user]
@@ -2072,6 +2170,9 @@ components:
     UserUpdate:
       type: object
       properties:
+        ssoOnly:
+          type: boolean
+          description: Disabling SSO Only requires a new password in the same request. Enabling removes password sign-in.
         email:
           type: string
           format: email
