@@ -64,6 +64,22 @@ try {
   await json(path + "/manager-candidates", viewer.id, undefined, undefined, 403);
   await json(path, manager.id, { name: "Renamed by manager" }, "PATCH");
   const board = await json(path + "/boards", manager.id, { name: "Managed board" }, "POST", 201);
+  for (const person of [manager, creator, admin]) {
+    const created = await json(path + "/boards", person.id, { name: `${person.name} board` }, "POST", 201);
+    const renamed = await json(`/boards/${created.id}`, person.id, { name: `  ${person.name} renamed board  ` }, "PATCH");
+    assert.equal(renamed.name, `${person.name} renamed board`);
+    assert.equal(renamed.id, created.id);
+    assert.equal(renamed.projectId, created.projectId);
+    assert.equal(renamed.position, created.position);
+    assert.equal(renamed.archivedAt, created.archivedAt);
+    assert.equal((await json(`/boards/${created.id}`, person.id)).name, renamed.name);
+  }
+  await json(path + "/boards", viewer.id, { name: "Denied board" }, "POST", 403);
+  await json(`/boards/${board.id}`, viewer.id, { name: "Denied rename" }, "PATCH", 403);
+  for (const name of ["", "   ", null, 42, {}]) {
+    await json(`/boards/${board.id}`, manager.id, { name }, "PATCH", 400);
+  }
+  assert.equal((await json(`/boards/${board.id}`, manager.id)).name, board.name);
   const document = await json(path + "/documents", manager.id, { title: "Managed document", content: "<p>Private project content</p>" }, "POST", 201);
   assert.equal((await json(`/articles/${document.slug}`, manager.id)).canEdit, true);
   const [image] = await db.insert(articleImagesTable).values({
@@ -74,10 +90,16 @@ try {
   await db.insert(groupMembersTable).values({ userId: viewer.id, groupId: group.id });
   await json(path + "/groups", manager.id, { groupId: group.id }, "POST", 201);
   assert.equal((await json(path, viewer.id)).isOwner, false);
+  const memberBoard = await json(path + "/boards", viewer.id, { name: "Member board" }, "POST", 201);
+  assert.equal((await json(`/boards/${memberBoard.id}`, viewer.id, { name: "Member renamed board" }, "PATCH")).name, "Member renamed board");
+  await json(`/boards/${memberBoard.id}`, viewer.id, { archived: true }, "PATCH");
+  assert.equal((await json(`/boards/${memberBoard.id}`, viewer.id, { name: "Renamed archived board" }, "PATCH")).name, "Renamed archived board");
   await json(path, viewer.id, undefined, "DELETE", 403);
   await json(path, manager.id, { managerId: replacement.id }, "PATCH");
   assert.equal((await json(path, replacement.id)).isOwner, true);
   await json(path, manager.id, undefined, undefined, 403);
+  await json(path + "/boards", manager.id, { name: "Former manager board" }, "POST", 403);
+  await json(`/boards/${board.id}`, manager.id, { name: "Former manager rename" }, "PATCH", 403);
   assert.equal((await request(`/articles/${document.slug}`, manager.id)).status, 404);
   assert.ok([403, 404].includes((await request(`/articles/images/${image.id}`, manager.id)).status));
   assert.equal((await json(path, creator.id)).isOwner, true);

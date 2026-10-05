@@ -6,6 +6,10 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { setBoardArchived } from "@/lib/board-archive";
 import { ProjectManager } from "@/components/project-manager";
+import { RenameBoard } from "@/components/rename-board";
+import { useVisibleItems } from "@/hooks/use-visible-items";
+import { LoadMore } from "@/components/load-more";
+import { FavoriteButton } from "@/components/favorite-button";
 import {
   Plus, Trash2, LayoutGrid, ArrowLeft, Loader2, X, Users, Shield, FolderKanban,
   Archive, ArchiveRestore, ChevronDown, ChevronRight, FileText, Pencil,
@@ -78,6 +82,10 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
     enabled: !!project,
   });
 
+  const collectionKey = `${user?.id}:${projectId}`;
+  const boardWindow = useVisibleItems((project?.boards ?? []).filter(board => !board.archivedAt), collectionKey);
+  const archiveWindow = useVisibleItems((project?.boards ?? []).filter(board => !!board.archivedAt), collectionKey);
+  const documentWindow = useVisibleItems(documentsData?.documents ?? [], collectionKey);
   const invalidate = () => qc.invalidateQueries({ queryKey: ["project", projectId] });
 
   const renameProject = useMutation({
@@ -226,6 +234,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
               <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                 <FolderKanban className="h-6 w-6 shrink-0" />
                 {project.name}
+                <FavoriteButton entityType="project" entityId={project.id} title={project.name} />
                 {project.isOwner && (
                   <button
                     type="button"
@@ -303,7 +312,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {documents.map((document) => (
+            {documentWindow.items.map((document) => (
               <div key={document.id} className="group relative rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-primary/30">
                 <Link href={`/projects/${projectId}/documents/${document.slug}`}>
                   <div className="cursor-pointer pr-8">
@@ -331,6 +340,8 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           </div>
         )}
       </section>
+
+      <LoadMore hasMore={documentWindow.hasMore} onClick={documentWindow.loadMore} />
 
       {/* Boards */}
       <section className="space-y-3">
@@ -376,7 +387,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {activeBoards.map((board) => (
+            {boardWindow.items.map((board) => (
               <BoardCard
                 key={board.id}
                 board={board}
@@ -388,6 +399,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
                 }}
               />
             ))}
+            <LoadMore hasMore={boardWindow.hasMore} onClick={boardWindow.loadMore} />
           </div>
         )}
 
@@ -410,7 +422,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
             {showArchivedBoards && (
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 {archivedBoards.length === 0 && <p className="text-sm text-muted-foreground py-4 sm:col-span-2">No archived boards.</p>}
-                {archivedBoards.map((board) => (
+                {archiveWindow.items.map((board) => (
                   <BoardCard
                     key={board.id}
                     board={board}
@@ -422,6 +434,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
                     }}
                   />
                 ))}
+                <LoadMore hasMore={archiveWindow.hasMore} onClick={archiveWindow.loadMore} />
               </div>
             )}
           </div>
@@ -513,7 +526,7 @@ function BoardCard({
     <div className={`group relative rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-primary/30 ${isArchived ? "opacity-70" : ""}`}>
       <Link href={`/projects/${projectId}/boards/${board.id}`}>
         <div className="cursor-pointer">
-          <h3 className="font-semibold group-hover:text-primary transition-colors">{board.name}</h3>
+          <h3 className="font-semibold break-words group-hover:text-primary transition-colors">{board.name}</h3>
           <p className="text-xs text-muted-foreground mt-1">
             {isArchived
               ? `Archived ${format(new Date(board.archivedAt!), "MMM d, yyyy")}`
@@ -523,7 +536,8 @@ function BoardCard({
       </Link>
 
       {/* Action buttons */}
-      <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
+      <div className="mt-3 pt-2 border-t flex flex-wrap items-center justify-between gap-2">
+        <RenameBoard board={board} projectId={projectId} />
         {isArchived && onUnarchive ? (
           <Button
             type="button"

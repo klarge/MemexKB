@@ -29,6 +29,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { setBoardArchived } from "@/lib/board-archive";
+import { RenameBoard } from "@/components/rename-board";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, isPast, isToday } from "date-fns";
@@ -1010,7 +1011,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
           </button>
         </Link>
         <div className="h-4 w-px bg-border" />
-        <h1 className="font-semibold text-sm">{boardData.name}</h1>
+        <h1 className="min-w-0 truncate font-semibold text-sm" title={boardData.name}>{boardData.name}</h1>
+        <RenameBoard board={boardData} projectId={projectId} />
         {boardData.archivedAt && <span className="text-xs text-muted-foreground">Archived</span>}
         <Button
           type="button"

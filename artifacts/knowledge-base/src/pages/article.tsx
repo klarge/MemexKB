@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import { FavoriteButton } from "@/components/favorite-button";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
@@ -327,9 +328,18 @@ export default function ArticleView({ params, area = "knowledge" }: { params?: {
 
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-  const processContent = (html: string) => {
+  const processContent = (html: string, citationScope = "body") => {
     const template = document.createElement("template");
     template.innerHTML = html;
+
+    // Procedure steps are separate content regions. Scope local citation
+    // anchors so a step's [1] cannot jump to the introduction's first source.
+    for (const element of template.content.querySelectorAll<HTMLElement>('[id^="cite-ref-"], [id^="cite-source-"]')) {
+      element.id = `${citationScope}-${element.id}`;
+    }
+    for (const link of template.content.querySelectorAll<HTMLAnchorElement>('a[href^="#cite-ref-"], a[href^="#cite-source-"]')) {
+      link.setAttribute("href", `#${citationScope}-${link.getAttribute("href")!.slice(1)}`);
+    }
 
     // Replace wikilinks only in visible text nodes. Replacing against the raw
     // HTML string can inject anchor markup into infobox data attributes such
@@ -342,7 +352,7 @@ export default function ArticleView({ params, area = "knowledge" }: { params?: {
     }
 
     for (const textNode of textNodes) {
-      if (textNode.parentElement?.closest("a, script, style, textarea")) continue;
+      if (textNode.parentElement?.closest('a, script, style, textarea, [data-type="citation"], [data-type="citation-sources"]')) continue;
 
       const text = textNode.nodeValue ?? "";
       const wikilinkPattern = /\[\[([^\]]+)\]\]/g;
@@ -553,6 +563,7 @@ export default function ArticleView({ params, area = "knowledge" }: { params?: {
               <h1 className="text-4xl font-extrabold tracking-tight" data-testid="article-title">
                 {displayedArticle.title}
               </h1>
+              {!isProjectDocument && !isLogRoute && <FavoriteButton entityType="article" entityId={displayedArticle.id} title={displayedArticle.title} />}
                {displayedArticle.visibility && (
                 <Badge variant="outline" className="border-primary/20 text-primary bg-primary/5">
                    {displayedArticle.visibility === "personal" ? "Personal" : displayedArticle.visibility === "group" ? <><Lock className="w-3 h-3 mr-1" />Group</> : "Public"}
@@ -628,7 +639,7 @@ export default function ArticleView({ params, area = "knowledge" }: { params?: {
                       <div
                         className="prose prose-stone dark:prose-invert max-w-none prose-sm mt-1 whitespace-pre-wrap"
                         data-wikilink-scope="true"
-                        dangerouslySetInnerHTML={{ __html: processContent(step.description) }}
+                        dangerouslySetInnerHTML={{ __html: processContent(step.description, `step-${i + 1}`) }}
                       />
                     </div>
                   </li>

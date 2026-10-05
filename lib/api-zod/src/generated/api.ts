@@ -9,6 +9,38 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary List the current user's accessible favorites
+ */
+export const ListFavoritesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "entityType": zod.enum(['article', 'project']),
+  "entityId": zod.number().int(),
+  "title": zod.string(),
+  "slug": zod.string().nullable(),
+  "kind": zod.enum(['knowledge', 'policy', 'procedure', 'project']),
+  "archived": zod.boolean(),
+  "savedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Add or remove a personal favorite
+ */
+export const updateFavoriteBodyEntityIdMax = 2147483647;
+
+
+
+export const UpdateFavoriteBody = zod.object({
+  "entityType": zod.enum(['article', 'project']),
+  "entityId": zod.number().int().min(1).max(updateFavoriteBodyEntityIdMax),
+  "favorite": zod.boolean()
+})
+
+export const UpdateFavoriteResponse = zod.void()
+
+
+/**
  * Returns server health status
  * @summary Health check
  */

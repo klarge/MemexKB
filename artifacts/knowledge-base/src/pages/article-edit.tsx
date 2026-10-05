@@ -46,6 +46,8 @@ import { WikilinkExtension, type WikilinkItem } from "@/lib/wikilink-extension";
 import { WikilinkList, type WikilinkListHandle } from "@/lib/wikilink-list";
 import { ResizableImageView } from "@/lib/resizable-image";
 import { InfoBoxExtension } from "@/lib/infobox-extension";
+import { Citation, CitationSources } from "@/lib/citation-extension";
+import { CitationTools } from "@/components/citation-tools";
 import { AREA_BASE, AREA_KIND, KIND_AREA, KIND_LABEL, normalizeKind, type ContentArea } from "@/lib/content-paths";
 import { flattenSubjects } from "@/lib/policy-subjects";
 import { useSiteSettings } from "@/lib/site-settings";
@@ -391,6 +393,8 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
       TableCell,
 
       InfoBoxExtension,
+      Citation,
+      CitationSources,
 
       WikilinkExtension.configure({
         suggestion: {
@@ -1143,6 +1147,7 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
                     </Button>
                   </>
                 )}
+                <CitationTools editor={editor} />
               </div>
             )}
 

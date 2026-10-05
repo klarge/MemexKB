@@ -103,7 +103,7 @@ router.delete("/tasks/lists/:id", requireAuth, async (req, res) => {
 // POST /api/tasks — create a task
 router.post("/tasks", requireAuth, async (req, res) => {
   const { listId, title } = req.body as { listId?: number; title?: string };
-  if (!title?.trim()) {
+  if (typeof title !== "string" || !title.trim()) {
     res.status(400).json({ error: "Title is required" });
     return;
   }
@@ -185,6 +185,10 @@ router.patch("/tasks/:id", requireAuth, async (req, res) => {
     return;
   }
 
+  if (title !== undefined && (typeof title !== "string" || !title.trim())) {
+    res.status(400).json({ error: "Title is required" });
+    return;
+  }
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (title !== undefined) updates.title = title.trim();
   if (completed !== undefined) updates.completedAt = completed ? new Date() : null;

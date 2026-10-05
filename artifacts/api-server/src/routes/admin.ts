@@ -32,6 +32,7 @@ import { slugify, extractWikilinks } from "../lib/slugify";
 import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
 import { marked } from "marked";
 import TurndownService from "turndown";
+import { preserveCitationHtml } from "../lib/citation-export";
 import { articleLinksTable } from "@workspace/db";
 
 const router = Router();
@@ -236,6 +237,7 @@ async function linkImagesToArticle(articleContent: string, articleId: number): P
 // ─── TurndownService ─────────────────────────────────────────────────────────
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+preserveCitationHtml(turndown);
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 

@@ -11,6 +11,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Loader2, Plus, Edit, Trash2, LayoutTemplate, Search } from "lucide-react";
+import { useVisibleItems } from "@/hooks/use-visible-items";
+import { LoadMore } from "@/components/load-more";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { KIND_LABEL, normalizeKind } from "@/lib/content-paths";
@@ -66,6 +68,8 @@ export default function Templates() {
     t.name.toLowerCase().includes(search.toLowerCase()) ||
     stripHtml(t.content).toLowerCase().includes(search.toLowerCase()))
   );
+
+  const templateWindow = useVisibleItems(filtered, JSON.stringify([user?.id, kindFilter, search.toLowerCase()]));
 
   return (
     <div className="space-y-6">
@@ -126,7 +130,7 @@ export default function Templates() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((t) => (
+          {templateWindow.items.map((t) => (
             <Card key={t.id} className="flex flex-col hover:shadow-sm transition-shadow">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
@@ -191,6 +195,7 @@ export default function Templates() {
               </CardContent>
             </Card>
           ))}
+          <LoadMore hasMore={templateWindow.hasMore} onClick={templateWindow.loadMore} />
         </div>
       )}
     </div>

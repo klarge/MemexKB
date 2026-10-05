@@ -31,6 +31,7 @@ import { convert } from "html-to-text";
 import { slugify, extractWikilinks, rewriteWikilinksForSlug } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
 import TurndownService from "turndown";
+import { preserveCitationHtml } from "../lib/citation-export";
 import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
 
 const _require = createRequire(import.meta.url);
@@ -49,6 +50,8 @@ function articleSearchRelevance(term: string) {
 }
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+preserveCitationHtml(turndown);
+const pdfTurndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
 // ─── PDF infobox helpers ──────────────────────────────────────────────────────
 
@@ -220,7 +223,7 @@ function isAdmin(userRole: string | undefined) {
 /** SQL equivalent of the normal-article portion of canAccessArticleRecord.
  * Keep collection pagination/counting in the database so inaccessible rows do
  * not affect either result. */
-function normalArticleVisibilityCondition(userId: number, userRole: string | undefined, userGroupIds: number[]) {
+export function normalArticleVisibilityCondition(userId: number, userRole: string | undefined, userGroupIds: number[]) {
   if (isAdmin(userRole)) return undefined;
   const groupMatch = userGroupIds.length > 0
     ? sql`EXISTS (
@@ -275,7 +278,7 @@ async function canAccessProject(
   return shared.length > 0;
 }
 
-async function canAccessArticleRecord(
+export async function canAccessArticleRecord(
   article: VisibilityArticle,
   userId: number | undefined,
   userRole: string | undefined,
@@ -1953,7 +1956,7 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
 
   for (const seg of segments) {
     if (seg.type === "text") {
-      const md = turndown.turndown(seg.html);
+      const md = pdfTurndown.turndown(seg.html);
       if (md.trim()) {
         doc.fontSize(11).font("Helvetica").fillColor("#333333").text(md, { align: "left", lineGap: 4 });
         doc.moveDown(0.5);

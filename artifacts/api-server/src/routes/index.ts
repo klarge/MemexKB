@@ -18,6 +18,7 @@ import settingsRouter from "./settings";
 import tagsRouter from "./tags";
 import fullBackupRouter from "./admin-full-backup";
 import policySubjectsRouter from "./policy-subjects";
+import favoritesRouter from "./favorites";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,7 @@ router.use(adminRouter);
 router.use(imagesRouter);
 router.use(templatesRouter);
 router.use(tasksRouter);
+router.use(favoritesRouter);
 router.use(projectsRouter);
 router.use(dashboardRouter);
 

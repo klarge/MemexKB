@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, Link, Redirect } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Plus, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 import { useSiteSettings } from "@/lib/site-settings";
-
-const PAGE_SIZE = 50;
+import { CONTENT_PAGE_SIZE as PAGE_SIZE } from "@/hooks/use-visible-items";
+import { LoadMore } from "@/components/load-more";
 
 type LogEntry = {
   id: number;
@@ -26,46 +25,35 @@ export default function LogPage() {
   const canEdit = Boolean(user);
   const { data: siteSettings, isLoading: settingsLoading } = useSiteSettings();
 
-  const [offset, setOffset] = useState(0);
-  // Accumulated entries across all pages
-  const [allEntries, setAllEntries] = useState<LogEntry[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [schemaOutOfDate, setSchemaOutOfDate] = useState(false);
-  // Prevent double-accumulation on StrictMode double-effects
-  const lastMergedOffset = useRef(-1);
-
-  const { data: page, isLoading, isFetching, isError, error, refetch } = useQuery<{
+  const { data, isLoading, isFetchingNextPage, isError, error, refetch, hasNextPage, fetchNextPage, isFetchNextPageError } = useInfiniteQuery<{
     entries: LogEntry[];
     total: number;
     hasMore: boolean;
     schemaOutOfDate?: boolean;
   }>({
-    queryKey: ["log-entries", offset],
-    queryFn: async () => {
-      const response = await fetch(`/api/log?limit=${PAGE_SIZE}&offset=${offset}`);
+    queryKey: ["log-entries", user?.id, "load-more"],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam, signal }) => {
+      const response = await fetch(`/api/log?limit=${PAGE_SIZE}&offset=${pageParam}`, { signal });
       if (!response.ok) {
         throw new Error("Could not load log entries. Please try again.");
       }
       return response.json();
     },
     enabled: siteSettings?.logEntriesEnabled === true,
+    getNextPageParam: (last, pages) => last.hasMore && last.entries.length > 0
+      ? pages.reduce((sum, page) => sum + page.entries.length, 0) : undefined,
+    gcTime: 0,
     staleTime: 30_000,
-    refetchInterval: (query) => query.state.data?.schemaOutOfDate ? 5_000 : false,
+    refetchInterval: (query) => query.state.data?.pages[0]?.schemaOutOfDate ? 5_000 : false,
   });
-
-  // Merge each page into the accumulated list exactly once
-  useEffect(() => {
-    if (!page) return;
-    if (offset === 0) setSchemaOutOfDate(page.schemaOutOfDate === true);
-    if (lastMergedOffset.current === offset) return;
-    lastMergedOffset.current = offset;
-    setAllEntries((prev) => (offset === 0 ? page.entries : [...prev, ...page.entries]));
-    setHasMore(page.hasMore);
-  }, [page, offset]);
-
-  const loadMore = useCallback(() => {
-    setOffset((prev) => prev + PAGE_SIZE);
-  }, []);
+  const seen = new Set<number>();
+  const allEntries = data?.pages.flatMap(page => page.entries).filter(entry => {
+    if (seen.has(entry.id)) return false;
+    seen.add(entry.id);
+    return true;
+  }) ?? [];
+  const schemaOutOfDate = data?.pages[0]?.schemaOutOfDate === true;
 
   // Redirect to home if the feature is disabled
   if (!settingsLoading && siteSettings && !siteSettings.logEntriesEnabled) {
@@ -178,18 +166,9 @@ export default function LogPage() {
             </Link>
           ))}
 
-          {hasMore && !isError && (
-            <div className="flex justify-center pt-4">
-              <Button variant="outline" onClick={loadMore} disabled={isFetching}>
-                {isFetching ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading…</>
-                ) : (
-                  "Load more"
-                )}
-              </Button>
-            </div>
-          )}
-          {isError && (
+          <LoadMore hasMore={hasNextPage} onClick={() => { void fetchNextPage(); }}
+            loading={isFetchingNextPage} error={isFetchNextPageError} />
+          {isError && !isFetchNextPageError && (
             <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
               <span className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4" /> Could not load more log entries.

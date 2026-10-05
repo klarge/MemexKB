@@ -1,6 +1,6 @@
 ---
 name: Project managers
-description: User requirements for designated project managers.
+description: Project manager responsibilities and matching board creation/renaming permissions.
 ---
 
 Projects should have a designated Project Manager, which by default is whoever created the Project, but can be assigned to other individuals.
@@ -14,3 +14,9 @@ Assigned managers have project-management permissions, including settings, shari
 **Why:** The user selected project-management permissions rather than a responsibility-only label.
 
 **How to apply:** Give the designated individual project-specific management access without changing their global role or permissions on other projects.
+
+Users who can add project boards must also be able to rename them.
+
+**Why:** The user explicitly requested matching board-creation and board-renaming permissions.
+
+**How to apply:** Keep both the rename controls and the server authorization aligned with board creation, including ordinary users who have access through a project group.

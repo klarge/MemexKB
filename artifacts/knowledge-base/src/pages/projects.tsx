@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Plus, FolderKanban, Loader2, X, LayoutGrid, Archive, ArchiveRestore, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
+import { useVisibleItems } from "@/hooks/use-visible-items";
+import { LoadMore } from "@/components/load-more";
+import { FavoriteButton } from "@/components/favorite-button";
 
 type Project = {
   id: number;
@@ -63,6 +66,8 @@ export default function ProjectsPage() {
   const projects = projectsData?.projects ?? [];
   const projectsTruncated = projectsData?.truncated ?? false;
   const archivedProjects = archivedData?.projects ?? [];
+  const projectWindow = useVisibleItems(projects, String(user?.id));
+  const archiveWindow = useVisibleItems(archivedProjects, String(user?.id));
 
   const createProject = useMutation({
     mutationFn: () =>
@@ -170,13 +175,14 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
+          {projectWindow.items.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               onArchive={(id) => archiveProject.mutate({ id, archived: true })}
             />
           ))}
+          <LoadMore hasMore={projectWindow.hasMore} onClick={projectWindow.loadMore} />
         </div>
       )}
 
@@ -200,7 +206,7 @@ export default function ProjectsPage() {
             {archivedProjects.length === 0 ? (
               <p className="text-sm text-muted-foreground col-span-full py-4 text-center">No archived projects.</p>
             ) : (
-              archivedProjects.map((project) => (
+              archiveWindow.items.map((project) => (
                 <ProjectCard
                   key={project.id}
                   project={project}
@@ -208,6 +214,7 @@ export default function ProjectsPage() {
                 />
               ))
             )}
+            <LoadMore hasMore={archiveWindow.hasMore} onClick={archiveWindow.loadMore} />
           </div>
         )}
       </div>
@@ -231,10 +238,9 @@ function ProjectCard({
       <Link href={`/projects/${project.id}`}>
         <div className="cursor-pointer">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-base group-hover:text-primary transition-colors leading-snug">
+            <h3 className="min-h-9 pr-24 font-semibold text-base group-hover:text-primary transition-colors leading-snug">
               {project.name}
             </h3>
-            <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           </div>
           {project.description && (
             <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{project.description}</p>
@@ -256,8 +262,10 @@ function ProjectCard({
         </div>
       </Link>
 
-      {/* Archive / unarchive button */}
-      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Keep card controls in a row so hover actions cannot overlap the folder. */}
+      <div className="absolute top-5 right-5 flex items-center gap-1">
+        <FavoriteButton entityType="project" entityId={project.id} title={project.name} />
+        <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
         {isArchived && onUnarchive ? (
           <button
             type="button"
@@ -277,6 +285,8 @@ function ProjectCard({
             <Archive className="h-3.5 w-3.5" />
           </button>
         ) : null}
+        </div>
+        <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0" />
       </div>
     </div>
   );

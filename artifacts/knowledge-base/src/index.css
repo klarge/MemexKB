@@ -59,6 +59,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+sup[data-type="citation"] { font-size: 0.75em; vertical-align: super; line-height: 0; }
+sup[data-type="citation"] a,
+sup[data-type="citation"] button { color: hsl(var(--primary)); text-decoration: none; cursor: pointer; padding: 0 0.1em; }
+sup[data-type="citation"] button:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+[data-type="citation-sources"] { clear: both; border-top: 1px solid hsl(var(--border)); margin-top: 2rem; padding-top: 1rem; overflow-wrap: anywhere; }
+[data-type="citation-sources"] li { scroll-margin-top: 5rem; }
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

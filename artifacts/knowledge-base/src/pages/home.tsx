@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useSiteSettings } from "@/lib/site-settings";
+import { HomeFavorites } from "@/components/home-favorites";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -312,6 +313,8 @@ export default function Home() {
             Here's what's been happening in your knowledge base.
           </p>
         </div>
+
+        <HomeFavorites />
 
         {/* Search bar */}
         <div className="relative">

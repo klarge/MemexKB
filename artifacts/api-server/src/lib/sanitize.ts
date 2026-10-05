@@ -20,7 +20,9 @@ export function sanitizeArticleHtml(html: string): string {
     allowedAttributes: {
       "*": ["class", "data-type", "data-wikilink"],
       div: ["data-title", "data-rows", "data-image"],
-      a: ["href", "target", "rel"],
+      a: ["href", "target", "rel", "id", "aria-label"],
+      sup: ["data-citation-id", "data-citation-description", "data-citation-url", "data-citation-number"],
+      li: ["id"],
       img: ["src", "alt", "title", "width", "height", "style", "data-caption"],
       th: ["colspan", "rowspan", "colwidth"],
       td: ["colspan", "rowspan", "style"],
@@ -42,5 +44,24 @@ export function sanitizeArticleHtml(html: string): string {
       },
     },
     disallowedTagsMode: "discard",
+    transformTags: {
+      a: (tagName, attribs) => {
+        if (attribs.id && !/^cite-ref-c-[a-zA-Z0-9-]{1,64}$/.test(attribs.id)) delete attribs.id;
+        return { tagName, attribs };
+      },
+      li: (tagName, attribs) => {
+        if (attribs.id && !/^cite-source-[1-9][0-9]*$/.test(attribs.id)) delete attribs.id;
+        return { tagName, attribs };
+      },
+      sup: (tagName, attribs) => {
+        const url = attribs["data-citation-url"];
+        if (url) {
+          try {
+            if (!["http:", "https:"].includes(new URL(url).protocol) || /[\u0000-\u0020]/.test(url)) delete attribs["data-citation-url"];
+          } catch { delete attribs["data-citation-url"]; }
+        }
+        return { tagName, attribs };
+      },
+    },
   });
 }

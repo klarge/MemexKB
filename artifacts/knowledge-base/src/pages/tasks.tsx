@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EditTask } from "@/components/edit-task";
+import { useVisibleItems } from "@/hooks/use-visible-items";
+import { LoadMore } from "@/components/load-more";
 import {
   DndContext,
   closestCenter,
@@ -120,12 +123,14 @@ function SortableTaskItem({
       </button>
 
       <span
-        className={`flex-1 text-sm leading-snug select-none ${
+        className={`min-w-0 flex-1 break-words text-sm leading-snug select-none ${
           done ? "line-through text-muted-foreground" : ""
         }`}
       >
         {task.title}
       </span>
+
+      <EditTask task={task} />
 
       <button
         type="button"
@@ -212,6 +217,8 @@ function ListCard({
         .map((id) => activeTasks.find((t) => t.id === id))
         .filter((t): t is Task => t !== undefined)
     : activeTasks;
+  const activeWindow = useVisibleItems(activeTasksOrdered, String(list.id));
+  const completedWindow = useVisibleItems(completedTasks, String(list.id));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -310,7 +317,7 @@ function ListCard({
             items={activeTasksOrdered.map((t) => t.id)}
             strategy={verticalListSortingStrategy}
           >
-            {activeTasksOrdered.map((task) => (
+            {activeWindow.items.map((task) => (
               <SortableTaskItem
                 key={task.id}
                 task={task}
@@ -331,6 +338,7 @@ function ListCard({
             ))}
           </SortableContext>
         </DndContext>
+        <LoadMore hasMore={activeWindow.hasMore} onClick={activeWindow.loadMore} />
 
         <AddTaskRow
           onAdd={(title) => {
@@ -369,7 +377,7 @@ function ListCard({
           </div>
           {showCompleted && (
             <div className="pb-1 bg-muted/10">
-              {completedTasks.map((task) => (
+              {completedWindow.items.map((task) => (
                 <SortableTaskItem
                   key={task.id}
                   task={task}
@@ -377,6 +385,7 @@ function ListCard({
                   onDelete={onDeleteTask}
                 />
               ))}
+              <LoadMore hasMore={completedWindow.hasMore} onClick={completedWindow.loadMore} />
             </div>
           )}
         </div>
@@ -397,6 +406,7 @@ export default function TasksPage() {
     queryFn: () => fetch("/api/tasks/lists").then((r) => r.json()),
   });
   const lists = listsData?.lists ?? [];
+  const listWindow = useVisibleItems(lists, "task-lists");
   const tasksTruncated = listsData?.truncated ?? false;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["task-lists"] });
@@ -526,7 +536,7 @@ export default function TasksPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {lists.map((list) => (
+          {listWindow.items.map((list) => (
             <ListCard
               key={list.id}
               list={list}
@@ -538,6 +548,7 @@ export default function TasksPage() {
               onReorderTasks={(listId, taskIds) => reorderTasks.mutate({ listId, taskIds })}
             />
           ))}
+          <LoadMore hasMore={listWindow.hasMore} onClick={listWindow.loadMore} />
         </div>
       )}
     </div>

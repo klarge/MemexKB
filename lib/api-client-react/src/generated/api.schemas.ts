@@ -5,6 +5,57 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export type FavoriteInputEntityType = typeof FavoriteInputEntityType[keyof typeof FavoriteInputEntityType];
+
+
+export const FavoriteInputEntityType = {
+  article: 'article',
+  project: 'project',
+} as const;
+
+export interface FavoriteInput {
+  entityType: FavoriteInputEntityType;
+  /**
+     * @minimum 1
+     * @maximum 2147483647
+     */
+  entityId: number;
+  favorite: boolean;
+}
+
+export type FavoriteItemEntityType = typeof FavoriteItemEntityType[keyof typeof FavoriteItemEntityType];
+
+
+export const FavoriteItemEntityType = {
+  article: 'article',
+  project: 'project',
+} as const;
+
+export type FavoriteItemKind = typeof FavoriteItemKind[keyof typeof FavoriteItemKind];
+
+
+export const FavoriteItemKind = {
+  knowledge: 'knowledge',
+  policy: 'policy',
+  procedure: 'procedure',
+  project: 'project',
+} as const;
+
+export interface FavoriteItem {
+  entityType: FavoriteItemEntityType;
+  entityId: number;
+  title: string;
+  /** @nullable */
+  slug: string | null;
+  kind: FavoriteItemKind;
+  archived: boolean;
+  savedAt: string;
+}
+
+export interface FavoritesResponse {
+  items: FavoriteItem[];
+}
+
 export interface ProjectManagerPerson {
   id: number;
   name: string;

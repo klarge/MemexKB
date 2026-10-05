@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import { useListArticles, getListArticlesQueryKey, useListPolicySubjects, type ListArticlesParams } from "@workspace/api-client-react";
+import { useListPolicySubjects, type ListArticlesParams } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { useSiteSettings } from "@/lib/site-settings";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,9 @@ import { AlertCircle, ChevronRight, FolderTree, Lock, ListChecks, Plus, ScrollTe
 import { format } from "date-fns";
 import { AREA_BASE, AREA_KIND } from "@/lib/content-paths";
 import { flattenSubjects } from "@/lib/policy-subjects";
-
-const PAGE_SIZE = 50;
+import { useContentArticles } from "@/hooks/use-content-articles";
+import { LoadMore } from "@/components/load-more";
+import { FavoriteButton } from "@/components/favorite-button";
 
 type Area = "policies" | "procedures";
 
@@ -31,22 +32,16 @@ export default function AreaList({ area }: { area: Area }) {
   const canAuthor = user?.role === "admin" || user?.role === "editor";
   const enabled = isPolicy ? settings?.policiesEnabled : settings?.proceduresEnabled;
 
-  const [page, setPage] = useState(0);
   const searchTerm = search.trim();
-  useEffect(() => { setPage(0); }, [searchTerm, selectedSubjectId, area]);
   // subjectId is filtered server-side (descendants included) so pagination stays accurate.
   const listParams: ListArticlesParams = {
     kind,
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
     sort: isPolicy ? "title" : "updated_at",
     order: isPolicy ? "asc" : "desc",
     ...(searchTerm ? { search: searchTerm } : {}),
     ...(isPolicy && selectedSubjectId ? { subjectId: selectedSubjectId } : {}),
   };
-  const { data, isLoading, isError, refetch } = useListArticles(listParams, {
-    query: { queryKey: getListArticlesQueryKey(listParams), placeholderData: (prev) => prev },
-  });
+  const { data, isLoading, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, isFetchNextPageError } = useContentArticles(listParams);
   const { data: subjects = [] } = useListPolicySubjects({ query: { enabled: isPolicy, queryKey: ["/api/policy-subjects"] } });
 
   const flat = useMemo(() => flattenSubjects(subjects), [subjects]);
@@ -56,7 +51,6 @@ export default function AreaList({ area }: { area: Area }) {
   );
   const articles = data?.articles ?? [];
   const total = data?.total ?? articles.length;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const goSubject = (id: number | null) => setLocation(id ? `${AREA_BASE[area]}?subject=${id}` : AREA_BASE[area]);
 
@@ -64,6 +58,7 @@ export default function AreaList({ area }: { area: Area }) {
     <Link key={a.id} href={`${AREA_BASE[area]}/${a.slug}`}>
       <Card className="hover-elevate cursor-pointer transition-colors group" data-testid={`card-${kind}-${a.id}`}>
         <CardContent className="p-4 flex items-center justify-between gap-3">
+          <FavoriteButton entityType="article" entityId={a.id} title={a.title} />
           <div className="min-w-0 flex items-center gap-3">
             <div className="h-9 w-9 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
               {a.isRestricted ? <Lock className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
@@ -186,13 +181,8 @@ export default function AreaList({ area }: { area: Area }) {
       {!isLoading && !isError && articles.length > 0 && (
         <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground" data-testid="pagination">
           <span data-testid="text-total">
-            Showing {page * PAGE_SIZE + 1}-{page * PAGE_SIZE + articles.length} of {total}
+            Showing {articles.length} of {total}
           </span>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} data-testid="button-prev-page">Previous</Button>
-            <span>Page {page + 1} of {pageCount}</span>
-            <Button variant="outline" size="sm" disabled={page + 1 >= pageCount} onClick={() => setPage((p) => p + 1)} data-testid="button-next-page">Next</Button>
-          </div>
         </div>
       )}
 
@@ -208,6 +198,8 @@ export default function AreaList({ area }: { area: Area }) {
       ) : (
         <div className="grid gap-2" data-testid="list-procedures">{articles.map(row)}</div>
       )}
+      <LoadMore hasMore={hasNextPage} onClick={() => { void fetchNextPage(); }}
+        loading={isFetchingNextPage} error={isFetchNextPageError} />
     </div>
   );
 }

@@ -38,6 +38,7 @@ import {
   boardCardCommentsTable,
   ssoConfigsTable,
   siteSettingsTable,
+  favoritesTable,
 } from "@workspace/db";
 import { requireAuth, requireRole } from "../lib/auth";
 import { validateBackupContent } from "../lib/backup-content-validation";
@@ -65,7 +66,7 @@ const sectionNames = [
   "templateTags", "taskLists", "tasks", "projects", "projectGroups", "boards",
   "boardColumns", "boardCards", "boardCardMembers", "boardCardComments",
   "ssoConfigs", "siteSettings",
-  "policySubjects", "procedureRuns",
+  "policySubjects", "procedureRuns", "favorites",
 ] as const;
 
 type SectionName = typeof sectionNames[number];
@@ -144,7 +145,7 @@ function validateBackup(value: unknown): asserts value is EnvironmentBackup {
   const data = value.data as unknown as BackupData;
   for (const section of sectionNames) {
     // New optional sections preserve compatibility with pre-feature archives.
-    if ((section === "policySubjects" || section === "procedureRuns") && data[section] === undefined && !manifest.sections?.[section]) {
+    if ((section === "policySubjects" || section === "procedureRuns" || section === "favorites") && data[section] === undefined && !manifest.sections?.[section]) {
       data[section] = [];
       continue;
     }
@@ -234,6 +235,7 @@ async function buildBackup(): Promise<EnvironmentBackup> {
     const taskLists = await tx.select().from(taskListsTable);
     const tasks = await tx.select().from(tasksTable);
     const projects = await tx.select().from(projectsTable);
+    const favorites = await tx.select().from(favoritesTable);
     const projectGroups = await tx.select().from(projectGroupsTable);
     const boards = await tx.select().from(boardsTable);
     const boardColumns = await tx.select().from(boardColumnsTable);
@@ -248,7 +250,7 @@ async function buildBackup(): Promise<EnvironmentBackup> {
       projectGroups, boards, boardColumns, boardCards, boardCardMembers, boardCardComments,
       ssoConfigs: ssoConfigs.map(({ config, enabled: _enabled, ...row }) => ({ ...row, enabled: false, config: redactSsoConfig(config) })),
       siteSettings,
-      policySubjects, procedureRuns,
+      policySubjects, procedureRuns, favorites,
     };
     for (const section of sectionNames) {
       if (data[section].length > MAX_ROWS_PER_SECTION) {
@@ -296,7 +298,7 @@ function prepareRecoveryTokens(userIds: number[]) {
 async function resetSerialSequences(tx: Parameters<Parameters<typeof db.transaction>[0]>[0]): Promise<void> {
   const serialTables = [
     "users", "password_reset_tokens", "groups", "tags", "articles", "article_images",
-    "article_versions", "templates", "task_lists", "tasks", "projects", "boards",
+    "article_versions", "templates", "task_lists", "tasks", "projects", "boards", "favorites",
     "board_columns", "board_cards", "board_card_comments", "sso_configs", "policy_subjects",
   ];
   for (const table of serialTables) {
@@ -407,6 +409,7 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
       if (backup.data.boardCardComments.length) await tx.insert(boardCardCommentsTable).values(backup.data.boardCardComments.map(restoreDates) as any);
       if (backup.data.ssoConfigs.length) await tx.insert(ssoConfigsTable).values(backup.data.ssoConfigs.map(restoreDates) as any);
       if (backup.data.siteSettings.length) await tx.insert(siteSettingsTable).values(backup.data.siteSettings.map(restoreDates) as any);
+      if (backup.data.favorites.length) await tx.insert(favoritesTable).values(backup.data.favorites.map(restoreDates) as any);
       if (recoveryTokens.length) await tx.insert(passwordResetTokensTable).values(recoveryTokens.map(({ token, ...row }) => row));
       await resetSerialSequences(tx);
     });

@@ -1,3 +1,5 @@
+import { outsideCitations } from "./citation-regions";
+
 export function slugify(title: string): string {
   return title
     .toLowerCase()
@@ -9,7 +11,11 @@ export function slugify(title: string): string {
 }
 
 export function extractWikilinks(html: string): string[] {
-  const matches = html.match(/\[\[([^\]]+)\]\]/g) ?? [];
+  const matches: string[] = [];
+  outsideCitations(html, (text) => {
+    matches.push(...(text.match(/\[\[([^\]]+)\]\]/g) ?? []));
+    return text;
+  });
   return [...new Set(matches.map((m) => {
     const body = m.slice(2, -2);
     const divider = body.indexOf("|");
@@ -22,12 +28,12 @@ export function wikilinkSlug(title: string): string {
 }
 
 export function rewriteWikilinksForSlug(html: string, oldSlug: string, newSlug: string): string {
-  return html.replace(/\[\[([^\]]+)\]\]/g, (match, rawBody: string) => {
+  return outsideCitations(html, (text) => text.replace(/\[\[([^\]]+)\]\]/g, (match, rawBody: string) => {
     const divider = rawBody.indexOf("|");
     const target = (divider === -1 ? rawBody : rawBody.slice(0, divider)).trim();
     if (slugify(target) !== oldSlug) return match;
 
     const label = divider === -1 ? target : rawBody.slice(divider + 1).trim();
     return `[[${newSlug}|${label}]]`;
-  });
+  }));
 }

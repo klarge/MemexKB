@@ -8,3 +8,4 @@ export * from "./settings";
 export * from "./tasks";
 export * from "./projects";
 export * from "./policy-subjects";
+export * from "./favorites";

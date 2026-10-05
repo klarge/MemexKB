@@ -15,5 +15,9 @@
 - [SAML IdP interoperability](saml-idp-interoperability.md) — confirmed live setup required correct ACS, signed assertion, and exact audience; diagnose logs before relaxing validation.
 - [Policies and procedures](policies-procedures.md) — policies are categorized, procedures are ordered; editor/admin runs create independent projects without card dependency gating.
 - [Backup verification safety](backup-verification.md) — exercise destructive backup restores with isolated fixtures, never over current development or production data.
-- [Project managers](project-managers.md) — projects need a designated manager, defaulting to their creator and assignable to another individual.
+- [Project managers](project-managers.md) — designated managers control projects; board creation and renaming share project-access permissions.
 - [SSO-only policy](sso-only-policy.md) — SSO linkage does not imply password exclusion; restrictions must survive recovery without changing roles or API-key access.
+- [Manual source citations](source-citation-scope.md) — source URLs are format-validated, not fetched; automatic discovery needs separate scope and security design.
+- [Nested Node test runners](nested-node-tests.md) — unset inherited NODE_TEST_CONTEXT and require an execution signal; a child runner can otherwise exit zero without running tests.
+- [Content list display](content-list-display.md) — content areas default to 20 entries, with a bottom Load more... button for additional batches.
+- [Favorites policy](favorites-policy.md) — favorites are personal; hide inaccessible bookmarks without erasing the user's saved preference.

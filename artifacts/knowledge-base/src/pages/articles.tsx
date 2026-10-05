@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import {
-  useListArticles,
-  getListArticlesQueryKey,
   useListTags,
   getListTagsQueryKey,
 } from "@workspace/api-client-react";
@@ -14,6 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Lock, FileText, Search, Plus, Calendar, User as UserIcon, Tag as TagIcon, X } from "lucide-react";
 import { format } from "date-fns";
+import { useContentArticles } from "@/hooks/use-content-articles";
+import { LoadMore } from "@/components/load-more";
+import { FavoriteButton } from "@/components/favorite-button";
 
 export default function Articles() {
   const queryString = useSearch();
@@ -47,13 +48,10 @@ export default function Articles() {
     search: debouncedSearch || undefined,
     sort,
     order,
-    limit: 50,
     ...(selectedTagId !== null ? { tagId: selectedTagId } : {}),
   };
 
-  const { data, isLoading } = useListArticles(listParams, {
-    query: { queryKey: getListArticlesQueryKey(listParams) },
-  });
+  const { data, isLoading, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, isFetchNextPageError } = useContentArticles(listParams);
 
   return (
     <div className="space-y-6">
@@ -141,6 +139,11 @@ export default function Articles() {
             <div key={i} className="h-24 bg-muted animate-pulse rounded-lg border border-border/50" />
           ))}
         </div>
+      ) : isError ? (
+        <div role="alert" className="text-center py-10 space-y-3">
+          <p>Could not load knowledge entries.</p>
+          <Button variant="outline" onClick={() => refetch()}>Try again</Button>
+        </div>
       ) : data?.articles?.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center h-48 text-center">
@@ -159,6 +162,7 @@ export default function Articles() {
             <Link key={article.id} href={`/knowledge/${article.slug}`}>
               <Card className="hover-elevate cursor-pointer transition-colors group">
                 <CardContent className="p-5 flex items-center justify-between">
+                  <FavoriteButton entityType="article" entityId={article.id} title={article.title} />
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="h-10 w-10 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
                       {article.isRestricted ? (
@@ -215,6 +219,8 @@ export default function Articles() {
           ))}
         </div>
       )}
+      <LoadMore hasMore={hasNextPage} onClick={() => { void fetchNextPage(); }}
+        loading={isFetchingNextPage} error={isFetchNextPageError} />
     </div>
   );
 }

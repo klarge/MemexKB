@@ -50,7 +50,7 @@ async function getUserGroupIds(userId: number | undefined): Promise<number[]> {
   return rows.map((r) => r.groupId);
 }
 
-async function checkProjectAccess(
+export async function checkProjectAccess(
   projectId: number,
   userId: number | undefined,
   userRole: string | undefined,
@@ -219,7 +219,7 @@ router.get("/projects", requireAuth, async (req, res) => {
 
 router.post("/projects", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const { name, description } = req.body as { name?: string; description?: string };
-  if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
+  if (typeof name !== "string" || !name.trim()) { res.status(400).json({ error: "Name is required" }); return; }
   const [project] = await db
     .insert(projectsTable)
     .values({ name: name.trim(), description: description?.trim() ?? "", createdById: req.session.userId!, managerId: req.session.userId! })
@@ -684,7 +684,7 @@ router.patch("/boards/:boardId", requireAuth, async (req, res) => {
   const { name, archived } = req.body as { name?: string; archived?: boolean };
   const updates: Record<string, unknown> = {};
   if (name !== undefined) {
-    if (!name.trim()) { res.status(400).json({ error: "Name required" }); return; }
+    if (typeof name !== "string" || !name.trim()) { res.status(400).json({ error: "Name required" }); return; }
     updates.name = name.trim();
   }
   if (archived !== undefined) updates.archivedAt = archived ? new Date() : null;

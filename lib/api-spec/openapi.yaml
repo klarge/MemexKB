@@ -24,6 +24,35 @@ tags:
   - name: projects
     description: Project workspaces, boards, and documents
 paths:
+  /favorites:
+    get:
+      operationId: listFavorites
+      tags: [favorites]
+      summary: List the current user's accessible favorites
+      responses:
+        "200":
+          description: Personal favorites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoritesResponse"
+    put:
+      operationId: updateFavorite
+      tags: [favorites]
+      summary: Add or remove a personal favorite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteInput"
+      responses:
+        "204":
+          description: Favorite updated
+        "400":
+          description: Invalid input
+        "404":
+          description: Content not accessible
   /healthz:
     get:
       operationId: healthCheck
@@ -1458,6 +1487,48 @@ components:
         type: integer
 
   schemas:
+    FavoriteInput:
+      type: object
+      required: [entityType, entityId, favorite]
+      properties:
+        entityType:
+          type: string
+          enum: [article, project]
+        entityId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        favorite:
+          type: boolean
+    FavoriteItem:
+      type: object
+      required: [entityType, entityId, title, slug, kind, archived, savedAt]
+      properties:
+        entityType:
+          type: string
+          enum: [article, project]
+        entityId:
+          type: integer
+        title:
+          type: string
+        slug:
+          type: [string, "null"]
+        kind:
+          type: string
+          enum: [knowledge, policy, procedure, project]
+        archived:
+          type: boolean
+        savedAt:
+          type: string
+          format: date-time
+    FavoritesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FavoriteItem"
     ProjectManagerPerson:
       type: object
       required: [id, name]
