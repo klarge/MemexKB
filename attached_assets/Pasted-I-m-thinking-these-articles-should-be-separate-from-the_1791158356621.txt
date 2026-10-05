@@ -1,1 +1,0 @@
-I'm thinking these articles should be separate from the regular knowledge articles, but should still support the [[ ]] linking to other knowledge, policies and proecedures. 
