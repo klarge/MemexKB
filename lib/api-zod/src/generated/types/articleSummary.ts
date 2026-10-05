@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ArticleVisibility } from './articleVisibility';
+import type { ContentKind } from './contentKind';
 import type { GroupSummary } from './groupSummary';
 import type { Tag } from './tag';
 
 export interface ArticleSummary {
+  kind?: ContentKind;
+  /** @nullable */
+  policySubjectId?: number | null;
   id: number;
   slug: string;
   /**

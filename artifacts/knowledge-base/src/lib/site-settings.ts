@@ -17,6 +17,10 @@ export interface SiteSettings {
   logEntriesEnabled: boolean;
   tasksEnabled: boolean;
   projectsEnabled: boolean;
+  policiesEnabled?: boolean;
+  proceduresEnabled?: boolean;
+  policyTemplateId?: number | null;
+  procedureTemplateId?: number | null;
 }
 
 export const SITE_SETTINGS_KEY = ["site-settings"] as const;

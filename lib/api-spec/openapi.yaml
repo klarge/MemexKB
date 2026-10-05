@@ -248,6 +248,17 @@ paths:
           schema:
             type: string
           description: Filter articles by title/content substring
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [knowledge, policy, procedure, all]
+          description: Defaults to knowledge; all is for cross-area link suggestions
+        - name: subjectId
+          in: query
+          schema:
+            type: integer
+          description: Policies in this subject or any descendant; applied before pagination
         - name: sort
           in: query
           schema:
@@ -312,6 +323,82 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /policy-subjects:
+    get:
+      operationId: listPolicySubjects
+      responses:
+        "200":
+          description: Shared policy subjects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PolicySubject"
+    post:
+      operationId: createPolicySubject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicySubjectInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicySubject"
+  /policy-subjects/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      operationId: updatePolicySubject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicySubjectInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicySubject"
+    delete:
+      operationId: deletePolicySubject
+      responses:
+        "204":
+          description: Deleted
+  /articles/{slug}/run:
+    post:
+      operationId: runProcedure
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcedureRunInput"
+      responses:
+        "201":
+          description: Independent project snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureRun"
   /articles/maintenance:
     get:
       operationId: listArticlesMaintenance
@@ -1597,6 +1684,10 @@ components:
       type: object
       required: [id, slug, title, updatedAt, createdAt, visibility, ownerId, canEdit]
       properties:
+        kind:
+          $ref: "#/components/schemas/ContentKind"
+        policySubjectId:
+          type: ["integer", "null"]
         id:
           type: integer
         slug:
@@ -1642,6 +1733,14 @@ components:
       type: object
       required: [id, slug, title, content, updatedAt, createdAt, groups, isRestricted, canAccess, visibility, ownerId, canEdit]
       properties:
+        kind:
+          $ref: "#/components/schemas/ContentKind"
+        policySubjectId:
+          type: ["integer", "null"]
+        procedureSteps:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureStep"
         id:
           type: integer
         projectId:
@@ -1750,6 +1849,14 @@ components:
       type: object
       required: [title, content]
       properties:
+        kind:
+          $ref: "#/components/schemas/ContentKind"
+        policySubjectId:
+          type: ["integer", "null"]
+        procedureSteps:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureStep"
         title:
           type: string
           minLength: 1
@@ -1776,6 +1883,12 @@ components:
     ArticleUpdate:
       type: object
       properties:
+        policySubjectId:
+          type: ["integer", "null"]
+        procedureSteps:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureStep"
         title:
           type: string
           minLength: 1
@@ -1795,6 +1908,40 @@ components:
           items:
             type: integer
 
+    ContentKind:
+      type: string
+      enum: [knowledge, policy, procedure]
+    ProcedureStep:
+      type: object
+      required: [title, description]
+      properties:
+        title: { type: string, minLength: 1 }
+        description: { type: string, minLength: 1 }
+    PolicySubject:
+      type: object
+      required: [id, name, parentId]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        parentId: { type: ["integer", "null"] }
+    PolicySubjectInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        parentId: { type: ["integer", "null"] }
+    ProcedureRunInput:
+      type: object
+      required: [name, requestId]
+      properties:
+        name: { type: string, minLength: 1 }
+        requestId: { type: string, minLength: 1, maxLength: 100 }
+    ProcedureRun:
+      type: object
+      required: [projectId, boardId]
+      properties:
+        projectId: { type: integer }
+        boardId: { type: integer }
     ArticleVisibility:
       type: string
       enum: [personal, group, public]

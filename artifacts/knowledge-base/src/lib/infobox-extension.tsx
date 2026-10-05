@@ -1,3 +1,4 @@
+import { KIND_LABEL, normalizeKind } from "./content-paths";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Node, mergeAttributes } from "@tiptap/core";
 import {
@@ -88,7 +89,7 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
         dismiss();
         return;
       }
-      const { newValue, newCursor } = insertWikilink(value, cursor, item.title);
+      const { newValue, newCursor } = insertWikilink(value, cursor, item.title, item.slug);
       onChange(newValue);
       setPendingCursor(newCursor);
       dismiss();
@@ -164,6 +165,7 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
               onClick={() => doInsert(item)}
             >
               {item.title}
+              <span className="ml-2 text-[10px] uppercase text-muted-foreground">{KIND_LABEL[normalizeKind(item.kind)]}</span>
             </button>
           ))}
         </div>

@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { KIND_LABEL, normalizeKind } from "./content-paths";
 import type { WikilinkItem } from "./wikilink-extension";
 
 interface WikilinkListProps {
@@ -61,7 +62,8 @@ export const WikilinkList = forwardRef<WikilinkListHandle, WikilinkListProps>(
             }`}
             onClick={() => command(item)}
           >
-            {item.title}
+            <span className="block truncate">{item.title}</span>
+            <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">{KIND_LABEL[normalizeKind(item.kind)]}</span>
           </button>
         ))}
       </div>

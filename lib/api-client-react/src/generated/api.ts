@@ -59,6 +59,10 @@ import type {
   LoginInput,
   MessageResponse,
   PasswordRecoveryInput,
+  PolicySubject,
+  PolicySubjectInput,
+  ProcedureRun,
+  ProcedureRunInput,
   ProjectDocument,
   ProjectDocumentInput,
   ProjectDocumentListResponse,
@@ -959,6 +963,369 @@ export const useCreateArticle = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateArticleMutationOptions(options));
+    }
+
+export const getListPolicySubjectsUrl = () => {
+
+
+
+
+  return `/api/policy-subjects`
+}
+
+export const listPolicySubjects = async ( options?: Parameters<typeof customFetch>[1]): Promise<PolicySubject[]> => {
+
+  return customFetch<PolicySubject[]>(getListPolicySubjectsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPolicySubjectsQueryKey = () => {
+    return [
+    `/api/policy-subjects`
+    ] as const;
+    }
+
+
+export const getListPolicySubjectsQueryOptions = <TData = Awaited<ReturnType<typeof listPolicySubjects>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPolicySubjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPolicySubjectsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPolicySubjects>>> = ({ signal }) => listPolicySubjects({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPolicySubjects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPolicySubjectsQueryResult = NonNullable<Awaited<ReturnType<typeof listPolicySubjects>>>
+export type ListPolicySubjectsQueryError = ErrorType<unknown>
+
+
+
+export function useListPolicySubjects<TData = Awaited<ReturnType<typeof listPolicySubjects>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPolicySubjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPolicySubjectsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePolicySubjectUrl = () => {
+
+
+
+
+  return `/api/policy-subjects`
+}
+
+export const createPolicySubject = async (policySubjectInput: PolicySubjectInput, options?: Parameters<typeof customFetch>[1]): Promise<PolicySubject> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<PolicySubject>(getCreatePolicySubjectUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(policySubjectInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePolicySubjectMutationKey = () => ['createPolicySubject'] as const;
+
+export const getCreatePolicySubjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPolicySubject>>, TError,CreatePolicySubjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPolicySubject>>, TError,CreatePolicySubjectMutationVariables, TContext> => {
+
+const mutationKey = getCreatePolicySubjectMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPolicySubject>>, CreatePolicySubjectMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPolicySubject(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePolicySubjectMutationResult = NonNullable<Awaited<ReturnType<typeof createPolicySubject>>>
+    export type CreatePolicySubjectMutationBody = BodyType<PolicySubjectInput>
+    export type CreatePolicySubjectMutationError = ErrorType<unknown>
+    export type CreatePolicySubjectMutationVariables = {data: BodyType<PolicySubjectInput>}
+
+    export const useCreatePolicySubject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPolicySubject>>, TError,CreatePolicySubjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPolicySubject>>,
+        TError,
+        CreatePolicySubjectMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreatePolicySubjectMutationOptions(options));
+    }
+
+export const getUpdatePolicySubjectUrl = (id: number,) => {
+
+
+
+
+  return `/api/policy-subjects/${id}`
+}
+
+export const updatePolicySubject = async (id: number,
+    policySubjectInput: PolicySubjectInput, options?: Parameters<typeof customFetch>[1]): Promise<PolicySubject> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<PolicySubject>(getUpdatePolicySubjectUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(policySubjectInput)
+  }
+);}
+
+
+
+
+
+export const getUpdatePolicySubjectMutationKey = () => ['updatePolicySubject'] as const;
+
+export const getUpdatePolicySubjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePolicySubject>>, TError,UpdatePolicySubjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePolicySubject>>, TError,UpdatePolicySubjectMutationVariables, TContext> => {
+
+const mutationKey = getUpdatePolicySubjectMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePolicySubject>>, UpdatePolicySubjectMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePolicySubject(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePolicySubjectMutationResult = NonNullable<Awaited<ReturnType<typeof updatePolicySubject>>>
+    export type UpdatePolicySubjectMutationBody = BodyType<PolicySubjectInput>
+    export type UpdatePolicySubjectMutationError = ErrorType<unknown>
+    export type UpdatePolicySubjectMutationVariables = {id: number;data: BodyType<PolicySubjectInput>}
+
+    export const useUpdatePolicySubject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePolicySubject>>, TError,UpdatePolicySubjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePolicySubject>>,
+        TError,
+        UpdatePolicySubjectMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdatePolicySubjectMutationOptions(options));
+    }
+
+export const getDeletePolicySubjectUrl = (id: number,) => {
+
+
+
+
+  return `/api/policy-subjects/${id}`
+}
+
+export const deletePolicySubject = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeletePolicySubjectUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeletePolicySubjectMutationKey = () => ['deletePolicySubject'] as const;
+
+export const getDeletePolicySubjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePolicySubject>>, TError,DeletePolicySubjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePolicySubject>>, TError,DeletePolicySubjectMutationVariables, TContext> => {
+
+const mutationKey = getDeletePolicySubjectMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePolicySubject>>, DeletePolicySubjectMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePolicySubject(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePolicySubjectMutationResult = NonNullable<Awaited<ReturnType<typeof deletePolicySubject>>>
+
+    export type DeletePolicySubjectMutationError = ErrorType<unknown>
+    export type DeletePolicySubjectMutationVariables = {id: number}
+
+    export const useDeletePolicySubject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePolicySubject>>, TError,DeletePolicySubjectMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePolicySubject>>,
+        TError,
+        DeletePolicySubjectMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeletePolicySubjectMutationOptions(options));
+    }
+
+export const getRunProcedureUrl = (slug: string,) => {
+
+
+
+
+  return `/api/articles/${slug}/run`
+}
+
+export const runProcedure = async (slug: string,
+    procedureRunInput: ProcedureRunInput, options?: Parameters<typeof customFetch>[1]): Promise<ProcedureRun> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ProcedureRun>(getRunProcedureUrl(slug),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(procedureRunInput)
+  }
+);}
+
+
+
+
+
+export const getRunProcedureMutationKey = () => ['runProcedure'] as const;
+
+export const getRunProcedureMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runProcedure>>, TError,RunProcedureMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runProcedure>>, TError,RunProcedureMutationVariables, TContext> => {
+
+const mutationKey = getRunProcedureMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runProcedure>>, RunProcedureMutationVariables> = (props) => {
+          const {slug,data} = props ?? {};
+
+          return  runProcedure(slug,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunProcedureMutationResult = NonNullable<Awaited<ReturnType<typeof runProcedure>>>
+    export type RunProcedureMutationBody = BodyType<ProcedureRunInput>
+    export type RunProcedureMutationError = ErrorType<unknown>
+    export type RunProcedureMutationVariables = {slug: string;data: BodyType<ProcedureRunInput>}
+
+    export const useRunProcedure = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runProcedure>>, TError,RunProcedureMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runProcedure>>,
+        TError,
+        RunProcedureMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRunProcedureMutationOptions(options));
     }
 
 export const getListArticlesMaintenanceUrl = (params?: ListArticlesMaintenanceParams,) => {

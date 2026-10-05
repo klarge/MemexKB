@@ -32,6 +32,8 @@ import ProjectsPage from "@/pages/projects";
 import ProjectPage from "@/pages/project";
 import BoardPage from "@/pages/board";
 import Knowledge from "@/pages/articles";
+import AreaList from "@/pages/area-list";
+import type { ContentArea } from "@/lib/content-paths";
 import ResetPassword from "@/pages/reset-password";
 
 const queryClient = new QueryClient();
@@ -148,6 +150,31 @@ function Router() {
           <Settings />
         </AuthRoute>
       </Route>
+
+      <Route path="/policies/new"><AuthRoute editorOnly><ArticleEdit area="policies" /></AuthRoute></Route>
+      <Route path="/policies/new/edit"><AuthRoute editorOnly><ArticleEdit area="policies" /></AuthRoute></Route>
+      <Route path="/procedures/new"><AuthRoute editorOnly><ArticleEdit area="procedures" /></AuthRoute></Route>
+      <Route path="/procedures/new/edit"><AuthRoute editorOnly><ArticleEdit area="procedures" /></AuthRoute></Route>
+      {(["policies", "procedures"] as const).map((area) => [
+        <Route key={`${area}-edit`} path={`/${area}/:slug/edit`}>
+          {(params: Record<string, string>) => (
+            <AuthRoute editorOnly><ArticleEdit params={params} area={area} /></AuthRoute>
+          )}
+        </Route>,
+        <Route key={`${area}-history`} path={`/${area}/:slug/history`}>
+          {(params: Record<string, string>) => (
+            <AuthRoute><ArticleHistory params={params} area={area} /></AuthRoute>
+          )}
+        </Route>,
+        <Route key={`${area}-view`} path={`/${area}/:slug`}>
+          {(params: Record<string, string>) => (
+            <AuthRoute><ArticleView params={params} area={area} /></AuthRoute>
+          )}
+        </Route>,
+        <Route key={`${area}-list`} path={`/${area}`}>
+          <AuthRoute><AreaList area={area} /></AuthRoute>
+        </Route>,
+      ])}
 
       <Route path="/knowledge/new">
         <NewArticleRoute />
@@ -338,20 +365,20 @@ function Router() {
       </Route>
 
       <Route path="/templates">
-        <AuthRoute editorOnly>
+        <AuthRoute adminOnly>
           <Templates />
         </AuthRoute>
       </Route>
 
       <Route path="/templates/new">
-        <AuthRoute editorOnly>
+        <AuthRoute adminOnly>
           <TemplateEdit />
         </AuthRoute>
       </Route>
 
       <Route path="/templates/:id/edit">
         {(params: Record<string, string>) => (
-          <AuthRoute editorOnly>
+          <AuthRoute adminOnly>
             <TemplateEdit params={params} />
           </AuthRoute>
         )}

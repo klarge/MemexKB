@@ -1,12 +1,15 @@
-import { pgTable, serial, text, timestamp, integer, primaryKey, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, primaryKey, boolean, uniqueIndex, index, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 import { groupsTable } from "./groups";
 import { projectsTable } from "./projects";
+import { policySubjectsTable } from "./policy-subjects";
 
 export type ArticleVisibility = "personal" | "group" | "public";
+export type ContentKind = "knowledge" | "policy" | "procedure";
+export type ProcedureStep = { title: string; description: string };
 
 export const articlesTable = pgTable("articles", {
   id: serial("id").primaryKey(),
@@ -15,6 +18,9 @@ export const articlesTable = pgTable("articles", {
   logSlug: text("log_slug"),
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
+  kind: text("kind").$type<ContentKind>().notNull().default("knowledge"),
+  policySubjectId: integer("policy_subject_id").references(() => policySubjectsTable.id, { onDelete: "restrict" }),
+  procedureSteps: jsonb("procedure_steps").$type<ProcedureStep[]>().notNull().default([]),
   isLogEntry: boolean("is_log_entry").notNull().default(false),
   isStatic: boolean("is_static").notNull().default(false),
   visibility: text("visibility").$type<ArticleVisibility>().notNull().default("personal"),
@@ -79,6 +85,8 @@ export const articleVersionsTable = pgTable("article_versions", {
   versionNumber: integer("version_number").notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  policySubjectId: integer("policy_subject_id"),
+  procedureSteps: jsonb("procedure_steps").$type<ProcedureStep[]>().notNull().default([]),
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),

@@ -24,6 +24,8 @@ import {
   tagsTable,
   articleTagsTable,
   templatesTable,
+  policySubjectsTable,
+  procedureRunsTable,
   templateTagsTable,
   taskListsTable,
   tasksTable,
@@ -61,6 +63,7 @@ const sectionNames = [
   "templateTags", "taskLists", "tasks", "projects", "projectGroups", "boards",
   "boardColumns", "boardCards", "boardCardMembers", "boardCardComments",
   "ssoConfigs", "siteSettings",
+  "policySubjects", "procedureRuns",
 ] as const;
 
 type SectionName = typeof sectionNames[number];
@@ -138,6 +141,11 @@ function validateBackup(value: unknown): asserts value is EnvironmentBackup {
   const manifest = value.manifest as unknown as EnvironmentBackup["manifest"];
   const data = value.data as unknown as BackupData;
   for (const section of sectionNames) {
+    // New optional sections preserve compatibility with pre-feature archives.
+    if ((section === "policySubjects" || section === "procedureRuns") && data[section] === undefined && !manifest.sections?.[section]) {
+      data[section] = [];
+      continue;
+    }
     const rows = data[section];
     if (!Array.isArray(rows) || rows.length > MAX_ROWS_PER_SECTION || rows.some((row) => !isRecord(row))) {
       throw new Error(`Backup section "${section}" is invalid or exceeds the safety limit.`);
@@ -206,6 +214,8 @@ async function buildBackup(): Promise<EnvironmentBackup> {
     const articleVersions = await tx.select().from(articleVersionsTable);
     const articleTags = await tx.select().from(articleTagsTable);
     const templates = await tx.select().from(templatesTable);
+    const policySubjects = await tx.select().from(policySubjectsTable);
+    const procedureRuns = await tx.select().from(procedureRunsTable);
     const templateTags = await tx.select().from(templateTagsTable);
     const taskLists = await tx.select().from(taskListsTable);
     const tasks = await tx.select().from(tasksTable);
@@ -224,6 +234,7 @@ async function buildBackup(): Promise<EnvironmentBackup> {
       projectGroups, boards, boardColumns, boardCards, boardCardMembers, boardCardComments,
       ssoConfigs: ssoConfigs.map(({ config, enabled: _enabled, ...row }) => ({ ...row, enabled: false, config: redactSsoConfig(config) })),
       siteSettings,
+      policySubjects, procedureRuns,
     };
     for (const section of sectionNames) {
       if (data[section].length > MAX_ROWS_PER_SECTION) {
@@ -270,7 +281,7 @@ async function resetSerialSequences(tx: Parameters<Parameters<typeof db.transact
   const serialTables = [
     "users", "password_reset_tokens", "groups", "tags", "articles", "article_images",
     "article_versions", "templates", "task_lists", "tasks", "projects", "boards",
-    "board_columns", "board_cards", "board_card_comments", "sso_configs",
+    "board_columns", "board_cards", "board_card_comments", "sso_configs", "policy_subjects",
   ];
   for (const table of serialTables) {
     await tx.execute(sql.raw(
@@ -341,7 +352,7 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
     }));
     await db.transaction(async (tx) => {
       await tx.execute(sql`DELETE FROM user_sessions`);
-      await tx.execute(sql`TRUNCATE TABLE users, groups, articles, tags, templates, task_lists, projects, sso_configs, site_settings, password_reset_tokens RESTART IDENTITY CASCADE`);
+      await tx.execute(sql`TRUNCATE TABLE users, groups, articles, tags, templates, task_lists, projects, sso_configs, site_settings, password_reset_tokens, policy_subjects, procedure_runs RESTART IDENTITY CASCADE`);
       await tx.insert(usersTable).values(users as any);
       await tx.insert(groupsTable).values(backup.data.groups.map(restoreDates) as any);
       await tx.insert(groupMembersTable).values(backup.data.groupMembers.map(restoreDates) as any);
@@ -351,6 +362,7 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
       // projectId and remain valid.
       await tx.insert(projectsTable).values(backup.data.projects.map(restoreDates) as any);
       await tx.insert(projectGroupsTable).values(backup.data.projectGroups.map(restoreDates) as any);
+      if (backup.data.policySubjects.length) await tx.insert(policySubjectsTable).values(backup.data.policySubjects as any);
       await tx.insert(articlesTable).values(backup.data.articles.map(restoreDates) as any);
       await tx.insert(articleGroupsTable).values(backup.data.articleGroups.map(restoreDates) as any);
       await tx.insert(articleLinksTable).values(backup.data.articleLinks.map(restoreDates) as any);
@@ -362,6 +374,7 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
       await tx.insert(taskListsTable).values(backup.data.taskLists.map(restoreDates) as any);
       await tx.insert(tasksTable).values(backup.data.tasks.map(restoreDates) as any);
       await tx.insert(boardsTable).values(backup.data.boards.map(restoreDates) as any);
+      if (backup.data.procedureRuns.length) await tx.insert(procedureRunsTable).values(backup.data.procedureRuns as any);
       await tx.insert(boardColumnsTable).values(backup.data.boardColumns.map(restoreDates) as any);
       await tx.insert(boardCardsTable).values(backup.data.boardCards.map(restoreDates) as any);
       await tx.insert(boardCardMembersTable).values(backup.data.boardCardMembers.map(restoreDates) as any);

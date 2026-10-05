@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { InfoBoxExtension } from "@/lib/infobox-extension";
+import { KIND_LABEL, normalizeKind, type ContentKind } from "@/lib/content-paths";
+import { ProcedureStepsEditor, cleanSteps, validateSteps, type StepDraft } from "@/components/procedure-steps-editor";
 
 interface TagOption {
   id: number;
@@ -30,6 +32,8 @@ interface TemplateData {
   name: string;
   content: string;
   tags: TagOption[];
+  kind?: string;
+  procedureSteps?: StepDraft[];
 }
 
 export default function TemplateEdit({ params }: { params?: { id?: string } }) {
@@ -41,6 +45,8 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
 
   const [name, setName] = useState("");
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const [kind, setKind] = useState<ContentKind>("knowledge");
+  const [steps, setSteps] = useState<StepDraft[]>([{ title: "", description: "" }]);
 
   const { data: existing, isLoading: isLoadingExisting } = useQuery<TemplateData>({
     queryKey: ["template", id],
@@ -73,6 +79,8 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
       setName(existing.name ?? "");
       editor.commands.setContent(existing.content ?? "");
       setSelectedTags(existing.tags?.map((t) => t.id) ?? []);
+      setKind(normalizeKind(existing.kind));
+      if (existing.procedureSteps?.length) setSteps(existing.procedureSteps.map((x) => ({ title: x.title, description: x.description })));
     }
   }, [existing, editor]);
 
@@ -82,12 +90,15 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
         name: name.trim(),
         content: editor?.getHTML() ?? "",
         tagIds: selectedTags,
+        kind,
+        ...(kind === "procedure" ? { procedureSteps: cleanSteps(steps) } : {}),
       };
       const res = await fetch(
         isNew ? "/api/templates" : `/api/templates/${id}`,
         {
           method: isNew ? "POST" : "PATCH",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(body),
         }
       );
@@ -99,6 +110,7 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
+      queryClient.invalidateQueries({ queryKey: ["template", id] });
       toast({ title: isNew ? "Template created" : "Template saved" });
       setLocation("/templates");
     },
@@ -110,6 +122,13 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
     if (!name.trim()) {
       toast({ title: "Name is required", variant: "destructive" });
       return;
+    }
+    if (kind === "procedure") {
+      const problem = validateSteps(steps);
+      if (problem) {
+        toast({ title: "Steps incomplete", description: problem, variant: "destructive" });
+        return;
+      }
     }
     saveMutation.mutate();
   };
@@ -146,7 +165,25 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Content</Label>
+            <Label>Template type</Label>
+            <div className="flex gap-2" role="group" aria-label="Template type">
+              {(["knowledge", "policy", "procedure"] as const).map((k) => (
+                <Button key={k} type="button" size="sm" variant={kind === k ? "default" : "outline"} onClick={() => setKind(k)} data-testid={`button-template-kind-${k}`}>
+                  {KIND_LABEL[k]}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {kind === "policy" && "Supplies document sections. The category is chosen separately on each policy."}
+              {kind === "procedure" && "Supplies introductory content and the starting steps for new procedures."}
+              {kind === "knowledge" && "Inserted into Knowledge articles. Documents already created are never changed."}
+            </p>
+          </div>
+
+          {kind === "procedure" && <ProcedureStepsEditor steps={steps} onChange={setSteps} />}
+
+          <div className="space-y-1.5">
+            <Label>{kind === "procedure" ? "Introductory content" : "Content"}</Label>
             {editor && (
               <div className="border border-border rounded-md bg-card overflow-hidden sticky top-0 z-10 shadow-sm mb-2 flex items-center p-1 gap-0.5 flex-wrap">
                 <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive("bold") ? "bg-muted" : ""}><Bold className="h-4 w-4" /></Button>

@@ -18,6 +18,8 @@ export interface ArticleSummary {
   id: number;
   slug: string;
   title: string;
+  kind?: "knowledge" | "policy" | "procedure";
+  policySubjectId?: number | null;
   updatedAt: string;
   createdAt: string;
   updatedByName: string | null;
@@ -28,6 +30,7 @@ export interface ArticleSummary {
 
 export interface Article extends ArticleSummary {
   content: string;
+  procedureSteps?: { title: string; description: string }[];
   backlinks: ArticleSummary[];
 }
 
@@ -116,6 +119,7 @@ export interface TaskList {
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 type ArticleListParams = {
+  kind?: "knowledge" | "policy" | "procedure" | "all";
   search?: string;
   tagId?: number;
   limit?: number;
@@ -145,6 +149,7 @@ export function createApiClient(token: string) {
 
   async function listArticles(params: ArticleListParams): Promise<ArticleListResponse> {
   const qs = new URLSearchParams();
+  if (params.kind) qs.set("kind", params.kind);
   if (params.search) qs.set("search", params.search);
   if (params.tagId != null) qs.set("tagId", String(params.tagId));
   if (params.limit != null) qs.set("limit", String(params.limit));

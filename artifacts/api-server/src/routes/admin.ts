@@ -16,6 +16,7 @@ import {
   boardCardsTable,
   boardCardMembersTable,
   projectGroupsTable,
+  policySubjectsTable,
 } from "@workspace/db";
 import { eq, and, inArray, asc, desc, ne, count } from "drizzle-orm";
 import { createRequire } from "node:module";
@@ -28,6 +29,7 @@ const { ZipArchive } = _require("archiver") as {
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
+import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import { articleLinksTable } from "@workspace/db";
@@ -301,6 +303,19 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
   }
 
   // Add articles
+  const subjects = await db.select().from(policySubjectsTable);
+  const subjectPath = (id: number | null): string[] => {
+    const names: string[] = [];
+    const visited = new Set<number>();
+    while (id !== null && !visited.has(id)) {
+      visited.add(id);
+      const subject = subjects.find((s) => s.id === id);
+      if (!subject) break;
+      names.unshift(subject.name);
+      id = subject.parentId;
+    }
+    return names;
+  };
   for (const article of articles) {
     const articleGroupIds = allGroups
       .filter((ag) => ag.articleId === article.id)
@@ -310,7 +325,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
       .filter(Boolean);
 
     // Rewrite absolute image URLs to relative paths for both formats
-    const usedImageIds = extractImageIds(article.content);
+    const usedImageIds = extractImageIds(contentWithSteps(article));
     const imageUrlMap: Array<[string, string]> = usedImageIds
       .map((id) => {
         const img = imageMap.get(id);
@@ -325,7 +340,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
     archive.append(rawHtml, { name: `articles/${article.slug}.html` });
 
     // Markdown — human-readable, portable to other tools
-    let md = `# ${article.title}\n\n${turndown.turndown(article.content)}`;
+    let md = `# ${article.title}\n\n${turndown.turndown(contentWithSteps(article))}`;
     for (const [from, to] of imageUrlMap) md = md.replaceAll(from, to);
     archive.append(md, { name: `articles/${article.slug}.md` });
 
@@ -333,6 +348,12 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
       slug: article.slug,
       title: article.title,
       isStatic: article.isStatic,
+      kind: article.kind,
+      policySubjectPath: subjectPath(article.policySubjectId),
+      procedureSteps: article.procedureSteps.map((step) => ({
+        title: step.title,
+        description: imageUrlMap.reduce((text, [from, to]) => text.replaceAll(from, to), step.description),
+      })),
       visibility: article.visibility,
       createdByEmail: article.createdById === null ? null : (ownerEmailById.get(article.createdById) ?? null),
       createdAt: article.createdAt,
@@ -521,12 +542,36 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         tags?: string[];
         visibility?: "personal" | "group" | "public";
         createdByEmail?: string | null;
+        kind?: unknown;
+        policySubjectPath?: unknown;
+        procedureSteps?: unknown;
       };
       const slug = meta.slug;
       const title = meta.title;
       // A metadata-backed article must never fall through to the later
       // Markdown-only import pass if metadata validation fails.
       processedSlugs.add(slug);
+      const kind = meta.kind ?? "knowledge";
+      if (!isContentKind(kind)) throw new Error("Invalid content kind in archive");
+      const procedureSteps = kind === "procedure" ? validateSteps(meta.procedureSteps).map((s) => ({
+        title: s.title, description: sanitizeArticleHtml(rewriteImageRefs(s.description, imagePathMap)),
+      })) : [];
+      let policySubjectId: number | null = null;
+      if (kind === "policy") {
+        if (!Array.isArray(meta.policySubjectPath) || !meta.policySubjectPath.length || meta.policySubjectPath.length > 100 ||
+            !meta.policySubjectPath.every((name) => typeof name === "string" && name.trim() && name.length <= 200)) {
+          throw new Error("Policy archive requires a valid subject path");
+        }
+        for (const name of meta.policySubjectPath as string[]) {
+          const subjectRows = await db.select().from(policySubjectsTable);
+          const found = subjectRows.find((s) => s.name === name && s.parentId === policySubjectId);
+          if (found) policySubjectId = found.id;
+          else {
+            const [created]: { id: number }[] = await db.insert(policySubjectsTable).values({ name, parentId: policySubjectId }).returning({ id: policySubjectsTable.id });
+            policySubjectId = created.id;
+          }
+        }
+      }
       const metaGroupNames: string[] = Array.isArray(meta.groups)
         ? meta.groups.filter((g) => typeof g === "string")
         : [];
@@ -587,6 +632,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         articleContent = sanitizeArticleHtml(await marked.parse(bodyMd));
       }
 
+      wikilinksPass1 = [...new Set([...wikilinksPass1, ...extractWikilinks(contentWithSteps({ content: "", procedureSteps }))])];
       const [existing] = await db
         .select({ id: articlesTable.id })
         .from(articlesTable)
@@ -603,7 +649,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
         }
         await db
           .update(articlesTable)
-          .set({ title, content: articleContent, visibility, isStatic, createdById: ownerId, updatedAt: new Date() })
+          .set({ title, content: articleContent, kind, policySubjectId, procedureSteps, visibility, isStatic, createdById: ownerId, updatedAt: new Date() })
           .where(eq(articlesTable.slug, slug));
         articleId = existing.id;
         await db.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, articleId));
@@ -616,7 +662,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       } else {
         const [article] = await db
           .insert(articlesTable)
-          .values({ slug, title, content: articleContent, visibility, isStatic, createdById: ownerId })
+          .values({ slug, title, content: articleContent, kind, policySubjectId, procedureSteps, visibility, isStatic, createdById: ownerId })
           .returning();
         articleId = article.id;
         if (wikilinksPass1.length > 0) {

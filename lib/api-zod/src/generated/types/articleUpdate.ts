@@ -6,8 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ArticleVisibility } from './articleVisibility';
+import type { ProcedureStep } from './procedureStep';
 
 export interface ArticleUpdate {
+  /** @nullable */
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   /** @minLength 1 */
   title?: string;
   content?: string;

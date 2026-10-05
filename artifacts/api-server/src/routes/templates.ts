@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { templatesTable, templateTagsTable, tagsTable, usersTable } from "@workspace/db";
+import { templatesTable, templateTagsTable, tagsTable, usersTable, siteSettingsTable } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
+import { isContentKind, validateSteps } from "../lib/content-kinds";
 
 const router = Router();
 
@@ -35,6 +36,8 @@ router.get("/templates", requireAuth, async (_req, res) => {
       id: templatesTable.id,
       name: templatesTable.name,
       content: templatesTable.content,
+      kind: templatesTable.kind,
+      procedureSteps: templatesTable.procedureSteps,
       createdAt: templatesTable.createdAt,
       updatedAt: templatesTable.updatedAt,
       createdByName: usersTable.name,
@@ -78,6 +81,8 @@ router.get("/templates/:id", requireAuth, async (req, res) => {
       id: templatesTable.id,
       name: templatesTable.name,
       content: templatesTable.content,
+      kind: templatesTable.kind,
+      procedureSteps: templatesTable.procedureSteps,
       createdAt: templatesTable.createdAt,
       updatedAt: templatesTable.updatedAt,
       createdByName: usersTable.name,
@@ -96,12 +101,19 @@ router.get("/templates/:id", requireAuth, async (req, res) => {
 router.post("/templates", requireAuth, requireRole("admin"), async (req, res) => {
   const { name, content, tagIds } = req.body;
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
+  const kind = req.body.kind ?? "knowledge";
+  if (!isContentKind(kind)) { res.status(400).json({ error: "Invalid template kind" }); return; }
+  let procedureSteps: ReturnType<typeof validateSteps> = [];
+  try { if (kind === "procedure") procedureSteps = validateSteps(req.body.procedureSteps); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   const [row] = await db
     .insert(templatesTable)
     .values({
       name: name.trim(),
       content: sanitizeArticleHtml(content ?? ""),
+      kind,
+      procedureSteps,
       createdById: req.session.userId ?? null,
     })
     .returning();
@@ -117,10 +129,20 @@ router.patch("/templates/:id", requireAuth, requireRole("admin"), async (req, re
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [existing] = await db.select({ id: templatesTable.id }).from(templatesTable).where(eq(templatesTable.id, id)).limit(1);
+  const [existing] = await db.select().from(templatesTable).where(eq(templatesTable.id, id)).limit(1);
   if (!existing) { res.status(404).json({ error: "Template not found" }); return; }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
+  const kind = req.body.kind ?? existing.kind;
+  if (!isContentKind(kind)) { res.status(400).json({ error: "Invalid template kind" }); return; }
+  if (kind !== existing.kind) {
+    const defaults = await db.select().from(siteSettingsTable).where(inArray(siteSettingsTable.key, ["policy_template_id", "procedure_template_id"]));
+    if (defaults.some((s) => s.value === String(id))) { res.status(409).json({ error: "Clear or replace the default before changing its template kind" }); return; }
+  }
+  updates.kind = kind;
+  try { updates.procedureSteps = kind === "procedure" ? validateSteps(req.body.procedureSteps === undefined ? existing.procedureSteps : req.body.procedureSteps) : []; }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  if (req.body.name !== undefined && (typeof req.body.name !== "string" || !req.body.name.trim())) { res.status(400).json({ error: "Name is required" }); return; }
   if (req.body.name !== undefined) updates.name = String(req.body.name).trim();
   if (req.body.content !== undefined) updates.content = sanitizeArticleHtml(req.body.content);
 
@@ -142,6 +164,8 @@ router.delete("/templates/:id", requireAuth, requireRole("admin"), async (req, r
   const [existing] = await db.select({ id: templatesTable.id }).from(templatesTable).where(eq(templatesTable.id, id)).limit(1);
   if (!existing) { res.status(404).json({ error: "Template not found" }); return; }
 
+  const defaults = await db.select().from(siteSettingsTable).where(inArray(siteSettingsTable.key, ["policy_template_id", "procedure_template_id"]));
+  if (defaults.some((s) => s.value === String(id))) { res.status(409).json({ error: "Clear or replace the selected default template before deleting it" }); return; }
   await db.delete(templatesTable).where(eq(templatesTable.id, id));
   res.json({ message: "Deleted" });
 });

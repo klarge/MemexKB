@@ -1,8 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
-
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* Wikilinks use a dotted underline only when their destination is missing.
    Existing links remain visibly interactive through color and hover state. */
@@ -454,4 +453,10 @@ table.infobox td[colspan="2"] img {
     max-width: 100%;
     margin: 0;
   }
+}
+
+[data-wikilink-scope] a[data-wikilink="true"].wikilink-existing { text-decoration: none; }
+[data-wikilink-scope] a[data-wikilink="true"].wikilink-existing:hover { text-decoration: underline; text-underline-offset: 3px; }
+[data-wikilink-scope] a[data-wikilink="true"].wikilink-missing {
+  text-decoration-line: underline; text-decoration-style: dotted; text-decoration-thickness: 1.5px; text-underline-offset: 3px;
 }

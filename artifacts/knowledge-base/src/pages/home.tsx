@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { KIND_LABEL, articlePathFor, normalizeKind } from "@/lib/content-paths";
 import { Link, useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -52,6 +53,7 @@ type LogEntry = {
 };
 
 type SearchResult = {
+  kind?: string;
   id: number;
   slug: string;
   title: string;
@@ -110,7 +112,7 @@ type DashboardData = {
 
 function ArticleRow({ article, accent }: { article: ArticleSummary; accent?: boolean }) {
   return (
-    <Link href={`/knowledge/${article.slug}`}>
+    <Link href={articlePathFor(article)}>
       <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
         <FileText className={`h-4 w-4 shrink-0 ${accent ? "text-amber-500" : "text-muted-foreground"}`} />
         <div className="flex-1 min-w-0">
@@ -177,11 +179,18 @@ function SectionShell({
 
 function SearchResultRow({ result, icon }: { result: SearchResult; icon: React.ReactNode }) {
   return (
-    <Link href={`/knowledge/${result.slug}`}>
+    <Link href={articlePathFor(result)}>
       <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
         <div className="shrink-0 text-muted-foreground">{icon}</div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm truncate">{result.title}</p>
+          <p className="font-medium text-sm truncate">
+            {result.title}
+            {normalizeKind(result.kind) !== "knowledge" && (
+              <span className="ml-2 border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-primary" data-testid={`badge-search-kind-${result.id}`}>
+                {KIND_LABEL[normalizeKind(result.kind)]}
+              </span>
+            )}
+          </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Updated {formatDistanceToNow(new Date(result.updatedAt), { addSuffix: true })}
             {result.updatedByName && ` · ${result.updatedByName}`}
@@ -192,8 +201,8 @@ function SearchResultRow({ result, icon }: { result: SearchResult; icon: React.R
   );
 }
 
-function logHref(result: { logOwnerId?: number | null; logSlug?: string | null; slug: string }) {
-  return result.logOwnerId && result.logSlug ? `/logs/${result.logOwnerId}/${result.logSlug}` : `/knowledge/${result.slug}`;
+function logHref(result: { kind?: string; logOwnerId?: number | null; logSlug?: string | null; slug: string }) {
+  return result.logOwnerId && result.logSlug ? `/logs/${result.logOwnerId}/${result.logSlug}` : articlePathFor(result);
 }
 
 function DueDateBadge({ dueDate }: { dueDate: string }) {

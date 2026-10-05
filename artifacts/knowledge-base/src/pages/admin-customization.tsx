@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Paintbrush, Upload, Trash2, Loader2, Plus, ExternalLink, GripVertical, BookOpen, ListTodo, FolderKanban } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { PolicyAreaSettings, PolicySubjectManager } from "@/components/policy-settings";
 import { useSiteSettings, useInvalidateSiteSettings, LOGO_URL, FAVICON_URL, type NavLink } from "@/lib/site-settings";
 
 function generateId() {
@@ -702,6 +703,9 @@ export default function AdminCustomization() {
           </div>
         </CardContent>
       </Card>
+
+      <PolicyAreaSettings />
+      <PolicySubjectManager />
 
       {/* Sidebar preview */}
       <Card>

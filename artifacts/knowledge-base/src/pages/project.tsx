@@ -221,7 +221,14 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
               </h1>
             )}
             {project.description && (
-              <p className="text-muted-foreground text-sm mt-1">{project.description}</p>
+              <div className="text-muted-foreground text-sm mt-1 whitespace-pre-line">
+                {project.description}
+                {project.description.match(/(?:^|\n)(\/procedures\/[a-z0-9-]+)(?:\n|$)/)?.[1] && (
+                  <Link className="block text-primary hover:underline mt-1" href={project.description.match(/(?:^|\n)(\/procedures\/[a-z0-9-]+)(?:\n|$)/)![1]}>
+                    Source procedure
+                  </Link>
+                )}
+              </div>
             )}
           </div>
           {project.isOwner && (

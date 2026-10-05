@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tagsTable, articleTagsTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { tagsTable, articleTagsTable, articlesTable, articleGroupsTable, groupMembersTable } from "@workspace/db";
+import { eq, count, and, or, isNull, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 
 const router = Router();
@@ -22,6 +22,19 @@ router.get("/tags", requireAuth, async (req, res) => {
   const counts = await db
     .select({ tagId: articleTagsTable.tagId, count: count() })
     .from(articleTagsTable)
+    .innerJoin(articlesTable, eq(articlesTable.id, articleTagsTable.articleId))
+    .where(and(
+      eq(articlesTable.kind, "knowledge"), eq(articlesTable.isLogEntry, false), isNull(articlesTable.projectId),
+      req.session.userRole === "admin" ? undefined : or(
+        eq(articlesTable.createdById, req.session.userId!),
+        eq(articlesTable.visibility, "public"),
+        and(eq(articlesTable.visibility, "group"), sql`EXISTS (
+          SELECT 1 FROM ${articleGroupsTable}
+          JOIN ${groupMembersTable} ON ${groupMembersTable.groupId} = ${articleGroupsTable.groupId}
+          WHERE ${articleGroupsTable.articleId} = ${articlesTable.id} AND ${groupMembersTable.userId} = ${req.session.userId!}
+        )`),
+      ),
+    ))
     .groupBy(articleTagsTable.tagId);
 
   const countMap = new Map(counts.map((c) => [c.tagId, Number(c.count)]));

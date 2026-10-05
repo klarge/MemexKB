@@ -13,6 +13,8 @@ import {
 import { Loader2, Plus, Edit, Trash2, LayoutTemplate, Search } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { KIND_LABEL, normalizeKind } from "@/lib/content-paths";
+import { useSiteSettings } from "@/lib/site-settings";
 
 type TemplateSummary = {
   id: number;
@@ -21,6 +23,7 @@ type TemplateSummary = {
   createdAt: string;
   updatedAt: string;
   createdByName: string | null;
+  kind?: string;
 };
 
 function stripHtml(html: string) {
@@ -33,29 +36,35 @@ export default function Templates() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | "knowledge" | "policy" | "procedure">("all");
+  const { data: settings } = useSiteSettings();
 
   const canEdit = user?.role === "admin";
 
   const { data: templates = [], isLoading } = useQuery<TemplateSummary[]>({
-    queryKey: ["templates"],
-    queryFn: () => fetch("/api/templates").then((r) => r.json()),
+    queryKey: ["templates", user?.id],
+    queryFn: () => fetch("/api/templates", { credentials: "include" }).then((r) => r.json()),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) =>
-      fetch(`/api/templates/${id}`, { method: "DELETE" }).then((r) => {
-        if (!r.ok) throw new Error("Failed to delete");
+      fetch(`/api/templates/${id}`, { method: "DELETE", credentials: "include" }).then(async (r) => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error((err as { error?: string }).error ?? "Failed to delete");
+        }
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       toast({ title: "Template deleted" });
     },
-    onError: () => toast({ title: "Failed to delete template", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Failed to delete template", description: e.message, variant: "destructive" }),
   });
 
   const filtered = templates.filter((t) =>
+    (kindFilter === "all" || normalizeKind(t.kind) === kindFilter) && (
     t.name.toLowerCase().includes(search.toLowerCase()) ||
-    stripHtml(t.content).toLowerCase().includes(search.toLowerCase())
+    stripHtml(t.content).toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -67,7 +76,7 @@ export default function Templates() {
             Templates
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Reusable content blocks you can insert while editing any article.
+            Reusable starting points for Knowledge articles, Policies, and Procedures. Changes apply to future documents only.
           </p>
         </div>
         {canEdit && (
@@ -85,6 +94,14 @@ export default function Templates() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+      </div>
+
+      <div className="flex gap-2 flex-wrap" role="group" aria-label="Template type">
+        {(["all", "knowledge", "policy", "procedure"] as const).map((k) => (
+          <Button key={k} size="sm" variant={kindFilter === k ? "default" : "outline"} onClick={() => setKindFilter(k)} data-testid={`filter-template-${k}`}>
+            {k === "all" ? "All" : KIND_LABEL[k]}
+          </Button>
+        ))}
       </div>
 
       {isLoading ? (
@@ -116,6 +133,13 @@ export default function Templates() {
                   <CardTitle className="text-base font-semibold leading-snug line-clamp-2">
                     {t.name}
                   </CardTitle>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <Badge variant="secondary" className="text-xs font-normal" data-testid={`badge-template-kind-${t.id}`}>{KIND_LABEL[normalizeKind(t.kind)]}</Badge>
+                    {((normalizeKind(t.kind) === "policy" && settings?.policyTemplateId === t.id) ||
+                      (normalizeKind(t.kind) === "procedure" && settings?.procedureTemplateId === t.id)) && (
+                      <Badge variant="outline" className="text-xs font-normal">Default</Badge>
+                    )}
+                  </div>
                   {canEdit && (
                     <div className="flex gap-1 shrink-0">
                       <Button

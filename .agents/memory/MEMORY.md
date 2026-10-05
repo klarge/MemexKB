@@ -13,3 +13,4 @@
 - [Archiver runtime types](archiver-runtime-types.md) — ZIP export uses a class at runtime even though installed declarations describe an older callable API.
 - [Pnpm workspace config preservation](pnpm-workspace-config.md) — dependency installs can reserialize workspace YAML; preserve supply-chain settings and catalog specifiers.
 - [SAML IdP interoperability](saml-idp-interoperability.md) — confirmed live setup required correct ACS, signed assertion, and exact audience; diagnose logs before relaxing validation.
+- [Policies and procedures](policies-procedures.md) — policies are categorized, procedures are ordered; editor/admin runs create independent projects without card dependency gating.

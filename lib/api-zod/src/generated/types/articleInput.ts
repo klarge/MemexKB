@@ -6,8 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ArticleVisibility } from './articleVisibility';
+import type { ContentKind } from './contentKind';
+import type { ProcedureStep } from './procedureStep';
 
 export interface ArticleInput {
+  kind?: ContentKind;
+  /** @nullable */
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   /** @minLength 1 */
   title: string;
   /** HTML content */

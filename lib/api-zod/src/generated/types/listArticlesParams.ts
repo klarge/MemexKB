@@ -5,6 +5,7 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+import type { ListArticlesKind } from './listArticlesKind';
 import type { ListArticlesOrder } from './listArticlesOrder';
 import type { ListArticlesSort } from './listArticlesSort';
 
@@ -13,6 +14,14 @@ export type ListArticlesParams = {
  * Filter articles by title/content substring
  */
 search?: string;
+/**
+ * Defaults to knowledge; all is for cross-area link suggestions
+ */
+kind?: ListArticlesKind;
+/**
+ * Policies in this subject or any descendant; applied before pagination
+ */
+subjectId?: number;
 sort?: ListArticlesSort;
 order?: ListArticlesOrder;
 limit?: number;

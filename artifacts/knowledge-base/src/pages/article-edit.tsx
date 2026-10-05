@@ -14,6 +14,7 @@ import {
   useListArticles,
   useListTags,
   getListTagsQueryKey,
+  useListPolicySubjects,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,10 @@ import { WikilinkExtension, type WikilinkItem } from "@/lib/wikilink-extension";
 import { WikilinkList, type WikilinkListHandle } from "@/lib/wikilink-list";
 import { ResizableImageView } from "@/lib/resizable-image";
 import { InfoBoxExtension } from "@/lib/infobox-extension";
+import { AREA_BASE, AREA_KIND, KIND_AREA, KIND_LABEL, normalizeKind, type ContentArea } from "@/lib/content-paths";
+import { flattenSubjects } from "@/lib/policy-subjects";
+import { useSiteSettings } from "@/lib/site-settings";
+import { ProcedureStepsEditor, cleanSteps, validateSteps, type StepDraft } from "@/components/procedure-steps-editor";
 
 const ResizableImage = Image.extend({
   addAttributes() {
@@ -101,7 +106,16 @@ function AutosaveChip({ status }: { status: AutosaveStatus }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ArticleEdit({ params }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string } }) {
+function metaPayloadFor(kind: string, subject: number | null, steps: StepDraft[]): { policySubjectId?: number; procedureSteps?: StepDraft[] } {
+  if (kind === "policy") return subject ? { policySubjectId: subject } : {};
+  if (kind === "procedure" && validateSteps(steps) === null) return { procedureSteps: cleanSteps(steps) };
+  return {};
+}
+function metaKeyFor(kind: string, subject: number | null, steps: StepDraft[]): string {
+  return JSON.stringify(metaPayloadFor(kind, subject, steps));
+}
+
+export default function ArticleEdit({ params, area = "knowledge" }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string }; area?: ContentArea }) {
   const { slug, userId: userIdParam, logSlug, projectId: projectIdParam } = params || {};
   const projectId = Number(projectIdParam);
   const isProjectDocument = Number.isSafeInteger(projectId) && projectId > 0;
@@ -116,12 +130,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         : searchParams.get("title") || "")
     : "";
 
-  const draftKey = isLog ? "memex-draft-log" : isProjectDocument ? `memex-draft-project-${projectId}` : "memex-draft-article";
-
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const draftKey = isLog ? "memex-draft-log" : isProjectDocument ? `memex-draft-project-${projectId}` : area === "knowledge" ? "memex-draft-article" : `memex-draft-${area}-${user?.id ?? "signed-out"}`;
 
   const refreshLogLists = () => {
     queryClient.removeQueries({ queryKey: ["log-entries-home"] });
@@ -133,6 +146,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const [visibility, setVisibility] = useState<"personal" | "group" | "public">("personal");
   const [isStatic, setIsStatic] = useState(false);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const [policySubjectId, setPolicySubjectId] = useState<number | null>(null);
+  const [steps, setSteps] = useState<StepDraft[]>([{ title: "", description: "" }]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [isLogSaving, setIsLogSaving] = useState(false);
   const [isProjectSaving, setIsProjectSaving] = useState(false);
@@ -156,6 +171,9 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks what was last successfully saved to the server (existing articles)
   const lastSavedRef = useRef<{ title: string; content: string } | null>(null);
+  const lastSavedMetaRef = useRef<string>("{}");
+  const subjectRef = useRef<number | null>(null);
+  const stepsRef = useRef<StepDraft[]>([]);
   // Prevents background query refreshes after autosave from replacing the
   // document the user is actively editing.
   const loadedArticleKeyRef = useRef<string | null>(null);
@@ -166,19 +184,29 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
   // Keep refs current every render
   titleRef.current = title;
+  subjectRef.current = policySubjectId;
+  stepsRef.current = steps;
   groupsRef.current = selectedGroups;
   tagsRef.current = selectedTags;
 
-  const { data: templates = [] } = useQuery<{ id: number; name: string; content: string; tags: { id: number; name: string; color: string }[] }[]>({
-    queryKey: ["templates"],
-    queryFn: () => fetch("/api/templates").then((r) => r.json()),
+  type TemplateOption = {
+    id: number; name: string; content: string; kind?: string;
+    procedureSteps?: StepDraft[];
+    tags: { id: number; name: string; color: string }[];
+  };
+  const { data: allTemplates = [] } = useQuery<TemplateOption[]>({
+    queryKey: ["templates", user?.id],
+    queryFn: () => fetch("/api/templates", { credentials: "include" }).then((r) => r.json()),
   });
+  const { data: siteSettings } = useSiteSettings();
+  const { data: subjectsData = [] } = useListPolicySubjects({ query: { queryKey: ["/api/policy-subjects"] } });
+  const subjectOptions = flattenSubjects(subjectsData);
 
   const { data: groupsData } = useListGroups();
   const { data: tagsData } = useListTags({ query: { queryKey: getListTagsQueryKey() } });
   // Limit to 100 most-recently-updated articles for wikilink autocomplete.
   // 500 was unnecessarily large and would be slow at scale.
-  const { data: articlesData } = useListArticles({ limit: 100, sort: "updated_at", order: "desc" });
+  const { data: articlesData } = useListArticles({ limit: 100, sort: "updated_at", order: "desc", kind: "all" });
 
   const { data: regularArticle, isLoading: isLoadingArticle, isError: isArticleError } = useGetArticle(slug as string, {
     query: {
@@ -192,15 +220,25 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
   });
   const article = isLogRoute ? logArticle : regularArticle;
   const articleSlug = article?.slug ?? slug;
+  const kind = isNew ? AREA_KIND[area] : normalizeKind(article?.kind);
+  const kindArea = KIND_AREA[kind];
+  const templates = allTemplates.filter((t) => normalizeKind(t.kind) === kind);
   const articlePath = isLogRoute
     ? `/logs/${logOwnerId}/${logSlug}`
     : isProjectDocument
       ? `/projects/${projectId}/documents/${articleSlug}`
-      : `/knowledge/${articleSlug}`;
+      : `${AREA_BASE[kindArea]}/${articleSlug}`;
   const editorArticleKey = isLogRoute
     ? `log:${logOwnerId}:${logSlug}`
     : `${isProjectDocument ? `project:${projectId}:` : "article:"}${articleSlug ?? ""}`;
   const canEditArticle = isNew || Boolean(article?.canEdit);
+
+  // Canonical route redirect when a slug is opened under the wrong area.
+  useEffect(() => {
+    if (!isNew && article && !isLogRoute && !isProjectDocument && kindArea !== area) {
+      setLocation(`${AREA_BASE[kindArea]}/${article.slug}/edit`, { replace: true });
+    }
+  }, [article, isNew, isLogRoute, isProjectDocument, kindArea, area, setLocation]);
 
   const createMutation = useCreateArticle();
   const updateMutation = useUpdateArticle();
@@ -244,7 +282,9 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
               : "No internal links needed updating.",
           });
           setSlugDialogOpen(false);
-          setLocation(`/knowledge/${data.slug}`);
+          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+          queryClient.invalidateQueries({ queryKey: ["home-search"] });
+          setLocation(`${AREA_BASE[kindArea]}/${data.slug}`);
         },
         onError: (err) => {
           toast({
@@ -334,6 +374,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     wikilinkItemsRef.current = (articlesData?.articles ?? []).map((a) => ({
       slug: a.slug,
       title: a.title,
+      kind: a.kind,
     }));
   }, [articlesData]);
 
@@ -453,6 +494,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     setVisibility(article.visibility ?? (article.groups?.length ? "group" : "personal"));
     setIsStatic(article.isStatic ?? false);
     setSelectedTags(article.tags?.map((t) => t.id) || []);
+    setPolicySubjectId(article.policySubjectId ?? null);
+    setSteps(article.procedureSteps?.length ? article.procedureSteps.map((x) => ({ title: x.title, description: x.description })) : [{ title: "", description: "" }]);
     if (editor.getHTML() !== article.content) {
       // Pass false as emitUpdate so this programmatic load does NOT fire
       // the editor's "update" event and accidentally schedule an autosave.
@@ -463,6 +506,11 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     // attribute ordering, which would cause the diff check to think content
     // changed and trigger a spurious save on first open.
     lastSavedRef.current = { title: article.title, content: editor.getHTML() };
+    lastSavedMetaRef.current = metaKeyFor(
+      normalizeKind(article.kind),
+      article.policySubjectId ?? null,
+      (article.procedureSteps ?? []).map((x) => ({ title: x.title, description: x.description })),
+    );
   }, [article, isNew, editor, editorArticleKey]);
 
   // ─── Draft restore (new articles) ─────────────────────────────────────────
@@ -471,16 +519,38 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     try {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return;
-      const draft = JSON.parse(raw) as { title?: string; content?: string };
-      const hasContent = draft.title?.trim() || (draft.content && draft.content !== "<p></p>");
+      const draft = JSON.parse(raw) as { title?: string; content?: string; policySubjectId?: number | null; procedureSteps?: StepDraft[] };
+      const hasContent = draft.title?.trim() || (draft.content && draft.content !== "<p></p>") || draft.policySubjectId || draft.procedureSteps?.some((x) => x.title?.trim() || x.description?.trim());
       if (!hasContent) return;
       if (draft.title) setTitle(draft.title);
+      if (kind === "policy" && draft.policySubjectId) setPolicySubjectId(draft.policySubjectId);
+      if (kind === "procedure" && Array.isArray(draft.procedureSteps) && draft.procedureSteps.length) {
+        setSteps(draft.procedureSteps.map((x) => ({ title: String(x.title ?? ""), description: String(x.description ?? "") })));
+      }
       if (draft.content) pendingDraftRef.current = draft.content;
       setDraftBanner(true);
     } catch {
       localStorage.removeItem(draftKey);
     }
-  }, [isNew, draftKey]);
+  }, [isNew, draftKey, kind]);
+
+  // Apply the area's default template to NEW documents only (skipped when a draft exists).
+  const defaultAppliedRef = useRef(false);
+  const defaultTemplateId = kind === "policy" ? siteSettings?.policyTemplateId : kind === "procedure" ? siteSettings?.procedureTemplateId : null;
+  useEffect(() => {
+    if (!isNew || isLog || isProjectDocument || kind === "knowledge" || defaultAppliedRef.current) return;
+    if (!editor || !defaultTemplateId || !siteSettings) return;
+    if (pendingDraftRef.current || draftBanner) { defaultAppliedRef.current = true; return; }
+    const t = allTemplates.find((x) => x.id === defaultTemplateId);
+    if (!t) return;
+    defaultAppliedRef.current = true;
+    // Never clobber work the user already started while the template was loading.
+    const stepsPristine = stepsRef.current.every((x) => !x.title.trim() && !x.description.trim());
+    if (!editor.isEmpty || titleRef.current.trim() || !stepsPristine || subjectRef.current) return;
+    editor.commands.setContent(t.content || "", { emitUpdate: false });
+    if (t.procedureSteps?.length) setSteps(t.procedureSteps.map((x) => ({ title: x.title, description: x.description })));
+    if (t.tags?.length) setSelectedTags((prev) => Array.from(new Set([...prev, ...t.tags.map((g) => g.id)])));
+  }, [isNew, isLog, isProjectDocument, kind, editor, defaultTemplateId, siteSettings, allTemplates, draftBanner]);
 
   // Apply pending draft content once the editor is ready
   useEffect(() => {
@@ -501,9 +571,13 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       const currentContent = editor.getHTML();
 
       if (!currentTitle) return;
+      const metaPayload = metaPayloadFor(kind, subjectRef.current, stepsRef.current);
+      const metaKey = JSON.stringify(metaPayload);
+      const metaDirty = Object.keys(metaPayload).length > 0 && metaKey !== lastSavedMetaRef.current;
       if (
         currentTitle === lastSavedRef.current.title &&
-        currentContent === lastSavedRef.current.content
+        currentContent === lastSavedRef.current.content &&
+        !metaDirty
       ) return;
 
       setAutosaveStatus("saving");
@@ -518,21 +592,25 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             groupIds: isLog || isProjectDocument ? undefined : groupsRef.current,
              visibility: isLog || isProjectDocument ? undefined : visibility,
             tagIds: tagsRef.current,
+            ...(metaDirty ? metaPayload : {}),
           }),
         });
         if (!res.ok) throw new Error("autosave failed");
         const savedArticle = await res.json();
         lastSavedRef.current = { title: currentTitle, content: currentContent };
+        if (metaDirty) lastSavedMetaRef.current = metaKey;
         setAutosaveStatus("saved");
         // Keep other views in sync without refetching the article being edited.
         // A refetch here can arrive while the user has typed more characters,
         // causing the load effect to replace their newer local document.
         queryClient.setQueryData(getGetArticleQueryKey(articleSlug), savedArticle);
+        queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+        queryClient.invalidateQueries({ queryKey: ["article-versions", articleSlug] });
       } catch {
         setAutosaveStatus("error");
       }
     }, 3000);
-  }, [isNew, articleSlug, editor, queryClient, visibility, isLog, isProjectDocument, canEditArticle]);
+  }, [isNew, articleSlug, editor, queryClient, visibility, isLog, isProjectDocument, canEditArticle, kind]);
 
   // ─── Autosave: new articles → localStorage ────────────────────────────────
   const scheduleDraftSave = useCallback(() => {
@@ -542,10 +620,16 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     autosaveTimerRef.current = setTimeout(() => {
       const currentTitle = titleRef.current;
       const currentContent = editor.getHTML();
-      const isEmpty = !currentTitle.trim() && currentContent === "<p></p>";
+      const stepsBlank = stepsRef.current.every((x) => !x.title.trim() && !x.description.trim());
+      const isEmpty = !currentTitle.trim() && currentContent === "<p></p>" && stepsBlank && !subjectRef.current;
       if (isEmpty) return;
       try {
-        localStorage.setItem(draftKey, JSON.stringify({ title: currentTitle, content: currentContent }));
+        localStorage.setItem(draftKey, JSON.stringify({
+          title: currentTitle,
+          content: currentContent,
+          policySubjectId: subjectRef.current,
+          procedureSteps: stepsRef.current,
+        }));
         setAutosaveStatus("saved");
       } catch {
         // storage quota — silently ignore
@@ -572,6 +656,24 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     scheduleAutosave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
+
+  // Structured fields (category, steps) schedule the same save path as content.
+  useEffect(() => {
+    if (!isNew && !lastSavedRef.current) return;
+    scheduleAutosaveRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policySubjectId, steps]);
+
+  // Warn before leaving with structured edits that autosave cannot persist yet.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isNew || kind !== "procedure" || !lastSavedRef.current) return;
+      const dirty = JSON.stringify(cleanSteps(stepsRef.current)) !== JSON.stringify(cleanSteps(JSON.parse(lastSavedMetaRef.current).procedureSteps ?? []));
+      if (dirty) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isNew, kind]);
 
   // Wire up title change → draft save (for new articles)
   useEffect(() => {
@@ -605,6 +707,23 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     const content = editor?.getHTML() || "";
+
+    if (kind === "policy" && !policySubjectId) {
+      toast({ title: "Category required", description: "Choose a category for this policy.", variant: "destructive" });
+      return;
+    }
+    if (kind === "procedure") {
+      const problem = validateSteps(steps);
+      if (problem) {
+        toast({ title: "Steps incomplete", description: problem, variant: "destructive" });
+        return;
+      }
+    }
+    const kindFields = kind === "policy"
+      ? { policySubjectId }
+      : kind === "procedure"
+        ? { procedureSteps: cleanSteps(steps) }
+        : {};
 
     if (isNew && isLog) {
       setIsLogSaving(true);
@@ -662,13 +781,15 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
 
     if (isNew) {
       createMutation.mutate(
-        { data: { title, content, groupIds: isLog ? undefined : selectedGroups, visibility: isLog ? undefined : visibility, isStatic: isLog ? undefined : isStatic, tagIds: selectedTags } },
+        { data: { ...kindFields, kind, title, content, groupIds: isLog ? undefined : selectedGroups, visibility: isLog ? undefined : visibility, isStatic: isLog ? undefined : isStatic, tagIds: selectedTags } },
         {
           onSuccess: (data) => {
             localStorage.removeItem(draftKey);
             queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
-            toast({ title: "Article created" });
-            setLocation(`/knowledge/${data.slug}`);
+            queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+            queryClient.invalidateQueries({ queryKey: ["home-search"] });
+            toast({ title: `${KIND_LABEL[kind]} created` });
+            setLocation(`${AREA_BASE[KIND_AREA[normalizeKind(data.kind ?? kind)]]}/${data.slug}`);
           },
           onError: (err) => {
             toast({ title: "Failed to create", description: err.message, variant: "destructive" });
@@ -677,17 +798,21 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       );
     } else if (articleSlug) {
       updateMutation.mutate(
-        { slug: articleSlug, data: { title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, visibility: isLog || isProjectDocument ? undefined : visibility, isStatic: isLog || isProjectDocument ? undefined : isStatic, tagIds: selectedTags } },
+        { slug: articleSlug, data: { ...kindFields, title, content, groupIds: isLog || isProjectDocument ? undefined : selectedGroups, visibility: isLog || isProjectDocument ? undefined : visibility, isStatic: isLog || isProjectDocument ? undefined : isStatic, tagIds: selectedTags } },
         {
           onSuccess: async (data) => {
             lastSavedRef.current = { title, content };
+            lastSavedMetaRef.current = JSON.stringify(metaPayloadFor(kind, policySubjectId, steps));
             setAutosaveStatus("idle");
             queryClient.invalidateQueries({ queryKey: getGetArticleQueryKey(articleSlug) });
             queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
+            queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+            queryClient.invalidateQueries({ queryKey: ["home-search"] });
+            queryClient.invalidateQueries({ queryKey: ["article-versions", articleSlug] });
             if (isLogRoute) refreshLogLists();
             toast({ title: "Article updated" });
             await releaseLock();
-            setLocation(isLogRoute || isProjectDocument ? articlePath : `/knowledge/${data.slug}`);
+            setLocation(isLogRoute || isProjectDocument ? articlePath : `${AREA_BASE[kindArea]}/${data.slug}`);
           },
           onError: (err) => {
             toast({ title: "Failed to update", description: err.message, variant: "destructive" });
@@ -769,8 +894,8 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
       <div className="rounded-lg border border-dashed p-12 text-center">
         <h2 className="text-xl font-semibold">Article not found</h2>
         <p className="mt-2 text-muted-foreground">This article does not exist or you do not have access to edit it.</p>
-        <Button className="mt-4" variant="outline" onClick={() => setLocation("/knowledge")}>
-          Back to knowledge
+        <Button className="mt-4" variant="outline" onClick={() => setLocation(AREA_BASE[area])}>
+          Back to {area}
         </Button>
       </div>
     );
@@ -790,7 +915,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-bold">
-          {isLog ? "Create Log Entry" : isNew ? (isProjectDocument ? "Create Document" : "Create Article") : isProjectDocument ? "Edit Document" : "Edit Article"}
+          {isLog ? "Create Log Entry" : isNew ? (isProjectDocument ? "Create Document" : kind === "knowledge" ? "Create Article" : `Create ${KIND_LABEL[kind]}`) : isProjectDocument ? "Edit Document" : kind === "knowledge" ? "Edit Article" : `Edit ${KIND_LABEL[kind]}`}
         </h1>
         <div className="flex-1" />
         <AutosaveChip status={autosaveStatus} />
@@ -874,7 +999,7 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                 <div className="space-y-2">
                   <Label htmlFor="article-slug">URL ending</Label>
                   <div className="flex items-center rounded-md border border-input bg-muted/40 px-3">
-                    <span className="text-sm text-muted-foreground">/knowledge/</span>
+                    <span className="text-sm text-muted-foreground">{AREA_BASE[kindArea]}/</span>
                     <Input
                       id="article-slug"
                       value={slugDraft}
@@ -899,8 +1024,12 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
             </DialogContent>
           </Dialog>
 
+          {kind === "procedure" && (
+            <ProcedureStepsEditor steps={steps} onChange={setSteps} />
+          )}
+
           <div className="space-y-2">
-            <Label className="text-base">Content</Label>
+            <Label className="text-base">{kind === "procedure" ? "Description" : "Content"}</Label>
 
             {editor && (
               <div className="border border-border rounded-md bg-card overflow-hidden sticky top-0 z-10 shadow-sm mb-2 flex items-center p-1 gap-0.5 flex-wrap">
@@ -1034,6 +1163,9 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
                       className="w-full text-left rounded-md border border-border px-4 py-3 hover:bg-muted transition-colors"
                       onClick={() => {
                         editor?.chain().focus().insertContent(t.content).run();
+                        if (kind === "procedure" && t.procedureSteps?.length) {
+                          setSteps(t.procedureSteps.map((x) => ({ title: x.title, description: x.description })));
+                        }
                         if (t.tags?.length) {
                           setSelectedTags((prev) => {
                             const next = [...prev];
@@ -1063,6 +1195,30 @@ export default function ArticleEdit({ params }: { params?: { slug?: string; user
         <div className="w-full lg:w-72 shrink-0 space-y-6">
           <Card>
             <CardContent className="p-4 space-y-4">
+              {kind === "policy" && (
+                <div>
+                  <Label htmlFor="policy-subject" className="mb-2 block">Category</Label>
+                  <select
+                    id="policy-subject"
+                    value={policySubjectId ?? ""}
+                    onChange={(e) => setPolicySubjectId(e.target.value ? Number(e.target.value) : null)}
+                    className="flex h-9 w-full border border-input bg-transparent px-3 py-1 text-sm"
+                    data-testid="select-policy-subject"
+                  >
+                    <option value="">Select a category</option>
+                    {subjectOptions.map((n) => (
+                      <option key={n.subject.id} value={n.subject.id}>
+                        {`${"\u00a0\u00a0".repeat(n.depth)}${n.subject.name}`}
+                      </option>
+                    ))}
+                  </select>
+                  {subjectOptions.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      No categories exist yet. An administrator can add them under Customization.
+                    </p>
+                  )}
+                </div>
+              )}
               {tagsData && tagsData.length > 0 && (
                 <div>
                   <Label className="mb-2 block">Tags</Label>

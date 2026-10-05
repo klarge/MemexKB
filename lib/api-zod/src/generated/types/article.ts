@@ -7,10 +7,16 @@
  */
 import type { ArticleSummary } from './articleSummary';
 import type { ArticleVisibility } from './articleVisibility';
+import type { ContentKind } from './contentKind';
 import type { GroupSummary } from './groupSummary';
+import type { ProcedureStep } from './procedureStep';
 import type { Tag } from './tag';
 
 export interface Article {
+  kind?: ContentKind;
+  /** @nullable */
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   id: number;
   /**
      * Owning project when this article is a project document

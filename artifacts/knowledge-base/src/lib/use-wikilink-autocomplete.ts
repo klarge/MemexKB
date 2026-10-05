@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface WikilinkSuggestion {
   title: string;
   slug: string;
+  kind?: string;
 }
 
 /**
@@ -28,11 +29,13 @@ export function insertWikilink(
   value: string,
   cursor: number,
   title: string,
+  slug?: string,
 ): { newValue: string; newCursor: number } {
   const before = value.slice(0, cursor);
   const lastOpen = before.lastIndexOf("[[");
   if (lastOpen === -1) return { newValue: value, newCursor: cursor };
-  const inserted = `[[${title}]]`;
+  const label = title.replace(/[\[\]|]/g, " ").replace(/\s+/g, " ").trim();
+  const inserted = slug ? `[[${slug}|${label}]]` : `[[${label}]]`;
   const newValue = value.slice(0, lastOpen) + inserted + value.slice(cursor);
   const newCursor = lastOpen + inserted.length;
   return { newValue, newCursor };
@@ -86,7 +89,7 @@ export function useWikilinkAutocomplete(): UseWikilinkAutocompleteResult {
       abortRef.current = new AbortController();
 
       try {
-        const params = new URLSearchParams({ search: q, limit: "10" });
+        const params = new URLSearchParams({ search: q, limit: "10", kind: "all" });
         const res = await fetch(`/api/articles?${params}`, {
           credentials: "include",
           signal: abortRef.current.signal,

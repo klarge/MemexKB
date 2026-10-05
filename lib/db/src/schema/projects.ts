@@ -21,6 +21,13 @@ export const projectsTable = pgTable("projects", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const procedureRunsTable = pgTable("procedure_runs", {
+  key: text("key").primaryKey(),
+  sourceSlug: text("source_slug").notNull(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  boardId: integer("board_id").notNull(),
+});
+
 export const projectGroupsTable = pgTable(
   "project_groups",
   {

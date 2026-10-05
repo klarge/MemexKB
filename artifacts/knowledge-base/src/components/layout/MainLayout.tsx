@@ -35,6 +35,8 @@ import {
   Sun,
   Moon,
   ExternalLink,
+  ScrollText,
+  ListChecks,
   BookOpen,
   Library,
   ListTodo,
@@ -126,6 +128,26 @@ export function MainLayout({ children }: { children: ReactNode }) {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {siteSettings?.policiesEnabled && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.startsWith("/policies")}>
+                        <Link href="/policies" data-testid="nav-policies">
+                          <ScrollText className="mr-2 h-4 w-4" />
+                          <span>Policies</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {siteSettings?.proceduresEnabled && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={location.startsWith("/procedures")}>
+                        <Link href="/procedures" data-testid="nav-procedures">
+                          <ListChecks className="mr-2 h-4 w-4" />
+                          <span>Procedures</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                   {siteSettings?.logEntriesEnabled && (
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={location === "/log"}>

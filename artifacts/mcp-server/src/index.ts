@@ -32,7 +32,7 @@ function createMcpServer(token: string, userId: number): McpServer {
 
 server.tool(
   "search_articles",
-  "Search the Memex knowledge base by keyword. Returns titles, slugs, tags, and a short excerpt for each matching article. Use get_article to read the full content of a specific result.",
+  "Search authorized Knowledge, Policies, and Procedures by keyword. Returns content kinds, titles, slugs, and tags. Use get_article to read the full content.",
   {
     query: z.string().min(1).describe("Search query — supports partial matches"),
     tag_id: z
@@ -52,6 +52,7 @@ server.tool(
   async ({ query, tag_id, limit }) => {
     const { articles, total } = await listArticles({
       search: query,
+      kind: "all",
       tagId: tag_id,
       limit,
       sort: "updated_at",
@@ -76,6 +77,7 @@ server.tool(
     articles.forEach((a, i) => {
       lines.push(`${i + 1}. **${a.title}**`);
       lines.push(`   Slug: ${a.slug}`);
+      lines.push(`   Kind: ${a.kind ?? "knowledge"}`);
       lines.push(`   Updated: ${formatDate(a.updatedAt)}${a.updatedByName ? ` by ${a.updatedByName}` : ""}`);
       if (a.tags.length > 0) lines.push(`   Tags: ${tagList(a.tags)}`);
       if (a.isRestricted && !a.canAccess) {
@@ -120,6 +122,8 @@ server.tool(
     lines.push(`# ${article.title}`);
     lines.push("");
     lines.push(`**Slug:** ${article.slug}`);
+    lines.push(`**Kind:** ${article.kind ?? "knowledge"}`);
+    if (article.policySubjectId) lines.push(`**Policy subject ID:** ${article.policySubjectId}`);
     lines.push(`**Updated:** ${formatDate(article.updatedAt)}${article.updatedByName ? ` by ${article.updatedByName}` : ""}`);
     lines.push(`**Created:** ${formatDate(article.createdAt)}`);
     if (article.tags.length > 0) lines.push(`**Tags:** ${tagList(article.tags)}`);
@@ -131,6 +135,12 @@ server.tool(
     // Body
     const body = htmlToText(article.content);
     lines.push(body || "_This article has no content._");
+    if (article.procedureSteps?.length) {
+      lines.push("", "## Procedure steps");
+      article.procedureSteps.forEach((step, index) => {
+        lines.push("", `${index + 1}. ${step.title}`, htmlToText(step.description));
+      });
+    }
 
     // Backlinks
     if (article.backlinks.length > 0) {
@@ -177,9 +187,12 @@ server.tool(
       .optional()
       .default("updated_at")
       .describe("Sort order field (default: updated_at)"),
+    kind: z.enum(["knowledge", "policy", "procedure", "all"]).optional().default("knowledge")
+      .describe("Content kind; ordinary Knowledge by default, all includes Policies and Procedures"),
   },
-  async ({ tag_id, limit, offset, sort }) => {
+  async ({ tag_id, limit, offset, sort, kind }) => {
     const { articles, total } = await listArticles({
+      kind,
       tagId: tag_id,
       limit,
       offset,
@@ -211,7 +224,7 @@ server.tool(
       const tags = a.tags.length > 0 ? ` [${tagList(a.tags)}]` : "";
       const restricted = a.isRestricted && !a.canAccess ? " 🔒" : "";
       lines.push(`${num}. **${a.title}**${restricted}`);
-      lines.push(`   Slug: \`${a.slug}\`  |  Updated: ${formatDate(a.updatedAt)}${tags}`);
+      lines.push(`   Kind: ${a.kind ?? "knowledge"}  |  Slug: \`${a.slug}\`  |  Updated: ${formatDate(a.updatedAt)}${tags}`);
     });
 
     if (to < total) {

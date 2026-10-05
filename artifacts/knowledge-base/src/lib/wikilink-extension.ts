@@ -9,6 +9,7 @@ export const WikilinkPluginKey = new PluginKey("wikilink");
 export interface WikilinkItem {
   slug: string;
   title: string;
+  kind?: string;
 }
 
 export interface WikilinkExtensionOptions {
@@ -50,7 +51,7 @@ export const WikilinkExtension = Extension.create<WikilinkExtensionOptions>({
             .chain()
             .focus()
             .deleteRange(range)
-            .insertContent(`[[${props.title}]] `)
+            .insertContent(`[[${props.slug}|${props.title.replace(/[\[\]|]/g, " ").replace(/\s+/g, " ").trim()}]] `)
             .run();
         },
         items: (): WikilinkItem[] => [],

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { AREA_BASE, KIND_AREA, normalizeKind, type ContentArea } from "@/lib/content-paths";
 import { diffWords } from "diff";
 import DOMPurify from "dompurify";
 
@@ -86,7 +87,7 @@ function WordDiff({ a, b }: { a: string; b: string }) {
   );
 }
 
-export default function ArticleHistory({ params }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string } }) {
+export default function ArticleHistory({ params, area = "knowledge" }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string }; area?: ContentArea }) {
   const userId = Number(params?.userId);
   const logSlug = params?.logSlug;
   const projectId = Number(params?.projectId);
@@ -106,12 +107,12 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
     ? `/logs/${userId}/${logSlug}`
     : isProjectDocument
       ? `/projects/${projectId}/documents/${slug}`
-      : `/knowledge/${slug}`;
+      : `${AREA_BASE[area]}/${slug}`;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: articlePermission } = useQuery<{ canEdit?: boolean }>({
+  const { data: articlePermission } = useQuery<{ canEdit?: boolean; kind?: string }>({
     queryKey: ["article-history-permissions", slug],
     queryFn: async () => {
       const response = await fetch(`/api/articles/${slug}`, { credentials: "include" });
@@ -122,6 +123,12 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
     retry: false,
   });
   const canEdit = Boolean(articlePermission?.canEdit);
+  const actualArea = KIND_AREA[normalizeKind(articlePermission?.kind)];
+  useEffect(() => {
+    if (articlePermission && !isLogRoute && !isProjectDocument && actualArea !== area) {
+      setLocation(`${AREA_BASE[actualArea]}/${slug}/history`, { replace: true });
+    }
+  }, [articlePermission, actualArea, area, isLogRoute, isProjectDocument, slug, setLocation]);
 
   const { data: versions, isLoading } = useQuery({
     queryKey: ["article-versions", slug],
@@ -157,6 +164,9 @@ export default function ArticleHistory({ params }: { params?: { slug?: string; u
       toast({ title: "Version restored", description: "The article has been restored to that version." });
       queryClient.invalidateQueries({ queryKey: ["article-versions", slug] });
       queryClient.invalidateQueries({ queryKey: ["getArticle", slug] });
+      queryClient.invalidateQueries({ queryKey: ["article-history-permissions", slug] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["home-search"] });
           setLocation(articlePath);
     },
     onError: (err) =>

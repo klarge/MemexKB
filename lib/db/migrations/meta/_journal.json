@@ -148,6 +148,13 @@
       "when": 1790211600000,
       "tag": "0020_add_article_static",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791158400000,
+      "tag": "0021_add_policies_procedures",
+      "breakpoints": true
     }
   ]
 }

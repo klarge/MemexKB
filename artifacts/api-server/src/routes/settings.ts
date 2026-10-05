@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { db } from "@workspace/db";
-import { siteSettingsTable } from "@workspace/db";
+import { siteSettingsTable, templatesTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { requireRole } from "../lib/auth";
 
@@ -97,7 +97,7 @@ router.get("/settings", async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "accent_color", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "accent_color", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled", "policies_enabled", "procedures_enabled", "policy_template_id", "procedure_template_id"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
@@ -110,6 +110,10 @@ router.get("/settings", async (_req, res) => {
     logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
     projectsEnabled: map.get("projects_enabled") !== "false",
+    policiesEnabled: map.get("policies_enabled") === "true",
+    proceduresEnabled: map.get("procedures_enabled") === "true",
+    policyTemplateId: Number(map.get("policy_template_id")) || null,
+    procedureTemplateId: Number(map.get("procedure_template_id")) || null,
   });
 });
 
@@ -137,7 +141,7 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
   const rows = await db
     .select()
     .from(siteSettingsTable)
-    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "accent_color", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled"]));
+    .where(inArray(siteSettingsTable.key, ["site_name", "logo_mime_type", "favicon_mime_type", "favicon_version", "accent_color", "nav_links", "log_entries_enabled", "tasks_enabled", "projects_enabled", "policies_enabled", "procedures_enabled", "policy_template_id", "procedure_template_id"]));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   res.json({
     siteName: map.get("site_name") ?? "Memex",
@@ -150,12 +154,33 @@ router.get("/admin/settings", requireRole("admin"), async (_req, res) => {
     logEntriesEnabled: map.get("log_entries_enabled") !== "false",
     tasksEnabled: map.get("tasks_enabled") !== "false",
     projectsEnabled: map.get("projects_enabled") !== "false",
+    policiesEnabled: map.get("policies_enabled") === "true",
+    proceduresEnabled: map.get("procedures_enabled") === "true",
+    policyTemplateId: Number(map.get("policy_template_id")) || null,
+    procedureTemplateId: Number(map.get("procedure_template_id")) || null,
   });
 });
 
 // ── Admin: update settings ────────────────────────────────────────────────────
 
 router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
+  const areaUpdates: { key: string; value: string }[] = [];
+  for (const [field, key] of [["policiesEnabled", "policies_enabled"], ["proceduresEnabled", "procedures_enabled"]]) {
+    if (req.body[field] !== undefined) {
+      if (typeof req.body[field] !== "boolean") { res.status(400).json({ error: `${field} must be a boolean` }); return; }
+      areaUpdates.push({ key, value: String(req.body[field]) });
+    }
+  }
+  for (const [field, key, kind] of [["policyTemplateId", "policy_template_id", "policy"], ["procedureTemplateId", "procedure_template_id", "procedure"]]) {
+    const id = req.body[field];
+    if (id === undefined) continue;
+    if (id !== null) {
+      if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ error: "Invalid default template" }); return; }
+      const [template] = await db.select().from(templatesTable).where(eq(templatesTable.id, id)).limit(1);
+      if (!template || template.kind !== kind) { res.status(400).json({ error: `Choose a ${kind} template` }); return; }
+    }
+    areaUpdates.push({ key, value: id === null ? "" : String(id) });
+  }
   const { siteName, logEntriesEnabled, tasksEnabled, projectsEnabled, accentColor } = req.body as {
     siteName?: string;
     logEntriesEnabled?: boolean;
@@ -192,6 +217,7 @@ router.patch("/admin/settings", requireRole("admin"), async (req, res) => {
     await setSetting("accent_color", accentColor.toLowerCase());
   }
 
+  for (const update of areaUpdates) await setSetting(update.key, update.value);
   res.json({ ok: true });
 });
 

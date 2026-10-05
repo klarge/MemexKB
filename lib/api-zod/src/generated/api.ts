@@ -147,6 +147,8 @@ export const listArticlesQueryOffsetDefault = 0;
 
 export const ListArticlesQueryParams = zod.object({
   "search": zod.coerce.string().optional().describe('Filter articles by title/content substring'),
+  "kind": zod.enum(['knowledge', 'policy', 'procedure', 'all']).optional().describe('Defaults to knowledge; all is for cross-area link suggestions'),
+  "subjectId": zod.coerce.number().int().optional().describe('Policies in this subject or any descendant; applied before pagination'),
   "sort": zod.enum(['title', 'updated_at', 'created_at']).default(listArticlesQuerySortDefault),
   "order": zod.enum(['asc', 'desc']).default(listArticlesQueryOrderDefault),
   "limit": zod.coerce.number().int().default(listArticlesQueryLimitDefault),
@@ -156,6 +158,8 @@ export const ListArticlesQueryParams = zod.object({
 
 export const ListArticlesResponse = zod.object({
   "articles": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -192,7 +196,15 @@ export const ListArticlesResponse = zod.object({
 
 
 
+
+
 export const CreateArticleBody = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "title": zod.string().min(1),
   "content": zod.string().describe('HTML content'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
@@ -202,7 +214,17 @@ export const CreateArticleBody = zod.object({
   "isLogEntry": zod.boolean().optional().describe('Create a personal log entry instead of a shared article')
 })
 
+
+
+
+
 export const CreateArticleResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -223,6 +245,8 @@ export const CreateArticleResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -259,6 +283,75 @@ export const CreateArticleResponse = zod.object({
 })
 
 
+export const ListPolicySubjectsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "parentId": zod.number().int().nullable()
+})
+export const ListPolicySubjectsResponse = zod.array(ListPolicySubjectsResponseItem)
+
+
+
+
+
+export const CreatePolicySubjectBody = zod.object({
+  "name": zod.string().min(1),
+  "parentId": zod.number().int().nullish()
+})
+
+export const CreatePolicySubjectResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "parentId": zod.number().int().nullable()
+})
+
+
+export const UpdatePolicySubjectParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+
+
+
+export const UpdatePolicySubjectBody = zod.object({
+  "name": zod.string().min(1),
+  "parentId": zod.number().int().nullish()
+})
+
+export const UpdatePolicySubjectResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "parentId": zod.number().int().nullable()
+})
+
+
+export const DeletePolicySubjectParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const DeletePolicySubjectResponse = zod.void()
+
+
+export const RunProcedureParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+
+export const runProcedureBodyRequestIdMax = 100;
+
+
+
+export const RunProcedureBody = zod.object({
+  "name": zod.string().min(1),
+  "requestId": zod.string().min(1).max(runProcedureBodyRequestIdMax)
+})
+
+export const RunProcedureResponse = zod.object({
+  "projectId": zod.number().int(),
+  "boardId": zod.number().int()
+})
+
+
 /**
  * @summary List articles sorted by oldest last-modified (maintenance view)
  */
@@ -272,6 +365,8 @@ export const ListArticlesMaintenanceQueryParams = zod.object({
 
 export const ListArticlesMaintenanceResponse = zod.object({
   "articles": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -313,6 +408,8 @@ export const ListProjectDocumentsParams = zod.object({
 export const ListProjectDocumentsResponse = zod.object({
   "hasMore": zod.boolean().optional().describe('Whether another page of documents exists when paging is requested'),
   "documents": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -361,7 +458,17 @@ export const CreateProjectDocumentBody = zod.object({
   "tagIds": zod.array(zod.number().int()).optional()
 })
 
+
+
+
+
 export const CreateProjectDocumentResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullable().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -382,6 +489,8 @@ export const CreateProjectDocumentResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -429,7 +538,17 @@ export const GetProjectDocumentParams = zod.object({
   "slug": zod.coerce.string()
 })
 
+
+
+
+
 export const GetProjectDocumentResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullable().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -450,6 +569,8 @@ export const GetProjectDocumentResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -506,7 +627,17 @@ export const UpdateProjectDocumentBody = zod.object({
   "tagIds": zod.array(zod.number().int()).optional()
 })
 
+
+
+
+
 export const UpdateProjectDocumentResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullable().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -527,6 +658,8 @@ export const UpdateProjectDocumentResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -586,6 +719,8 @@ export const GetArticleStatsResponse = zod.object({
   "totalGroups": zod.number().int(),
   "totalUsers": zod.number().int(),
   "recentlyUpdated": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -613,6 +748,8 @@ export const GetArticleStatsResponse = zod.object({
 })).optional()
 })),
   "oldestUpdated": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -653,7 +790,17 @@ export const GetLogEntryParams = zod.object({
   "logSlug": zod.coerce.string().regex(getLogEntryPathLogSlugRegExp)
 })
 
+
+
+
+
 export const GetLogEntryResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -674,6 +821,8 @@ export const GetLogEntryResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -717,7 +866,17 @@ export const GetArticleParams = zod.object({
   "slug": zod.coerce.string()
 })
 
+
+
+
+
 export const GetArticleResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -738,6 +897,8 @@ export const GetArticleResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -784,7 +945,14 @@ export const UpdateArticleParams = zod.object({
 
 
 
+
+
 export const UpdateArticleBody = zod.object({
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "title": zod.string().min(1).optional(),
   "content": zod.string().optional(),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
@@ -793,7 +961,17 @@ export const UpdateArticleBody = zod.object({
   "tagIds": zod.array(zod.number().int()).optional()
 })
 
+
+
+
+
 export const UpdateArticleResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -814,6 +992,8 @@ export const UpdateArticleResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -939,6 +1119,8 @@ export const GetArticleBacklinksParams = zod.object({
 })
 
 export const GetArticleBacklinksResponseItem = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
@@ -999,7 +1181,17 @@ export const SetArticleGroupsBody = zod.object({
   "groupIds": zod.array(zod.number().int())
 })
 
+
+
+
+
 export const SetArticleGroupsResponse = zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
+  "procedureSteps": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "description": zod.string().min(1)
+})).optional(),
   "id": zod.number().int(),
   "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
@@ -1020,6 +1212,8 @@ export const SetArticleGroupsResponse = zod.object({
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
+  "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
+  "policySubjectId": zod.number().int().nullish(),
   "id": zod.number().int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),

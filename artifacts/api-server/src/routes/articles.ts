@@ -21,6 +21,8 @@ import {
   boardsTable,
   projectsTable,
   projectGroupsTable,
+  policySubjectsTable,
+  procedureRunsTable,
 } from "@workspace/db";
 import { eq, ilike, inArray, asc, desc, count, sql, and, or, ne, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, optionalAuth } from "../lib/auth";
@@ -29,6 +31,7 @@ import { convert } from "html-to-text";
 import { slugify, extractWikilinks, rewriteWikilinksForSlug } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
 import TurndownService from "turndown";
+import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
 
 const _require = createRequire(import.meta.url);
 const PDFDocument = _require("pdfkit") as typeof import("pdfkit");
@@ -342,6 +345,27 @@ function logUrlFields(article: { isLogEntry: boolean; logSlug: string | null; cr
   };
 }
 
+function structuredFields(article: { kind: string; policySubjectId: number | null; procedureSteps: { title: string; description: string }[] }) {
+  return { kind: article.kind, policySubjectId: article.policySubjectId, procedureSteps: article.procedureSteps };
+}
+
+async function validateStructuredFields(kind: unknown, subjectId: unknown, steps: unknown, special = false) {
+  if (!isContentKind(kind)) throw new Error("Invalid content kind");
+  if (special && kind !== "knowledge") throw new Error("Logs and project documents cannot be policies or procedures");
+  if (kind === "policy") {
+    if (!Number.isSafeInteger(subjectId) || Number(subjectId) < 1) throw new Error("Choose a policy subject");
+    const [subject] = await db.select().from(policySubjectsTable).where(eq(policySubjectsTable.id, Number(subjectId))).limit(1);
+    if (!subject) throw new Error("Policy subject no longer exists");
+  } else if (subjectId !== undefined && subjectId !== null) throw new Error("Only policies have subjects");
+  if (kind !== "procedure" && Array.isArray(steps) && steps.length) throw new Error("Only procedures have steps");
+  if (steps !== undefined && (!Array.isArray(steps))) throw new Error("Steps must be an array");
+  return {
+    kind,
+    policySubjectId: kind === "policy" ? Number(subjectId) : null,
+    procedureSteps: kind === "procedure" ? validateSteps(steps) : [],
+  };
+}
+
 let logSlugColumnSupport: { value: boolean; checkedAt: number } | undefined;
 const LOG_SCHEMA_RECHECK_MS = 5_000;
 
@@ -371,11 +395,56 @@ function hasLogSlugColumn(): Promise<boolean> {
   })();
 }
 
+router.post("/articles/:slug/run", requireAuth, requireRole("admin", "editor"), async (req, res) => {
+  const { name, requestId } = req.body;
+  if (typeof name !== "string" || !name.trim() || name.length > 500 ||
+      typeof requestId !== "string" || !requestId.trim() || requestId.length > 100) {
+    res.status(400).json({ error: "Project name and request ID are required" }); return;
+  }
+  const [flag] = await db.select().from(siteSettingsTable).where(eq(siteSettingsTable.key, "projects_enabled")).limit(1);
+  if (flag?.value === "false") { res.status(403).json({ error: "Enable Projects before running a procedure" }); return; }
+  const slug = String(req.params.slug);
+  const [source] = await db.select().from(articlesTable).where(eq(articlesTable.slug, slug)).limit(1);
+  if (!source || !(await canAccessArticleRecord(source, req.session.userId, req.session.userRole))) {
+    res.status(404).json({ error: "Procedure not found" }); return;
+  }
+  if (source.kind !== "procedure" || source.isLogEntry || source.projectId !== null) {
+    res.status(400).json({ error: "Only procedures can be run" }); return;
+  }
+  const key = `${req.session.userId}:${requestId}`;
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
+    const [prior] = await tx.select().from(procedureRunsTable).where(eq(procedureRunsTable.key, key)).limit(1);
+    if (prior) return prior.sourceSlug === slug ? { projectId: prior.projectId, boardId: prior.boardId } : null;
+    const [current] = await tx.select().from(articlesTable).where(eq(articlesTable.id, source.id)).for("update");
+    if (!current || current.kind !== "procedure") return null;
+    const steps = validateSteps(current.procedureSteps);
+    const [project] = await tx.insert(projectsTable).values({
+      name: name.trim(), description: `Created from procedure: ${current.title}\n/procedures/${current.slug}`,
+      createdById: req.session.userId!,
+    }).returning();
+    const [board] = await tx.insert(boardsTable).values({ projectId: project.id, name: current.title, position: 1000 }).returning();
+    const columns = await tx.insert(boardColumnsTable).values(
+      ["To Do", "In Progress", "Done"].map((column, index) => ({ boardId: board.id, name: column, position: (index + 1) * 1000 })),
+    ).returning();
+    await tx.insert(boardCardsTable).values(steps.map((step, index) => ({
+      columnId: columns[0].id, title: `${index + 1}. ${step.title}`, description: convert(step.description, { wordwrap: false }),
+      position: (index + 1) * 1000, createdById: req.session.userId!,
+    })));
+    await tx.insert(procedureRunsTable).values({ key, sourceSlug: slug, projectId: project.id, boardId: board.id });
+    return { projectId: project.id, boardId: board.id };
+  });
+  if (!result) { res.status(409).json({ error: "Procedure changed or this request ID was already used for another procedure" }); return; }
+  res.status(201).json(result);
+});
+
 router.get("/articles", requireAuth, async (req, res) => {
   const { search, sort = "title", order = "asc", limit = 50, offset = 0, tagId } = req.query;
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const userGroupIds = await getUserGroupIds(userId);
+  const kind = req.query.kind ?? "knowledge";
+  if (kind !== "all" && !isContentKind(kind)) { res.status(400).json({ error: "Invalid content kind" }); return; }
 
   const tagIdNum = tagId ? parseInt(String(tagId), 10) : null;
 
@@ -397,6 +466,8 @@ router.get("/articles", requireAuth, async (req, res) => {
     .select({
       id: articlesTable.id,
       slug: articlesTable.slug,
+      kind: articlesTable.kind,
+      policySubjectId: articlesTable.policySubjectId,
       title: articlesTable.title,
       visibility: articlesTable.visibility,
       createdById: articlesTable.createdById,
@@ -412,6 +483,24 @@ router.get("/articles", requireAuth, async (req, res) => {
   // Project documents are navigated through their project and must never surface
   // in the global Knowledge index or search filters.
   const conditions = [ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId)];
+  if (kind !== "all") conditions.push(eq(articlesTable.kind, kind as "knowledge" | "policy" | "procedure"));
+  if (req.query.subjectId !== undefined) {
+    const subjectId = Number(req.query.subjectId);
+    if (!Number.isSafeInteger(subjectId) || subjectId < 1 || (kind !== "policy" && kind !== "all")) {
+      res.status(400).json({ error: "Subject filtering requires policies and a valid subject ID" }); return;
+    }
+    const subjects = await db.select().from(policySubjectsTable);
+    const ids = new Set<number>(subjects.some((s) => s.id === subjectId) ? [subjectId] : []);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const s of subjects) {
+        if (s.parentId !== null && ids.has(s.parentId) && !ids.has(s.id)) { ids.add(s.id); added = true; }
+      }
+    }
+    if (!ids.size) { res.json({ articles: [], total: 0 }); return; }
+    conditions.push(eq(articlesTable.kind, "policy"), inArray(articlesTable.policySubjectId, [...ids]));
+  }
   const visibilityCondition = normalArticleVisibilityCondition(userId!, userRole, userGroupIds);
   if (visibilityCondition) conditions.push(visibilityCondition);
   const searchTerm = typeof search === "string" && search.trim() ? search.trim() : null;
@@ -421,6 +510,7 @@ router.get("/articles", requireAuth, async (req, res) => {
       or(
         ilike(articlesTable.title, searchPattern),
         ilike(articlesTable.content, searchPattern),
+        sql`${articlesTable.procedureSteps}::text ILIKE ${searchPattern}`,
       )!,
     );
   }
@@ -469,6 +559,8 @@ router.get("/articles", requireAuth, async (req, res) => {
     return [{
       id: a.id,
       slug: a.slug,
+      kind: a.kind,
+      policySubjectId: a.policySubjectId,
       title: a.title,
       visibility: a.visibility,
       ownerId: a.createdById,
@@ -477,7 +569,7 @@ router.get("/articles", requireAuth, async (req, res) => {
       updatedByName: a.updatedByName ?? null,
       isRestricted: a.visibility === "group",
       canAccess: true,
-      canEdit: isAdmin(userRole) || a.createdById === userId || (userRole === "editor" && (a.visibility === "public" || (a.visibility === "group" && articleGroupIds.some((id) => userGroupIds.includes(id))))),
+      canEdit: isAdmin(userRole) || (userRole === "editor" && (a.createdById === userId || a.visibility === "public" || (a.visibility === "group" && articleGroupIds.some((id) => userGroupIds.includes(id))))),
       groups,
       tags,
     }];
@@ -492,7 +584,7 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
   const userGroupIds = await getUserGroupIds(userId);
 
   // Project documents belong to project metrics, not global Knowledge metrics.
-  const notLogEntry = and(ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId))!;
+  const notLogEntry = and(ne(articlesTable.isLogEntry, true), isNull(articlesTable.projectId), eq(articlesTable.kind, "knowledge"))!;
   const visibilityCondition = normalArticleVisibilityCondition(userId!, userRole, userGroupIds);
   const accessibleArticles = visibilityCondition ? and(notLogEntry, visibilityCondition)! : notLogEntry;
 
@@ -548,6 +640,9 @@ router.post("/articles", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Editor access is required to create articles" });
     return;
   }
+  let metadata;
+  try { metadata = await validateStructuredFields(req.body.kind ?? "knowledge", req.body.policySubjectId, req.body.procedureSteps, Boolean(isLogEntry)); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
   if (!title) {
     res.status(400).json({ error: "Title required" });
     return;
@@ -634,18 +729,18 @@ router.post("/articles", requireAuth, async (req, res) => {
     if (slugConflict) throw new Error("INTERNAL_LOG_SLUG_CONFLICT");
     const [createdArticle] = await tx
       .insert(articlesTable)
-      .values({ slug, logSlug, title, content: sanitizedContent, isLogEntry: Boolean(isLogEntry), isStatic: isStatic ?? false, visibility, createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
+      .values({ slug, logSlug, title, content: sanitizedContent, ...metadata, isLogEntry: Boolean(isLogEntry), isStatic: isStatic ?? false, visibility, createdById: req.session.userId ?? null, updatedById: req.session.userId ?? null })
       .returning();
 
     await attachReferencedArticleImages(
       tx,
-      sanitizedContent,
+      contentWithSteps(createdArticle),
       createdArticle.id,
       req.session.userId,
       req.session.userRole,
     );
 
-    const wikilinks = extractWikilinks(content ?? "");
+    const wikilinks = extractWikilinks(contentWithSteps(createdArticle));
     if (wikilinks.length > 0) {
       await tx
         .insert(articleLinksTable)
@@ -658,6 +753,8 @@ router.post("/articles", requireAuth, async (req, res) => {
       versionNumber: 1,
       title: createdArticle.title,
       content: createdArticle.content,
+      policySubjectId: createdArticle.policySubjectId,
+      procedureSteps: createdArticle.procedureSteps,
       createdById: req.session.userId ?? null,
     });
     return createdArticle;
@@ -689,7 +786,7 @@ router.post("/articles", requireAuth, async (req, res) => {
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
-  res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
+  res.status(201).json({ id: article.id, slug: article.slug, title: article.title, content: article.content, ...structuredFields(article), isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
 });
 
 router.get("/logs/:userId/:logSlug", requireAuth, async (req, res) => {
@@ -796,7 +893,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
     return;
   }
   const [article] = await db
-    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, isStatic: articlesTable.isStatic, visibility: articlesTable.visibility, projectId: articlesTable.projectId, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
+    .select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, kind: articlesTable.kind, policySubjectId: articlesTable.policySubjectId, procedureSteps: articlesTable.procedureSteps, title: articlesTable.title, content: articlesTable.content, isLogEntry: articlesTable.isLogEntry, isStatic: articlesTable.isStatic, visibility: articlesTable.visibility, projectId: articlesTable.projectId, createdById: articlesTable.createdById, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedById: articlesTable.updatedById, updatedByName: usersTable.name })
     .from(articlesTable)
     .leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id))
     .where(eq(articlesTable.slug, slug))
@@ -836,7 +933,7 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
   let backlinks: { id: number; slug: string; title: string; visibility: "personal" | "group" | "public"; ownerId: number | null; canEdit: boolean; updatedAt: Date; createdAt: Date; updatedByName: string | null; isRestricted: boolean; canAccess: boolean; groups: { id: number; name: string; description: string | null }[]; tags: { id: number; name: string; color: string; createdAt: Date; articleCount: number }[]; logSlug: string | null; logOwnerId: number | null }[] = [];
   if (backlinkRows.length > 0) {
     const fromIds = [...new Set(backlinkRows.map((b) => b.fromArticleId))];
-    const fromArticles = await db.select({ id: articlesTable.id, slug: articlesTable.slug, logSlug: articlesTable.logSlug, isLogEntry: articlesTable.isLogEntry, visibility: articlesTable.visibility, projectId: articlesTable.projectId, createdById: articlesTable.createdById, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name }).from(articlesTable).leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id)).where(inArray(articlesTable.id, fromIds));
+    const fromArticles = await db.select({ id: articlesTable.id, slug: articlesTable.slug, kind: articlesTable.kind, logSlug: articlesTable.logSlug, isLogEntry: articlesTable.isLogEntry, visibility: articlesTable.visibility, projectId: articlesTable.projectId, createdById: articlesTable.createdById, title: articlesTable.title, updatedAt: articlesTable.updatedAt, createdAt: articlesTable.createdAt, updatedByName: usersTable.name }).from(articlesTable).leftJoin(usersTable, eq(articlesTable.updatedById, usersTable.id)).where(inArray(articlesTable.id, fromIds));
     backlinks = (await Promise.all(fromArticles.map(async (a) => {
       if (!(await canAccessArticleRecord(a, userId, userRole))) return null;
       const bGroups = await getArticleGroups(a.id);
@@ -846,11 +943,11 @@ router.get("/articles/:slug", optionalAuth, async (req, res) => {
         ? await canAccessProject(a.projectId, userId, userRole)
         : true;
       const bTags = await getArticleTags(a.id);
-      return { id: a.id, slug: a.slug, title: a.title, visibility: a.visibility, ownerId: a.createdById, canEdit: await canEditArticleRecord(a, userId, userRole), updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bGroups, tags: bTags, ...logUrlFields(a) };
+      return { id: a.id, slug: a.slug, kind: a.kind, title: a.title, visibility: a.visibility, ownerId: a.createdById, canEdit: await canEditArticleRecord(a, userId, userRole), updatedAt: a.updatedAt, createdAt: a.createdAt, updatedByName: a.updatedByName ?? null, isRestricted: bIsRestricted, canAccess: bCanAccess, groups: bGroups, tags: bTags, ...logUrlFields(a) };
     }))).filter((article): article is NonNullable<typeof article> => article !== null);
   }
 
-  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: true, canEdit: await canEditArticleRecord(article, userId, userRole), groups, tags, backlinks, ...logUrlFields(article) });
+  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, ...structuredFields(article), isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: article.updatedByName ?? null, isRestricted: article.projectId !== null || isRestricted, canAccess: true, canEdit: await canEditArticleRecord(article, userId, userRole), groups, tags, backlinks, ...logUrlFields(article) });
 });
 
 router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (req, res) => {
@@ -906,9 +1003,17 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
         : [];
 
       const rewrittenContent = new Map<number, string>();
+      const rewrittenSteps = new Map<number, typeof existing.procedureSteps>();
       for (const article of inboundArticles) {
         const content = rewriteWikilinksForSlug(article.content, currentSlug, nextSlug);
-        if (content !== article.content) rewrittenContent.set(article.id, content);
+        const steps = article.procedureSteps.map((step) => ({
+          title: rewriteWikilinksForSlug(step.title, currentSlug, nextSlug),
+          description: rewriteWikilinksForSlug(step.description, currentSlug, nextSlug),
+        }));
+        if (content !== article.content || JSON.stringify(steps) !== JSON.stringify(article.procedureSteps)) {
+          rewrittenContent.set(article.id, content);
+          rewrittenSteps.set(article.id, steps);
+        }
       }
 
       const targetContent = rewrittenContent.get(existing.id) ?? existing.content;
@@ -917,6 +1022,7 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
         .set({
           slug: nextSlug,
           content: targetContent,
+          procedureSteps: rewrittenSteps.get(existing.id) ?? existing.procedureSteps,
           updatedAt: new Date(),
           updatedById: req.session.userId ?? null,
         })
@@ -926,10 +1032,10 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
       for (const article of inboundArticles) {
         if (article.id === existing.id) continue;
         const content = rewrittenContent.get(article.id);
-        if (!content) continue;
+        if (content === undefined) continue;
         await tx
           .update(articlesTable)
-          .set({ content, updatedAt: new Date(), updatedById: req.session.userId ?? null })
+          .set({ content, procedureSteps: rewrittenSteps.get(article.id) ?? article.procedureSteps, updatedAt: new Date(), updatedById: req.session.userId ?? null })
           .where(eq(articlesTable.id, article.id));
       }
 
@@ -937,7 +1043,7 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
       if (rewrittenIds.length > 0) {
         await tx.delete(articleLinksTable).where(inArray(articleLinksTable.fromArticleId, rewrittenIds));
         const refreshedLinks = [...rewrittenContent.entries()].flatMap(([fromArticleId, content]) =>
-          extractWikilinks(content).map((target) => ({ fromArticleId, toSlug: slugify(target) })),
+          extractWikilinks(contentWithSteps({ content, procedureSteps: rewrittenSteps.get(fromArticleId) })).map((target) => ({ fromArticleId, toSlug: slugify(target) })),
         );
         if (refreshedLinks.length > 0) {
           await tx.insert(articleLinksTable).values(refreshedLinks).onConflictDoNothing();
@@ -948,7 +1054,7 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
         renamedArticle,
         ...inboundArticles
           .filter((article) => article.id !== existing.id && rewrittenContent.has(article.id))
-          .map((article) => ({ ...article, content: rewrittenContent.get(article.id)! })),
+          .map((article) => ({ ...article, content: rewrittenContent.get(article.id)!, procedureSteps: rewrittenSteps.get(article.id) ?? article.procedureSteps })),
       ];
       for (const article of versionArticles) {
         const [versionCount] = await tx
@@ -960,6 +1066,8 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
           versionNumber: Number(versionCount?.c ?? 0) + 1,
           title: article.title,
           content: article.content,
+          policySubjectId: article.policySubjectId,
+          procedureSteps: article.procedureSteps,
           createdById: req.session.userId ?? null,
         });
       }
@@ -1027,6 +1135,10 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
     res.status(403).json({ error: "You do not have permission to edit this article" });
     return;
   }
+  if (req.body.kind !== undefined && req.body.kind !== existing.kind) { res.status(400).json({ error: "Content kind cannot be changed by editing" }); return; }
+  let metadata;
+  try { metadata = await validateStructuredFields(existing.kind, req.body.policySubjectId === undefined ? existing.policySubjectId : req.body.policySubjectId, req.body.procedureSteps === undefined ? existing.procedureSteps : req.body.procedureSteps, existing.isLogEntry || existing.projectId !== null); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   // Log entries can only be edited by their creator or an admin
   if (existing.isLogEntry && req.session.userRole !== "admin" && existing.createdById !== req.session.userId) {
@@ -1055,7 +1167,7 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
     }
   }
 
-  const updates: Record<string, unknown> = { updatedAt: new Date(), updatedById: req.session.userId ?? null };
+  const updates: Record<string, unknown> = { ...metadata, updatedAt: new Date(), updatedById: req.session.userId ?? null };
   if (title !== undefined) updates.title = title;
   const sanitizedContent = content !== undefined ? sanitizeArticleHtml(content) : undefined;
   if (sanitizedContent !== undefined) updates.content = sanitizedContent;
@@ -1063,13 +1175,13 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
   if (isStatic !== undefined) updates.isStatic = isStatic;
   let article;
   let versionCreated = false;
-  if (sanitizedContent !== undefined) {
+  if (sanitizedContent !== undefined || req.body.procedureSteps !== undefined || req.body.policySubjectId !== undefined) {
     try {
       article = await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
         await attachReferencedArticleImages(
           tx,
-          sanitizedContent,
+          contentWithSteps({ content: sanitizedContent ?? existing.content, procedureSteps: metadata.procedureSteps }),
           existing.id,
           req.session.userId,
           req.session.userRole,
@@ -1082,7 +1194,7 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
         if (!updatedArticle) return null;
 
         await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, updatedArticle.id));
-        const wikilinks = extractWikilinks(content);
+        const wikilinks = extractWikilinks(contentWithSteps(updatedArticle));
         if (wikilinks.length > 0) {
           await tx
             .insert(articleLinksTable)
@@ -1099,6 +1211,8 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
           versionNumber: Number(versionCount?.c ?? 0) + 1,
           title: updatedArticle.title,
           content: updatedArticle.content,
+          policySubjectId: updatedArticle.policySubjectId,
+          procedureSteps: updatedArticle.procedureSteps,
           createdById: req.session.userId ?? null,
         });
         return updatedArticle;
@@ -1146,13 +1260,15 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
       versionNumber: nextVersionNumber,
       title: article.title,
       content: article.content,
+      policySubjectId: article.policySubjectId,
+      procedureSteps: article.procedureSteps,
       createdById: req.session.userId ?? null,
     });
   }
 
   const groups = await getArticleGroups(article.id);
   const tags = await getArticleTags(article.id);
-  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.projectId !== null || article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
+  res.json({ id: article.id, slug: article.slug, projectId: article.projectId, title: article.title, content: article.content, ...structuredFields(article), isStatic: article.isStatic, visibility: article.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: req.session.userName ?? null, isRestricted: article.projectId !== null || article.visibility === "group", canAccess: true, canEdit: true, groups, tags, backlinks: [], ...logUrlFields(article) });
 });
 
 // ─── Log Entries ─────────────────────────────────────────────────────────────
@@ -1248,6 +1364,7 @@ router.get("/search", requireAuth, async (req, res) => {
   const searchCond = or(
     ilike(articlesTable.title, `%${term}%`),
     ilike(articlesTable.content, `%${term}%`),
+    sql`${articlesTable.procedureSteps}::text ILIKE ${`%${term}%`}`,
   );
 
   // ── Articles ──
@@ -1256,6 +1373,7 @@ router.get("/search", requireAuth, async (req, res) => {
       id: articlesTable.id,
       slug: articlesTable.slug,
       title: articlesTable.title,
+      kind: articlesTable.kind,
       visibility: articlesTable.visibility,
       createdById: articlesTable.createdById,
       updatedAt: articlesTable.updatedAt,
@@ -1277,12 +1395,13 @@ router.get("/search", requireAuth, async (req, res) => {
       id: a.id,
       slug: a.slug,
       title: a.title,
+      kind: a.kind,
       updatedAt: a.updatedAt,
       updatedByName: a.updatedByName ?? null,
     }));
 
   // ── Log entries (only if feature enabled) ──
-  let logEntries: typeof articles = [];
+  let logEntries: Array<Omit<(typeof articles)[number], "kind"> & { logSlug?: string | null; logOwnerId?: number | null }> = [];
   if (await isLogEntriesEnabled()) {
     const rawLogs = await db
       .select({
@@ -1598,6 +1717,7 @@ router.get("/articles/:slug/backlinks", requireAuth, async (req, res) => {
   const backlinkFields = {
     id: articlesTable.id,
     slug: articlesTable.slug,
+    kind: articlesTable.kind,
     isLogEntry: articlesTable.isLogEntry,
     visibility: articlesTable.visibility,
     projectId: articlesTable.projectId,
@@ -1627,6 +1747,7 @@ router.get("/articles/:slug/backlinks", requireAuth, async (req, res) => {
       slug: a.slug,
       title: a.title,
       visibility: a.visibility,
+      kind: a.kind,
       ownerId: a.createdById,
       updatedAt: a.updatedAt,
       createdAt: a.createdAt,
@@ -1699,7 +1820,7 @@ router.put("/articles/:slug/groups", requireAuth, async (req, res) => {
   }
   await db.update(articlesTable).set({ visibility: validated.visibility, updatedAt: new Date(), updatedById: req.session.userId }).where(eq(articlesTable.id, article.id));
   const groups = await getArticleGroups(article.id);
-  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, visibility: validated.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: null, isRestricted: groups.length > 0, canAccess: true, canEdit: true, groups, tags: await getArticleTags(article.id), backlinks: [] });
+  res.json({ id: article.id, slug: article.slug, title: article.title, content: article.content, ...structuredFields(article), visibility: validated.visibility, ownerId: article.createdById, updatedAt: article.updatedAt, createdAt: article.createdAt, updatedByName: null, isRestricted: groups.length > 0, canAccess: true, canEdit: true, groups, tags: await getArticleTags(article.id), backlinks: [] });
 });
 
 router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
@@ -1712,6 +1833,7 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
       slug: articlesTable.slug,
       title: articlesTable.title,
       content: articlesTable.content,
+      procedureSteps: articlesTable.procedureSteps,
       isLogEntry: articlesTable.isLogEntry,
       visibility: articlesTable.visibility,
       projectId: articlesTable.projectId,
@@ -1728,7 +1850,7 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  const markdown = `# ${article.title}\n\n${turndown.turndown(article.content)}`;
+  const markdown = `# ${article.title}\n\n${turndown.turndown(contentWithSteps(article))}`;
   res.setHeader("Content-Type", "text/markdown");
   res.setHeader("Content-Disposition", `attachment; filename="${slug}.md"`);
   res.send(markdown);
@@ -1744,6 +1866,7 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
       slug: articlesTable.slug,
       title: articlesTable.title,
       content: articlesTable.content,
+      procedureSteps: articlesTable.procedureSteps,
       isLogEntry: articlesTable.isLogEntry,
       visibility: articlesTable.visibility,
       projectId: articlesTable.projectId,
@@ -1775,7 +1898,7 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   // Extract infoboxes (new <div data-type="infobox"> and legacy <table class="infobox">)
   // before handing HTML to turndown so they don't get mangled into plain Markdown tables.
   const pdfInfoboxes: PdfInfoboxData[] = [];
-  const rawHtml = article.content || "";
+  const rawHtml = contentWithSteps(article);
 
   const cleanedHtml = rawHtml
     .replace(/<div[^>]*data-type=["']infobox["'][^>]*>[\s\S]*?<\/div>/gi, (match) => {
@@ -1966,6 +2089,8 @@ router.get("/articles/:slug/versions/:versionId", requireAuth, async (req, res) 
       versionNumber: articleVersionsTable.versionNumber,
       title: articleVersionsTable.title,
       content: articleVersionsTable.content,
+      policySubjectId: articleVersionsTable.policySubjectId,
+      procedureSteps: articleVersionsTable.procedureSteps,
       createdAt: articleVersionsTable.createdAt,
       createdByName: usersTable.name,
     })
@@ -1978,7 +2103,7 @@ router.get("/articles/:slug/versions/:versionId", requireAuth, async (req, res) 
     .limit(1);
 
   if (!version) { res.status(404).json({ error: "Version not found" }); return; }
-  res.json(version);
+  res.json({ ...version, content: contentWithSteps(version) });
 });
 
 router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (req, res) => {
@@ -2024,6 +2149,9 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (r
     .limit(1);
   if (!version) { res.status(404).json({ error: "Version not found" }); return; }
 
+  let restoredMetadata;
+  try { restoredMetadata = await validateStructuredFields(article.kind, version.policySubjectId, version.procedureSteps, article.isLogEntry || article.projectId !== null); }
+  catch (e) { res.status(409).json({ error: `Cannot restore this version: ${(e as Error).message}` }); return; }
   const restoreResult = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
     const [currentArticle] = await tx
@@ -2045,14 +2173,15 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (r
     if (!currentVersion) return { status: "version_missing" as const };
 
     const restoredContent = sanitizeArticleHtml(currentVersion.content);
+    await attachReferencedArticleImages(tx, contentWithSteps({ content: restoredContent, procedureSteps: restoredMetadata.procedureSteps }), currentArticle.id, req.session.userId, req.session.userRole);
     const [updatedArticle] = await tx
       .update(articlesTable)
-      .set({ title: currentVersion.title, content: restoredContent, updatedAt: new Date(), updatedById: req.session.userId ?? null })
+      .set({ ...restoredMetadata, title: currentVersion.title, content: restoredContent, updatedAt: new Date(), updatedById: req.session.userId ?? null })
       .where(and(eq(articlesTable.id, currentArticle.id), eq(articlesTable.slug, slug)))
       .returning();
 
     await tx.delete(articleLinksTable).where(eq(articleLinksTable.fromArticleId, currentArticle.id));
-    const wikilinks = extractWikilinks(restoredContent);
+    const wikilinks = extractWikilinks(contentWithSteps(updatedArticle));
     if (wikilinks.length > 0) {
       await tx
         .insert(articleLinksTable)
@@ -2069,6 +2198,8 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (r
       versionNumber: Number(versionCount?.c ?? 0) + 1,
       title: updatedArticle.title,
       content: updatedArticle.content,
+      policySubjectId: updatedArticle.policySubjectId,
+      procedureSteps: updatedArticle.procedureSteps,
       createdById: req.session.userId ?? null,
     });
     return { status: "updated" as const, article: updatedArticle };

@@ -10,15 +10,23 @@ import {
   getGetArticleQueryKey,
   getGetArticleBacklinksQueryKey,
   useDeleteArticle,
+  useListPolicySubjects,
+  useRunProcedure,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  AlertCircle, Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock, PencilLine,
+  AlertCircle, Play, ChevronRight, Loader2, Edit, Trash2, Download, Lock, ChevronLeft, FileText, FilePlus, Clock, PencilLine,
 } from "lucide-react";
 import { format } from "date-fns";
+import { AREA_BASE, KIND_AREA, KIND_LABEL, articlePathFor, normalizeKind, type ContentArea } from "@/lib/content-paths";
+import { subjectPath } from "@/lib/policy-subjects";
+import { useSiteSettings } from "@/lib/site-settings";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -91,7 +99,7 @@ function errorStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
-export default function ArticleView({ params }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string } }) {
+export default function ArticleView({ params, area = "knowledge" }: { params?: { slug?: string; userId?: string; logSlug?: string; projectId?: string }; area?: ContentArea }) {
   const { slug, userId: userIdParam, logSlug, projectId: projectIdParam } = params || {};
   const projectId = Number(projectIdParam);
   const isProjectDocument = Number.isSafeInteger(projectId) && projectId > 0;
@@ -132,11 +140,23 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     ? `/logs/${logOwnerId}/${logSlug}`
     : isProjectDocument
       ? `/projects/${projectId}/documents/${actualSlug}`
-      : `/knowledge/${actualSlug}`;
+      : `${AREA_BASE[area]}/${actualSlug}`;
+  const kind = normalizeKind(displayedArticle?.kind);
+  const kindArea = KIND_AREA[kind];
+  const { data: siteSettings } = useSiteSettings();
+  const { data: subjects = [] } = useListPolicySubjects({ query: { enabled: kind === "policy", queryKey: ["/api/policy-subjects"] } });
+  const categoryPath = kind === "policy" ? subjectPath(subjects, displayedArticle?.policySubjectId) : [];
+
+  // Open documents under their canonical area (old links and cross-area links keep working).
+  useEffect(() => {
+    if (displayedArticle && !isLogRoute && !isProjectDocument && kindArea !== area) {
+      setLocation(`${AREA_BASE[kindArea]}/${displayedArticle.slug}`, { replace: true });
+    }
+  }, [displayedArticle, isLogRoute, isProjectDocument, kindArea, area, setLocation]);
 
   // ─── Edit lock status ─────────────────────────────────────────────────────
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
-  const [wikilinkStates, setWikilinkStates] = useState<Record<string, "existing" | "missing">>({});
+  const [wikilinkStates, setWikilinkStates] = useState<Record<string, { status: "existing" | "missing"; kind: string }>>({});
   const [tableOfContents, setTableOfContents] = useState<TableOfContentsItem[]>([]);
   const articleContentRef = useRef<HTMLDivElement>(null);
 
@@ -163,18 +183,13 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
   // Resolve wikilink targets after the article HTML has been rendered so the
   // visual treatment can distinguish real destinations from create-new links.
   useEffect(() => {
-    const content = document.querySelector("[data-testid='article-content']");
-    if (!content) return;
-
     const links = Array.from(
-      content.querySelectorAll<HTMLAnchorElement>("a[data-wikilink='true']"),
+      document.querySelectorAll<HTMLAnchorElement>("[data-wikilink-scope] a[data-wikilink='true']"),
     );
     const linkSlugs = new Set<string>();
     for (const link of links) {
-      const href = link.getAttribute("href");
-      if (!href) continue;
-      const linkSlug = href.replace(/^\/knowledge\//, "");
-      linkSlugs.add(linkSlug);
+      const linkSlug = link.dataset.slug;
+      if (linkSlug) linkSlugs.add(linkSlug);
     }
 
     let cancelled = false;
@@ -186,8 +201,15 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
           });
           if (cancelled) return;
           const status = response.status === 404 ? "missing" : "existing";
+          let linkKind = "knowledge";
+          if (status === "existing" && response.ok) {
+            const body = await response.json().catch(() => null) as { kind?: string } | null;
+            linkKind = normalizeKind(body?.kind);
+          }
           setWikilinkStates((current) =>
-            current[linkSlug] === status ? current : { ...current, [linkSlug]: status },
+            current[linkSlug]?.status === status && current[linkSlug]?.kind === linkKind
+              ? current
+              : { ...current, [linkSlug]: { status, kind: linkKind } },
           );
         } catch {
           // Keep transient failures in the neutral pending style; a failed
@@ -199,7 +221,7 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
     return () => {
       cancelled = true;
     };
-  }, [displayedArticle?.id, displayedArticle?.content]);
+  }, [displayedArticle?.id, displayedArticle?.content, displayedArticle?.procedureSteps]);
 
   // Add in-page anchors to the rendered headings and derive the sidebar table
   // of contents from the same DOM the reader sees. Anchor IDs are added by
@@ -256,8 +278,10 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
             queryClient.removeQueries({ queryKey: ["log-entries-home"] });
             void queryClient.invalidateQueries({ queryKey: ["log-entries"] });
           }
-          toast({ title: isProjectDocument ? "Document deleted" : "Article deleted" });
-          setLocation(isProjectDocument ? `/projects/${projectId}` : "/");
+          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+          queryClient.invalidateQueries({ queryKey: ["home-search"] });
+          toast({ title: isProjectDocument ? "Document deleted" : `${kind === "knowledge" ? "Article" : KIND_LABEL[kind]} deleted` });
+          setLocation(isProjectDocument ? `/projects/${projectId}` : kind === "knowledge" ? "/" : AREA_BASE[kindArea]);
         },
         onError: (err) => {
           toast({
@@ -265,6 +289,37 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
             description: err.message || "Unknown error",
             variant: "destructive",
           });
+        },
+      },
+    );
+  };
+
+  const [runOpen, setRunOpen] = useState(false);
+  const [runName, setRunName] = useState("");
+  const runRequestIdRef = useRef("");
+  const runMutation = useRunProcedure();
+  const canRun = Boolean(user && (user.role === "admin" || user.role === "editor"));
+  const projectsOn = siteSettings?.projectsEnabled !== false;
+
+  const openRun = () => {
+    runRequestIdRef.current = crypto.randomUUID();
+    setRunName(displayedArticle?.title ?? "");
+    setRunOpen(true);
+  };
+  const submitRun = () => {
+    const name = runName.trim();
+    if (!name || runMutation.isPending) return;
+    runMutation.mutate(
+      { slug: apiSlug, data: { name, requestId: runRequestIdRef.current } },
+      {
+        onSuccess: (result) => {
+          setRunOpen(false);
+          queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+          toast({ title: "Project created" });
+          setLocation(`/projects/${result.projectId}/boards/${result.boardId}`);
+        },
+        onError: (err) => {
+          toast({ title: "Could not run procedure", description: err.message, variant: "destructive" });
         },
       },
     );
@@ -306,8 +361,10 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
 
         const linkSlug = knowledgeSlug(target);
         const link = document.createElement("a");
-        link.href = `/knowledge/${linkSlug}`;
-        const linkState = wikilinkStates[linkSlug];
+        const resolved = wikilinkStates[linkSlug];
+        link.href = `${AREA_BASE[KIND_AREA[normalizeKind(resolved?.kind)]]}/${linkSlug}`;
+        link.dataset.slug = linkSlug;
+        const linkState = resolved?.status;
         link.className = `text-primary hover:text-primary/80 font-medium no-underline ${
           linkState ? `wikilink-${linkState}` : "wikilink-pending"
         }`;
@@ -501,8 +558,20 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
                    {displayedArticle.visibility === "personal" ? "Personal" : displayedArticle.visibility === "group" ? <><Lock className="w-3 h-3 mr-1" />Group</> : "Public"}
                 </Badge>
               )}
+               {kind !== "knowledge" && <Badge variant="secondary" data-testid="badge-kind">{KIND_LABEL[kind]}</Badge>}
                {displayedArticle.isStatic && <Badge variant="secondary" title="Does not require future review">Static</Badge>}
             </div>
+            {kind === "policy" && categoryPath.length > 0 && (
+              <nav aria-label="Policy category" className="mb-2 flex items-center flex-wrap gap-1 text-sm text-muted-foreground" data-testid="breadcrumb-policy">
+                <Link href="/policies" className="hover:text-primary">Policies</Link>
+                {categoryPath.map((p) => (
+                  <span key={p.id} className="flex items-center gap-1">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                    <Link href={`/policies?subject=${p.id}`} className="hover:text-primary">{p.name}</Link>
+                  </span>
+                ))}
+              </nav>
+            )}
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span>Last updated: {format(new Date(displayedArticle.updatedAt), "MMMM d, yyyy 'at' h:mm a")}</span>
               {displayedArticle.updatedByName && <span>by {displayedArticle.updatedByName}</span>}
@@ -540,7 +609,33 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
             className="prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg mt-8 prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:bg-muted [&_img]:cursor-zoom-in"
             dangerouslySetInnerHTML={{ __html: processContent(displayedArticle.content) }}
             data-testid="article-content"
+            data-wikilink-scope="true"
           />
+        )}
+
+        {displayedArticle.canAccess && kind === "procedure" && (
+          <section className="mt-10" data-testid="section-procedure-steps">
+            <h2 className="text-xl font-semibold mb-4">Steps</h2>
+            {(displayedArticle.procedureSteps ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">This procedure has no steps.</p>
+            ) : (
+              <ol className="space-y-4">
+                {(displayedArticle.procedureSteps ?? []).map((step, i) => (
+                  <li key={i} className="flex gap-4 border bg-card p-4" data-testid={`step-${i}`}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-primary text-primary-foreground text-sm font-semibold tabular-nums">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold">{step.title}</h3>
+                      <div
+                        className="prose prose-stone dark:prose-invert max-w-none prose-sm mt-1 whitespace-pre-wrap"
+                        data-wikilink-scope="true"
+                        dangerouslySetInnerHTML={{ __html: processContent(step.description) }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
         )}
       </div>
 
@@ -551,15 +646,15 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(isLogRoute || isProjectDocument ? `${articlePath}/edit` : `/knowledge/${actualSlug}/edit`)}
+                onClick={() => setLocation(`${articlePath}/edit`)}
                 data-testid="button-edit-article"
               >
-                <Edit className="mr-2 h-4 w-4" /> {isProjectDocument ? "Edit Document" : "Edit Article"}
+                <Edit className="mr-2 h-4 w-4" /> {isProjectDocument ? "Edit Document" : kind === "knowledge" ? "Edit Article" : `Edit ${KIND_LABEL[kind]}`}
               </Button>
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={() => setLocation(isLogRoute || isProjectDocument ? `${articlePath}/history` : `/knowledge/${actualSlug}/history`)}
+                onClick={() => setLocation(`${articlePath}/history`)}
               >
                 <Clock className="mr-2 h-4 w-4" /> Version History
               </Button>
@@ -592,6 +687,26 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+            </CardContent>
+          </Card>
+        )}
+
+        {displayedArticle.canAccess && kind === "procedure" && canRun && (
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <Button
+                className="w-full justify-start"
+                onClick={openRun}
+                disabled={!projectsOn}
+                data-testid="button-run-procedure"
+              >
+                <Play className="mr-2 h-4 w-4" /> Run procedure
+              </Button>
+              <p className="text-xs text-muted-foreground" data-testid="text-run-help">
+                {projectsOn
+                  ? "Creates a private project with one card per step."
+                  : "Projects are turned off, so procedures cannot be run right now. Ask an administrator to enable Projects."}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -647,11 +762,14 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
                 {backlinks.map((link) => (
                   <li key={link.id}>
                     <Link
-                      href={link.logOwnerId && link.logSlug ? `/logs/${link.logOwnerId}/${link.logSlug}` : `/knowledge/${link.slug}`}
+                      href={articlePathFor(link)}
                       className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
                     >
                       <FileText className="h-3 w-3" />
                       <span className="truncate">{link.title}</span>
+                      {normalizeKind(link.kind) !== "knowledge" && !link.logSlug && (
+                        <span className="text-[10px] uppercase tracking-wide">{KIND_LABEL[normalizeKind(link.kind)]}</span>
+                      )}
                     </Link>
                   </li>
                 ))}
@@ -697,6 +815,35 @@ export default function ArticleView({ params }: { params?: { slug?: string; user
         )}
       </div>
     </div>
+
+    <Dialog open={runOpen} onOpenChange={(o) => { if (!runMutation.isPending) setRunOpen(o); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Run procedure</DialogTitle>
+          <DialogDescription>
+            This creates a new private project you own, with one To Do card for each step. Later edits to the procedure will not change it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="run-name">Project name</Label>
+          <Input
+            id="run-name"
+            value={runName}
+            maxLength={200}
+            onChange={(e) => setRunName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitRun(); }}
+            data-testid="input-run-name"
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setRunOpen(false)} disabled={runMutation.isPending}>Cancel</Button>
+          <Button onClick={submitRun} disabled={runMutation.isPending || !runName.trim()} data-testid="button-confirm-run">
+            {runMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Create project
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     {lightboxSrc && (
 

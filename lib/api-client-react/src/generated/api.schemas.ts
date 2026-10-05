@@ -187,6 +187,15 @@ export interface AuthUser {
   role: AuthUserRole;
 }
 
+export type ContentKind = typeof ContentKind[keyof typeof ContentKind];
+
+
+export const ContentKind = {
+  knowledge: 'knowledge',
+  policy: 'policy',
+  procedure: 'procedure',
+} as const;
+
 export type ArticleVisibility = typeof ArticleVisibility[keyof typeof ArticleVisibility];
 
 
@@ -204,6 +213,9 @@ export interface GroupSummary {
 }
 
 export interface ArticleSummary {
+  kind?: ContentKind;
+  /** @nullable */
+  policySubjectId?: number | null;
   id: number;
   slug: string;
   /**
@@ -233,7 +245,18 @@ export interface ArticleSummary {
   tags?: Tag[];
 }
 
+export interface ProcedureStep {
+  /** @minLength 1 */
+  title: string;
+  /** @minLength 1 */
+  description: string;
+}
+
 export interface Article {
+  kind?: ContentKind;
+  /** @nullable */
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   id: number;
   /**
      * Owning project when this article is a project document
@@ -292,6 +315,10 @@ export interface ProjectDocumentListResponse {
 }
 
 export interface ArticleInput {
+  kind?: ContentKind;
+  /** @nullable */
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   /** @minLength 1 */
   title: string;
   /** HTML content */
@@ -306,6 +333,9 @@ export interface ArticleInput {
 }
 
 export interface ArticleUpdate {
+  /** @nullable */
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   /** @minLength 1 */
   title?: string;
   content?: string;
@@ -314,6 +344,35 @@ export interface ArticleUpdate {
   visibility?: ArticleVisibility;
   groupIds?: number[];
   tagIds?: number[];
+}
+
+export interface PolicySubject {
+  id: number;
+  name: string;
+  /** @nullable */
+  parentId: number | null;
+}
+
+export interface PolicySubjectInput {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  parentId?: number | null;
+}
+
+export interface ProcedureRunInput {
+  /** @minLength 1 */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  requestId: string;
+}
+
+export interface ProcedureRun {
+  projectId: number;
+  boardId: number;
 }
 
 export interface ArticleSlugUpdate {
@@ -540,6 +599,14 @@ export type ListArticlesParams = {
  * Filter articles by title/content substring
  */
 search?: string;
+/**
+ * Defaults to knowledge; all is for cross-area link suggestions
+ */
+kind?: ListArticlesKind;
+/**
+ * Policies in this subject or any descendant; applied before pagination
+ */
+subjectId?: number;
 sort?: ListArticlesSort;
 order?: ListArticlesOrder;
 limit?: number;
@@ -549,6 +616,16 @@ offset?: number;
  */
 tagId?: number;
 };
+
+export type ListArticlesKind = typeof ListArticlesKind[keyof typeof ListArticlesKind];
+
+
+export const ListArticlesKind = {
+  knowledge: 'knowledge',
+  policy: 'policy',
+  procedure: 'procedure',
+  all: 'all',
+} as const;
 
 export type ListArticlesSort = typeof ListArticlesSort[keyof typeof ListArticlesSort];
 
