@@ -14,3 +14,5 @@
 - [Pnpm workspace config preservation](pnpm-workspace-config.md) — dependency installs can reserialize workspace YAML; preserve supply-chain settings and catalog specifiers.
 - [SAML IdP interoperability](saml-idp-interoperability.md) — confirmed live setup required correct ACS, signed assertion, and exact audience; diagnose logs before relaxing validation.
 - [Policies and procedures](policies-procedures.md) — policies are categorized, procedures are ordered; editor/admin runs create independent projects without card dependency gating.
+- [Backup verification safety](backup-verification.md) — exercise destructive backup restores with isolated fixtures, never over current development or production data.
+- [Project managers](project-managers.md) — projects need a designated manager, defaulting to their creator and assignable to another individual.

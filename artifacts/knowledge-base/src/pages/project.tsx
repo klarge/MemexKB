@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
+import { setBoardArchived } from "@/lib/board-archive";
 import {
   Plus, Trash2, LayoutGrid, ArrowLeft, Loader2, X, Users, Shield, FolderKanban,
   Archive, ArchiveRestore, ChevronDown, ChevronRight, FileText, Pencil,
@@ -110,12 +111,16 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
 
   const archiveBoard = useMutation({
     mutationFn: ({ id, archived }: { id: number; archived: boolean }) =>
-      fetch(`/api/boards/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archived }),
-      }),
-    onSuccess: invalidate,
+      setBoardArchived(id, archived),
+    onSuccess: async (updated, { archived }) => {
+      if (archived) setShowArchivedBoards(true);
+      await Promise.all([
+        invalidate(),
+        qc.invalidateQueries({ queryKey: ["board", updated.id] }),
+        qc.invalidateQueries({ queryKey: ["projects"] }),
+        qc.invalidateQueries({ queryKey: ["projects-archived"] }),
+      ]);
+    },
   });
 
   const addGroup = useMutation({
@@ -348,10 +353,11 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
           </div>
         )}
 
+        {archiveBoard.isError && <p role="alert" className="text-sm text-destructive">{archiveBoard.error.message}</p>}
         {activeBoards.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-muted/20 py-12 text-center text-muted-foreground">
             <LayoutGrid className="mx-auto h-8 w-8 opacity-20 mb-2" />
-            <p className="text-sm">No boards yet. Create one to start organizing work.</p>
+            <p className="text-sm">{archivedBoards.length ? "No active boards. Restore an archived board below or create a new one." : "No boards yet. Create one to start organizing work."}</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -361,6 +367,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
                 board={board}
                 projectId={projectId}
                 onArchive={(id) => archiveBoard.mutate({ id, archived: true })}
+                archiveDisabled={archiveBoard.isPending}
                 onDelete={(id) => {
                   if (confirm(`Delete board "${board.name}"?`)) deleteBoard.mutate(id);
                 }}
@@ -370,10 +377,10 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
         )}
 
         {/* Archived boards */}
-        {(archivedBoards.length > 0 || showArchivedBoards) && (
           <div className="pt-2">
             <button
               type="button"
+              aria-expanded={showArchivedBoards}
               onClick={() => setShowArchivedBoards((v) => !v)}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
             >
@@ -387,12 +394,14 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
 
             {showArchivedBoards && (
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                {archivedBoards.length === 0 && <p className="text-sm text-muted-foreground py-4 sm:col-span-2">No archived boards.</p>}
                 {archivedBoards.map((board) => (
                   <BoardCard
                     key={board.id}
                     board={board}
                     projectId={projectId}
                     onUnarchive={(id) => archiveBoard.mutate({ id, archived: false })}
+                    archiveDisabled={archiveBoard.isPending}
                     onDelete={(id) => {
                       if (confirm(`Delete board "${board.name}"?`)) deleteBoard.mutate(id);
                     }}
@@ -401,7 +410,6 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
               </div>
             )}
           </div>
-        )}
       </section>
 
       {/* Shared With (owner only) */}
@@ -475,12 +483,14 @@ function BoardCard({
   onArchive,
   onUnarchive,
   onDelete,
+  archiveDisabled,
 }: {
   board: Board;
   projectId: number;
   onArchive?: (id: number) => void;
   onUnarchive?: (id: number) => void;
   onDelete: (id: number) => void;
+  archiveDisabled: boolean;
 }) {
   const isArchived = !!board.archivedAt;
 
@@ -488,7 +498,7 @@ function BoardCard({
     <div className={`group relative rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-primary/30 ${isArchived ? "opacity-70" : ""}`}>
       <Link href={`/projects/${projectId}/boards/${board.id}`}>
         <div className="cursor-pointer">
-          <h3 className="font-semibold group-hover:text-primary transition-colors pr-16">{board.name}</h3>
+          <h3 className="font-semibold group-hover:text-primary transition-colors">{board.name}</h3>
           <p className="text-xs text-muted-foreground mt-1">
             {isArchived
               ? `Archived ${format(new Date(board.archivedAt!), "MMM d, yyyy")}`
@@ -498,25 +508,29 @@ function BoardCard({
       </Link>
 
       {/* Action buttons */}
-      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
         {isArchived && onUnarchive ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             title="Restore board"
+            disabled={archiveDisabled}
             onClick={() => onUnarchive(board.id)}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <ArchiveRestore className="h-3.5 w-3.5" />
-          </button>
+            <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" /> Restore board
+          </Button>
         ) : !isArchived && onArchive ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             title="Archive board"
+            disabled={archiveDisabled}
             onClick={() => onArchive(board.id)}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <Archive className="h-3.5 w-3.5" />
-          </button>
+            <Archive className="mr-1.5 h-3.5 w-3.5" /> Archive board
+          </Button>
         ) : null}
         <button
           type="button"

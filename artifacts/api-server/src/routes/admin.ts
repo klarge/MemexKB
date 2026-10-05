@@ -273,7 +273,7 @@ router.get("/admin/export", requireAuth, requireRole("admin"), async (_req, res)
   // Collect all image IDs referenced across every article
   const allImageIds = new Set<number>();
   for (const article of articles) {
-    for (const id of extractImageIds(article.content)) allImageIds.add(id);
+    for (const id of extractImageIds(contentWithSteps(article))) allImageIds.add(id);
   }
 
   // Batch-fetch images and build id → record map
@@ -674,7 +674,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       }
 
       // Link images to this article
-      await linkImagesToArticle(articleContent, articleId);
+      await linkImagesToArticle(contentWithSteps({ content: articleContent, procedureSteps }), articleId);
 
       // Imported metadata replaces destination access rules completely.
       await db.delete(articleGroupsTable).where(eq(articleGroupsTable.articleId, articleId));
@@ -686,6 +686,7 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
       }
 
       // Restore tag assignments
+      await db.delete(articleTagsTable).where(eq(articleTagsTable.articleId, articleId));
       if (metaTagNames.length > 0) {
         // Create any tags that don't exist yet (may not be in tags.json for older exports)
         for (const tagName of metaTagNames) {
@@ -703,7 +704,6 @@ router.post("/admin/import", requireAuth, requireRole("admin"), upload.any(), as
           .map((name) => tagsByName.get(name.toLowerCase()))
           .filter((id): id is number => id !== undefined);
         if (resolvedTagIds.length > 0) {
-          await db.delete(articleTagsTable).where(eq(articleTagsTable.articleId, articleId));
           await db
             .insert(articleTagsTable)
             .values(resolvedTagIds.map((tagId) => ({ articleId, tagId })))

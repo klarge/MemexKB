@@ -40,6 +40,7 @@ import {
   siteSettingsTable,
 } from "@workspace/db";
 import { requireAuth, requireRole } from "../lib/auth";
+import { validateBackupContent } from "../lib/backup-content-validation";
 
 const router = Router();
 const upload = multer({
@@ -155,11 +156,12 @@ function validateBackup(value: unknown): asserts value is EnvironmentBackup {
       throw new Error(`Backup section "${section}" failed its integrity check.`);
     }
   }
+  validateBackupContent(data);
 }
 
 function restoreDates(row: Record<string, unknown>): Record<string, unknown> {
   const dateFields = new Set([
-    "createdAt", "updatedAt", "archivedAt", "completedAt", "dueDate", "expiresAt", "lastUsedAt",
+    "createdAt", "updatedAt", "addedAt", "archivedAt", "completedAt", "dueDate", "expiresAt", "lastUsedAt",
   ]);
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [
     key,
@@ -186,7 +188,7 @@ async function buildBackup(): Promise<EnvironmentBackup> {
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.columns
-        WHERE table_schema = 'public'
+        WHERE table_schema = current_schema()
           AND table_name = 'articles'
           AND column_name = 'log_slug'
       ) AS "exists"
@@ -199,6 +201,12 @@ async function buildBackup(): Promise<EnvironmentBackup> {
           slug: articlesTable.slug,
           title: articlesTable.title,
           content: articlesTable.content,
+          kind: articlesTable.kind,
+          policySubjectId: articlesTable.policySubjectId,
+          procedureSteps: articlesTable.procedureSteps,
+          isStatic: articlesTable.isStatic,
+          visibility: articlesTable.visibility,
+          projectId: articlesTable.projectId,
           isLogEntry: articlesTable.isLogEntry,
           createdById: articlesTable.createdById,
           updatedById: articlesTable.updatedById,
@@ -265,6 +273,8 @@ async function hasExistingData(): Promise<boolean> {
     db.select({ value: count() }).from(templatesTable), db.select({ value: count() }).from(taskListsTable),
     db.select({ value: count() }).from(projectsTable), db.select({ value: count() }).from(ssoConfigsTable),
     db.select({ value: count() }).from(siteSettingsTable),
+    db.select({ value: count() }).from(policySubjectsTable),
+    db.select({ value: count() }).from(procedureRunsTable),
   ]);
   return counts.some(([result]) => Number(result.value) > 0);
 }
@@ -353,35 +363,35 @@ router.post("/admin/full-backup/restore", requireAuth, requireRole("admin"), upl
     await db.transaction(async (tx) => {
       await tx.execute(sql`DELETE FROM user_sessions`);
       await tx.execute(sql`TRUNCATE TABLE users, groups, articles, tags, templates, task_lists, projects, sso_configs, site_settings, password_reset_tokens, policy_subjects, procedure_runs RESTART IDENTITY CASCADE`);
-      await tx.insert(usersTable).values(users as any);
-      await tx.insert(groupsTable).values(backup.data.groups.map(restoreDates) as any);
-      await tx.insert(groupMembersTable).values(backup.data.groupMembers.map(restoreDates) as any);
-      await tx.insert(tagsTable).values(backup.data.tags.map(restoreDates) as any);
+      if (users.length) await tx.insert(usersTable).values(users as any);
+      if (backup.data.groups.length) await tx.insert(groupsTable).values(backup.data.groups.map(restoreDates) as any);
+      if (backup.data.groupMembers.length) await tx.insert(groupMembersTable).values(backup.data.groupMembers.map(restoreDates) as any);
+      if (backup.data.tags.length) await tx.insert(tagsTable).values(backup.data.tags.map(restoreDates) as any);
       // Project documents reference their owning project, so restore projects
       // before article rows. Backups created before project documents simply omit
       // projectId and remain valid.
-      await tx.insert(projectsTable).values(backup.data.projects.map(restoreDates) as any);
-      await tx.insert(projectGroupsTable).values(backup.data.projectGroups.map(restoreDates) as any);
+      if (backup.data.projects.length) await tx.insert(projectsTable).values(backup.data.projects.map(restoreDates) as any);
+      if (backup.data.projectGroups.length) await tx.insert(projectGroupsTable).values(backup.data.projectGroups.map(restoreDates) as any);
       if (backup.data.policySubjects.length) await tx.insert(policySubjectsTable).values(backup.data.policySubjects as any);
-      await tx.insert(articlesTable).values(backup.data.articles.map(restoreDates) as any);
-      await tx.insert(articleGroupsTable).values(backup.data.articleGroups.map(restoreDates) as any);
-      await tx.insert(articleLinksTable).values(backup.data.articleLinks.map(restoreDates) as any);
-      await tx.insert(articleImagesTable).values(backup.data.articleImages.map(restoreDates) as any);
-      await tx.insert(articleVersionsTable).values(backup.data.articleVersions.map(restoreDates) as any);
-      await tx.insert(articleTagsTable).values(backup.data.articleTags.map(restoreDates) as any);
-      await tx.insert(templatesTable).values(backup.data.templates.map(restoreDates) as any);
-      await tx.insert(templateTagsTable).values(backup.data.templateTags.map(restoreDates) as any);
-      await tx.insert(taskListsTable).values(backup.data.taskLists.map(restoreDates) as any);
-      await tx.insert(tasksTable).values(backup.data.tasks.map(restoreDates) as any);
-      await tx.insert(boardsTable).values(backup.data.boards.map(restoreDates) as any);
+      if (backup.data.articles.length) await tx.insert(articlesTable).values(backup.data.articles.map(restoreDates) as any);
+      if (backup.data.articleGroups.length) await tx.insert(articleGroupsTable).values(backup.data.articleGroups.map(restoreDates) as any);
+      if (backup.data.articleLinks.length) await tx.insert(articleLinksTable).values(backup.data.articleLinks.map(restoreDates) as any);
+      if (backup.data.articleImages.length) await tx.insert(articleImagesTable).values(backup.data.articleImages.map(restoreDates) as any);
+      if (backup.data.articleVersions.length) await tx.insert(articleVersionsTable).values(backup.data.articleVersions.map(restoreDates) as any);
+      if (backup.data.articleTags.length) await tx.insert(articleTagsTable).values(backup.data.articleTags.map(restoreDates) as any);
+      if (backup.data.templates.length) await tx.insert(templatesTable).values(backup.data.templates.map(restoreDates) as any);
+      if (backup.data.templateTags.length) await tx.insert(templateTagsTable).values(backup.data.templateTags.map(restoreDates) as any);
+      if (backup.data.taskLists.length) await tx.insert(taskListsTable).values(backup.data.taskLists.map(restoreDates) as any);
+      if (backup.data.tasks.length) await tx.insert(tasksTable).values(backup.data.tasks.map(restoreDates) as any);
+      if (backup.data.boards.length) await tx.insert(boardsTable).values(backup.data.boards.map(restoreDates) as any);
       if (backup.data.procedureRuns.length) await tx.insert(procedureRunsTable).values(backup.data.procedureRuns as any);
-      await tx.insert(boardColumnsTable).values(backup.data.boardColumns.map(restoreDates) as any);
-      await tx.insert(boardCardsTable).values(backup.data.boardCards.map(restoreDates) as any);
-      await tx.insert(boardCardMembersTable).values(backup.data.boardCardMembers.map(restoreDates) as any);
-      await tx.insert(boardCardCommentsTable).values(backup.data.boardCardComments.map(restoreDates) as any);
-      await tx.insert(ssoConfigsTable).values(backup.data.ssoConfigs.map(restoreDates) as any);
-      await tx.insert(siteSettingsTable).values(backup.data.siteSettings.map(restoreDates) as any);
-      await tx.insert(passwordResetTokensTable).values(recoveryTokens.map(({ token, ...row }) => row));
+      if (backup.data.boardColumns.length) await tx.insert(boardColumnsTable).values(backup.data.boardColumns.map(restoreDates) as any);
+      if (backup.data.boardCards.length) await tx.insert(boardCardsTable).values(backup.data.boardCards.map(restoreDates) as any);
+      if (backup.data.boardCardMembers.length) await tx.insert(boardCardMembersTable).values(backup.data.boardCardMembers.map(restoreDates) as any);
+      if (backup.data.boardCardComments.length) await tx.insert(boardCardCommentsTable).values(backup.data.boardCardComments.map(restoreDates) as any);
+      if (backup.data.ssoConfigs.length) await tx.insert(ssoConfigsTable).values(backup.data.ssoConfigs.map(restoreDates) as any);
+      if (backup.data.siteSettings.length) await tx.insert(siteSettingsTable).values(backup.data.siteSettings.map(restoreDates) as any);
+      if (recoveryTokens.length) await tx.insert(passwordResetTokensTable).values(recoveryTokens.map(({ token, ...row }) => row));
       await resetSerialSequences(tx);
     });
     const recoveryLinks = recoveryTokens.map(({ userId, token }) => {

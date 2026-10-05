@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -24,10 +24,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowLeft, Plus, Trash2, Loader2, X, GripVertical, Calendar, User, Check, Pencil, Search,
-  MessageSquare, Send,
+  MessageSquare, Send, Archive, ArchiveRestore,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { setBoardArchived } from "@/lib/board-archive";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format, isPast, isToday } from "date-fns";
@@ -54,7 +55,7 @@ type Card = {
   members: CardMember[];
 };
 type Column = { id: number; name: string; position: number; cards: Card[] };
-type BoardData = { id: number; projectId: number; name: string; columns: Column[]; cardsTruncated?: boolean };
+type BoardData = { id: number; projectId: number; name: string; archivedAt: string | null; columns: Column[]; cardsTruncated?: boolean };
 type ProjectMember = { id: number; name: string; email: string };
 
 const colKey = (id: number) => `col-${id}`;
@@ -694,6 +695,22 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   const boardId = Number(params.boardId);
   const projectId = Number(params.projectId);
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  const archiveBoard = useMutation({
+    mutationFn: (archived: boolean) => setBoardArchived(boardId, archived),
+    onSuccess: async (updated, archived) => {
+      setLocation(`/projects/${updated.projectId}`);
+      toast({ title: archived ? "Board archived" : "Board restored", description: "The board and all its cards have been preserved." });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["board", boardId] }),
+        qc.invalidateQueries({ queryKey: ["project", updated.projectId] }),
+        qc.invalidateQueries({ queryKey: ["projects"] }),
+        qc.invalidateQueries({ queryKey: ["projects-archived"] }),
+      ]);
+    },
+    onError: (error: Error) => toast({ title: "Unable to update board", description: error.message, variant: "destructive" }),
+  });
 
   const { data: boardData, isLoading } = useQuery<BoardData>({
     queryKey: ["board", boardId],
@@ -985,7 +1002,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       {/* Board toolbar */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b bg-background shrink-0">
+      <div className="flex flex-wrap items-center gap-3 px-6 py-3 border-b bg-background shrink-0">
         <Link href={`/projects/${projectId}`}>
           <button type="button" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -994,6 +1011,18 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
         </Link>
         <div className="h-4 w-px bg-border" />
         <h1 className="font-semibold text-sm">{boardData.name}</h1>
+        {boardData.archivedAt && <span className="text-xs text-muted-foreground">Archived</span>}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="ml-auto"
+          disabled={archiveBoard.isPending}
+          onClick={() => archiveBoard.mutate(!boardData.archivedAt)}
+        >
+          {archiveBoard.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : boardData.archivedAt ? <ArchiveRestore className="mr-1.5 h-4 w-4" /> : <Archive className="mr-1.5 h-4 w-4" />}
+          {boardData.archivedAt ? "Restore board" : "Archive board"}
+        </Button>
       </div>
 
       {/* Card cap notice */}

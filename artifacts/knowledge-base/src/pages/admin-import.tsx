@@ -333,7 +333,7 @@ export default function AdminImport() {
             Full environment backup
           </CardTitle>
           <CardDescription>
-            Create one encrypted recovery archive for users, groups, articles, private logs, tasks, projects, templates, settings, and customization. Passwords, sessions, tokens, and secret configuration are never included.
+            Create one encrypted recovery archive for users, groups, Knowledge, Policies and their category tree, Procedures and ordered steps, version history, private logs, tasks, projects and procedure-run snapshots, typed templates, settings, and customization. Passwords, sessions, tokens, and secret configuration are never included.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -435,10 +435,10 @@ export default function AdminImport() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileArchive className="h-4 w-4" />
-                Knowledge Base
+                Content archive
               </CardTitle>
               <CardDescription className="text-xs">
-                All articles and images as a ZIP archive (Markdown + HTML + metadata).
+                Knowledge, Policies with assigned category paths, and Procedures with ordered steps and images (Markdown + HTML + metadata). Use the full environment backup for history, templates, settings, and generated projects.
               </CardDescription>
             </CardHeader>
             <CardContent>
