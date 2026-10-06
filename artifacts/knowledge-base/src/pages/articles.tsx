@@ -161,9 +161,8 @@ export default function Articles() {
           {data?.articles.map((article) => (
             <Link key={article.id} href={`/knowledge/${article.slug}`}>
               <Card className="hover-elevate cursor-pointer transition-colors group">
-                <CardContent className="p-5 flex items-center justify-between">
-                  <FavoriteButton entityType="article" entityId={article.id} title={article.title} />
-                  <div className="flex items-center gap-4 min-w-0">
+                <CardContent className="p-5 flex items-center justify-between gap-3">
+                  <div className="flex flex-1 items-center gap-4 min-w-0">
                     <div className="h-10 w-10 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
                       {article.isRestricted ? (
                         <Lock className="h-5 w-5" />
@@ -213,6 +212,7 @@ export default function Articles() {
                       </div>
                     </div>
                   </div>
+                  <FavoriteButton entityType="article" entityId={article.id} title={article.title} />
                 </CardContent>
               </Card>
             </Link>

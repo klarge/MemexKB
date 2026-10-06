@@ -58,8 +58,7 @@ export default function AreaList({ area }: { area: Area }) {
     <Link key={a.id} href={`${AREA_BASE[area]}/${a.slug}`}>
       <Card className="hover-elevate cursor-pointer transition-colors group" data-testid={`card-${kind}-${a.id}`}>
         <CardContent className="p-4 flex items-center justify-between gap-3">
-          <FavoriteButton entityType="article" entityId={a.id} title={a.title} />
-          <div className="min-w-0 flex items-center gap-3">
+          <div className="min-w-0 flex flex-1 items-center gap-3">
             <div className="h-9 w-9 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
               {a.isRestricted ? <Lock className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
             </div>
@@ -74,6 +73,7 @@ export default function AreaList({ area }: { area: Area }) {
           <Badge variant="outline" className="shrink-0 text-xs border-primary/20 text-primary bg-primary/5">
             {a.visibility === "group" ? "Group" : a.visibility === "public" ? "Public" : "Personal"}
           </Badge>
+          <FavoriteButton entityType="article" entityId={a.id} title={a.title} />
         </CardContent>
       </Card>
     </Link>
