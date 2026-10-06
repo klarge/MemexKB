@@ -101,10 +101,10 @@ export default function AreaList({ area }: { area: Area }) {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-3" data-testid={`heading-${area}`}>
-            <Icon className="h-7 w-7" /> {title}
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" data-testid={`heading-${area}`}>
+            <Icon className="h-6 w-6" /> {title}
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground text-sm mt-1">
             {isPolicy
               ? "Standing rules, organized by category. Policies are reference documents, not a sequence."
               : "Repeatable processes. Run a procedure to turn its steps into a project."}
