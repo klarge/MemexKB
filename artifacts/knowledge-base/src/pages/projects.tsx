@@ -249,7 +249,7 @@ function ProjectCard({
             <span className="flex items-center gap-1">
               <LayoutGrid className="h-3 w-3" />
               {project.boardCount} {project.boardCount === 1 ? "board" : "boards"}
-              {project.managerName && <span className="ml-3">Manager: {project.managerName}</span>}
+              {project.managerName && <span className="ml-3">PM: {project.managerName}</span>}
             </span>
             {isArchived ? (
               <span className="ml-auto flex items-center gap-1 text-amber-600 dark:text-amber-400">
