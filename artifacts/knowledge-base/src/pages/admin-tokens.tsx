@@ -86,8 +86,8 @@ export default function AdminTokens() {
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">API Keys</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold tracking-tight">API Keys</h1>
+          <p className="text-muted-foreground text-sm mt-1">
             All active API keys across{" "}
             <span className="font-medium text-foreground">{userCount}</span>{" "}
             {userCount === 1 ? "user" : "users"} — {tokens?.length ?? 0} total

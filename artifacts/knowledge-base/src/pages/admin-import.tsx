@@ -325,8 +325,8 @@ export default function AdminImport() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-primary">Import &amp; Export</h1>
-        <p className="text-muted-foreground mt-1">Backup your knowledge base or import articles.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Import &amp; Export</h1>
+        <p className="text-muted-foreground text-sm mt-1">Backup your knowledge base or import articles.</p>
       </div>
 
       {/* ── Exports ── */}

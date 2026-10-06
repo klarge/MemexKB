@@ -180,11 +180,11 @@ export default function AdminTags() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
-            <TagIcon className="h-7 w-7" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <TagIcon className="h-6 w-6" />
             Tags
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground text-sm mt-1">
             Manage tags for articles. Only admins can create or delete tags. Editors and users can apply
             existing tags when editing articles.
           </p>

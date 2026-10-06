@@ -373,7 +373,7 @@ export default function AdminSso() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <ShieldCheck className="h-6 w-6" /> SSO / Identity Providers
           </h1>
           <p className="text-muted-foreground text-sm mt-1">

@@ -148,8 +148,8 @@ export default function AdminUsers() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Users</h1>
-          <p className="text-muted-foreground mt-1">Manage platform access and roles.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Users</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage platform access and roles.</p>
         </div>
         <Button onClick={() => handleOpenDialog()} data-testid="button-create-user">
           <Plus className="mr-2 h-4 w-4" />

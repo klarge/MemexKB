@@ -22,3 +22,4 @@
 - [Content list display](content-list-display.md) — content areas default to 20 entries, with a bottom Load more... button for additional batches.
 - [Favorites policy](favorites-policy.md) — favorites are personal; hide inaccessible bookmarks without erasing the user's saved preference.
 - [Board drag gestures](board-drag-gestures.md) — suppression must survive cross-column remounts; pointer and touch activation must not compete.
+- [Page header consistency](page-header-consistency.md) — content and administration headers should match Logs, Tasks, and Projects.
