@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import StarterKit from "@/lib/editor-starter-kit";
+import { OrderedListStyleSelect } from "@/components/ordered-list-style-select";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -194,6 +195,7 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
                 <div className="w-px h-6 bg-border mx-0.5" />
                 <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleBulletList().run()} className={editor.isActive("bulletList") ? "bg-muted" : ""}><List className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={editor.isActive("orderedList") ? "bg-muted" : ""}><ListOrdered className="h-4 w-4" /></Button>
+                <OrderedListStyleSelect editor={editor} />
                 <div className="w-px h-6 bg-border mx-0.5" />
                 <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={editor.isActive("blockquote") ? "bg-muted" : ""}><Quote className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={editor.isActive("codeBlock") ? "bg-muted" : ""}><Code className="h-4 w-4" /></Button>

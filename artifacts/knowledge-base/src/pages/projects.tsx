@@ -237,6 +237,7 @@ function ProjectCard({
     <div className={`group relative rounded-xl border bg-card p-5 hover:shadow-md transition-all hover:border-primary/30 space-y-3 ${isArchived ? "opacity-70" : ""}`}>
       <Link href={`/projects/${project.id}`}>
         <div className="cursor-pointer">
+          <p className="mb-1 text-xs font-medium text-muted-foreground" data-testid={`project-id-${project.id}`}>PROJ-{project.id}</p>
           <div className="flex items-start justify-between gap-2">
             <h3 className="min-h-9 pr-24 font-semibold text-base group-hover:text-primary transition-colors leading-snug">
               {project.name}

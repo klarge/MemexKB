@@ -350,6 +350,16 @@ sup[data-type="citation"] button:focus-visible { outline: 2px solid hsl(var(--ri
   }
 }
 
+/* Shared by the editor and saved content; explicit choices override nesting. */
+:is(.ProseMirror, .prose) ol { list-style-type: decimal; }
+:is(.ProseMirror, .prose) :is(ol, ul) ol { list-style-type: lower-alpha; }
+:is(.ProseMirror, .prose) ol[type="1"] { list-style-type: decimal; }
+:is(.ProseMirror, .prose) ol[type="a"] { list-style-type: lower-alpha; }
+:is(.ProseMirror, .prose) ol[type="i"] { list-style-type: lower-roman; }
+/* Data attributes are case-sensitive across browsers, unlike HTML type. */
+:is(.ProseMirror, .prose) ol[data-list-style="A"] { list-style-type: upper-alpha; }
+:is(.ProseMirror, .prose) ol[data-list-style="I"] { list-style-type: upper-roman; }
+
 /* Unlayered so this wins over the typography plugin's layered anchor color. */
 .ProseMirror a[href] {
   color: hsl(var(--primary));

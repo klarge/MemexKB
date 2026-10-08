@@ -23,3 +23,4 @@
 - [Favorites policy](favorites-policy.md) — favorites are personal; hide inaccessible bookmarks without erasing the user's saved preference.
 - [Board drag gestures](board-drag-gestures.md) — suppression must survive cross-column remounts; pointer and touch activation must not compete.
 - [Page header consistency](page-header-consistency.md) — content and administration headers should match Logs, Tasks, and Projects.
+- [Tiptap list attribute collisions](tiptap-list-attributes.md) — reuse native list types; overlapping rendered HTML attributes can silently erase toolbar choices.

@@ -744,6 +744,8 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
   const [activeCardId, setActiveCardId] = useState<number | null>(null);
   const [activeColumnKey, setActiveColumnKey] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
+  useEffect(() => { setAssigneeFilter("all"); }, [boardId]);
   const cardClickGuard = useRef(new CardDragClickGuard());
   const dragSnapshot = useRef<{ items: Record<string, number[]>; columnOrder: number[] } | null>(null);
 
@@ -784,6 +786,28 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
       for (const card of col.cards) map[card.id] = card;
     return map;
   }, [boardData]);
+
+  const assigneeOptions = useMemo(() => {
+    const members = new Map<number, CardMember>();
+    for (const member of projectMembers) members.set(member.id, member);
+    // Keep existing assignments selectable even if a member left the project.
+    for (const card of Object.values(cardMap)) {
+      for (const member of card.members) members.set(member.id, member);
+    }
+    return [...members.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+  }, [projectMembers, cardMap]);
+
+  // Filter only the rendered cards; drag/reorder state retains hidden cards.
+  const visibleItems = useMemo(() => Object.fromEntries(
+    Object.entries(items).map(([key, ids]) => [key, ids.filter(id => {
+      const card = cardMap[id];
+      if (!card) return false;
+      if (assigneeFilter === "all") return true;
+      if (assigneeFilter === "unassigned") return card.members.length === 0;
+      return card.members.some(member => String(member.id) === assigneeFilter);
+    })]),
+  ), [items, cardMap, assigneeFilter]);
+  const visibleCardCount = Object.values(visibleItems).reduce((count, ids) => count + ids.length, 0);
 
   const columnMap = useMemo<Record<number, Column>>(() => {
     const map: Record<number, Column> = {};
@@ -1050,13 +1074,30 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
         <Link href={`/projects/${projectId}`}>
           <button type="button" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back
+            Back to PROJ-{boardData.projectId}
           </button>
         </Link>
         <div className="h-4 w-px bg-border" />
         <h1 className="min-w-0 truncate font-semibold text-sm" title={boardData.name}>{boardData.name}</h1>
         <RenameBoard board={boardData} projectId={projectId} />
         {boardData.archivedAt && <span className="text-xs text-muted-foreground">Archived</span>}
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Assigned to</span>
+          <select
+            aria-label="Filter cards by assignee"
+            className="h-8 max-w-48 rounded-md border border-input bg-background px-2 text-sm"
+            value={assigneeFilter}
+            disabled={activeCardId !== null || activeColumnKey !== null}
+            onChange={event => setAssigneeFilter(event.target.value)}
+          >
+            <option value="all">Everyone</option>
+            <option value="unassigned">Unassigned</option>
+            {assigneeOptions.map(member => <option key={member.id} value={String(member.id)}>{member.name}</option>)}
+          </select>
+        </label>
+        {assigneeFilter !== "all" && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setAssigneeFilter("all")}>Clear filter</Button>
+        )}
         <Button
           type="button"
           size="sm"
@@ -1069,6 +1110,12 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
           {boardData.archivedAt ? "Restore board" : "Archive board"}
         </Button>
       </div>
+
+      {assigneeFilter !== "all" && (
+        <div role="status" className="shrink-0 border-b px-6 py-2 text-xs text-muted-foreground">
+          {visibleCardCount === 0 ? "No cards match this assignee." : `Showing ${visibleCardCount} ${visibleCardCount === 1 ? "card" : "cards"}.`}
+        </div>
+      )}
 
       {/* Card cap notice */}
       {boardData.cardsTruncated && (
@@ -1099,7 +1146,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
                   <KanbanColumn
                     key={cId}
                     column={col}
-                    cardIds={items[colKey(cId)] ?? []}
+                    cardIds={visibleItems[colKey(cId)] ?? []}
                     cardMap={cardMap}
                     onOpenCard={(id, keyboard) => { if (cardClickGuard.current.canOpen(keyboard)) setSelectedCardId(id); }}
                     onBeginCardInteraction={() => cardClickGuard.current.beginInteraction()}

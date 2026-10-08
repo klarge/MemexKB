@@ -248,6 +248,7 @@ export default function ProjectPage({ params }: { params: { projectId: string } 
                 )}
               </h1>
             )}
+            <p className="mt-1 text-xs font-medium text-muted-foreground" data-testid="project-id">PROJ-{project.id}</p>
             {project.description && (
               <div className="text-muted-foreground text-sm mt-1 whitespace-pre-line">
                 {project.description}

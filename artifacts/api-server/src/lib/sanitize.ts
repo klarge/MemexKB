@@ -23,6 +23,7 @@ export function sanitizeArticleHtml(html: string): string {
       a: ["href", "target", "rel", "id", "aria-label"],
       sup: ["data-citation-id", "data-citation-description", "data-citation-url", "data-citation-number"],
       li: ["id"],
+      ol: ["type", "start", "data-list-style"],
       img: ["src", "alt", "title", "width", "height", "style", "data-caption"],
       th: ["colspan", "rowspan", "colwidth"],
       td: ["colspan", "rowspan", "style"],
@@ -45,6 +46,12 @@ export function sanitizeArticleHtml(html: string): string {
     },
     disallowedTagsMode: "discard",
     transformTags: {
+      ol: (tagName, attribs) => {
+        if (attribs.type && !["1", "a", "A", "i", "I"].includes(attribs.type)) delete attribs.type;
+        if (attribs["data-list-style"] !== attribs.type) delete attribs["data-list-style"];
+        if (attribs.start && !/^-?\d+$/.test(attribs.start)) delete attribs.start;
+        return { tagName, attribs };
+      },
       a: (tagName, attribs) => {
         if (attribs.id && !/^cite-ref-c-[a-zA-Z0-9-]{1,64}$/.test(attribs.id)) delete attribs.id;
         return { tagName, attribs };
