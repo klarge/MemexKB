@@ -9,7 +9,7 @@
 - [Article visibility policy](article-visibility-policy.md) — visibility is explicit; authorization, counts, pagination, stats, caches, and derived surfaces must all use the same policy.
 - [Docker database modes](docker-database-modes.md) — external-DB Compose is standalone so local DB dependencies cannot leak into external deployments.
 - [MCP request identity](mcp-request-identity.md) — never cache a user's bearer key in shared MCP transport/session state; bind API access to each authenticated request.
-- [Orval path/query collision](orval-path-query-collision.md) — adding query params to an operation with path params can duplicate Zod barrel exports; account for this generator quirk.
+- [Orval export collisions](orval-path-query-collision.md) — combined path/query parameters and external request schemas can duplicate generated Zod exports; require codegen typechecking.
 - [Archiver runtime types](archiver-runtime-types.md) — ZIP export uses a class at runtime even though installed declarations describe an older callable API.
 - [Pnpm workspace config preservation](pnpm-workspace-config.md) — dependency installs can reserialize workspace YAML; preserve supply-chain settings and catalog specifiers.
 - [SAML IdP interoperability](saml-idp-interoperability.md) — confirmed live setup required correct ACS, signed assertion, and exact audience; diagnose logs before relaxing validation.
@@ -24,3 +24,4 @@
 - [Board drag gestures](board-drag-gestures.md) — suppression must survive cross-column remounts; pointer and touch activation must not compete.
 - [Page header consistency](page-header-consistency.md) — content and administration headers should match Logs, Tasks, and Projects.
 - [Tiptap list attribute collisions](tiptap-list-attributes.md) — reuse native list types; overlapping rendered HTML attributes can silently erase toolbar choices.
+- [PDF reader fidelity](pdf-rendering.md) — exports must match HTML; printable-width media queries can activate mobile layouts despite desktop screen emulation.

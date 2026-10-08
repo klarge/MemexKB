@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { runSeed } from "./lib/seed";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
+import { startNotificationWorker } from "./lib/notification-worker";
 
 const rawPort = process.env["PORT"];
 
@@ -39,6 +40,7 @@ app.listen(port, async (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  startNotificationWorker();
 
   // Seeding is opt-in: only runs when RUN_SEED=true is explicitly set.
   // In production, SEED_ADMIN_EMAIL and a strong SEED_ADMIN_PASSWORD must

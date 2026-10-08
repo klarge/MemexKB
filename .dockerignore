@@ -5,6 +5,7 @@
 # Node modules — installed fresh inside the builder stage
 node_modules
 **/node_modules
+.pythonlibs
 
 # Build output — produced inside the builder stage
 **/dist

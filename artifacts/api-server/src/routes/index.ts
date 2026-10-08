@@ -19,6 +19,7 @@ import tagsRouter from "./tags";
 import fullBackupRouter from "./admin-full-backup";
 import policySubjectsRouter from "./policy-subjects";
 import favoritesRouter from "./favorites";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,7 @@ router.use(devScreenshotRouter);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(settingsRouter);
+router.use(notificationsRouter);
 router.use(ssoAuthRouter);
 router.use(ssoAdminRouter);
 router.use(tokensRouter);

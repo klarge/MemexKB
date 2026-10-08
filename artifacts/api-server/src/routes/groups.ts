@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { accessibleProjectIds, enqueueNotification } from "../lib/notification-events";
 import { db } from "@workspace/db";
 import { groupsTable, groupMembersTable, usersTable } from "@workspace/db";
 import { eq, count, inArray, and } from "drizzle-orm";
@@ -90,10 +91,13 @@ router.post("/groups/:id/members", requireAuth, requireRole("admin"), async (req
     res.status(400).json({ error: "userId required" });
     return;
   }
-  await db
-    .insert(groupMembersTable)
-    .values({ groupId, userId })
-    .onConflictDoNothing();
+  await db.transaction(async tx => {
+    const previous = new Set(await accessibleProjectIds(userId, tx));
+    const added = await tx.insert(groupMembersTable).values({ groupId, userId }).onConflictDoNothing().returning();
+    if (added.length) for (const projectId of await accessibleProjectIds(userId, tx)) {
+      if (!previous.has(projectId)) await enqueueNotification("projectAdded", userId, projectId, null, tx);
+    }
+  });
   res.json({ message: "Member added" });
 });
 

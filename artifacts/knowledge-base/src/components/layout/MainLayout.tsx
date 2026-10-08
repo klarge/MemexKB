@@ -41,6 +41,7 @@ import {
   Library,
   ListTodo,
   FolderKanban,
+  Bell,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -289,6 +290,17 @@ export function MainLayout({ children }: { children: ReactNode }) {
                         <Link href="/admin/tokens">
                           <KeyRound className="mr-2 h-4 w-4" />
                           <span>API Keys</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location === "/admin/notifications"}
+                      >
+                        <Link href="/admin/notifications">
+                          <Bell className="mr-2 h-4 w-4" />
+                          <span>Notifications</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

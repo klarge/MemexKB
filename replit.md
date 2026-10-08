@@ -49,9 +49,42 @@ variables are:
 
 | Variable | Description |
 |---|---|
-| `SESSION_SECRET` | Long random string for signing session cookies |
+| `SESSION_SECRET` | Long random string for signing session cookies and encrypting SMTP credentials |
 | `POSTGRES_PASSWORD` | Password for the `memex` Postgres user |
 | `DATABASE_URL` | Postgres connection string (auto-set by compose) |
+
+### Email notifications
+
+Configure outgoing SMTP under **Administration → Notifications**. Use STARTTLS
+(normally port 587) or implicit TLS (normally port 465), a sender address, and the
+public app URL for email links. The password is encrypted using `SESSION_SECRET`;
+keep that secret stable across restarts/restores, or re-enter the SMTP password.
+The test action sends only to the signed-in administrator.
+
+Users opt in under **Settings → Email notifications** for card assignments,
+project additions through groups or Project Manager changes, and approaching
+card due dates. Reminder lead time defaults to 24 hours and is configurable.
+The API checks once per minute while running. Keep the server running for
+timely reminders. Reminders exclude completed cards and archived boards/projects;
+preferences and access are rechecked before each delivery. The persistent outbox
+deduplicates reminders per card, recipient, and due date and retries failed
+delivery up to five times. Recent failure reasons appear in server logs without
+SMTP passwords.
+
+### Article PDF exports
+
+PDF exports render article HTML in Chromium using the compiled reader
+stylesheet and embedded reader fonts. This preserves headings, tables, list
+numbering, alignment, infoboxes, captions, citations, and procedure steps.
+Attached images are embedded only if they belong to the authorized article;
+remote images are not fetched during rendering. Scripts and network access
+are disabled in the export browser. A4 exports use the desktop article layout
+with print-safe page breaks and a light background.
+
+Docker installs Chromium automatically. Other self-hosted installations need
+Chromium on the server; set `CHROMIUM_EXECUTABLE_PATH` when it is not installed
+at `/usr/bin/chromium` or `/usr/bin/chromium-browser`. The API build packages
+the reader CSS and fonts, so exports do not depend on an external font service.
 
 ### Schema migrations
 
@@ -100,7 +133,7 @@ To use a pre-built image instead of building locally, replace `build: .` with
   and all other paths (React SPA static files) via `STATIC_DIR`.  No separate
   nginx container needed.
 - **esbuild bundle**: The API server is compiled to a single `dist/index.mjs`
-  with all deps inlined, except `archiver`, `unzipper`, and `pdfkit` which are
+  with all deps inlined, except `archiver`, `unzipper`, `pdfkit`, `nodemailer`, and `playwright-core` which are
   CJS packages that must remain external.
 - **pnpm deploy for migrations**: The `migrate` Docker service uses the
   `builder` stage so drizzle-kit is available without polluting the runtime image.

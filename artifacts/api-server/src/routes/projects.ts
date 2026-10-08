@@ -24,6 +24,7 @@ import { UpdateProjectBody } from "@workspace/api-zod";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
+import { enqueueNotification, projectAccessUserIds, enqueueNewProjectAccess } from "../lib/notification-events";
 
 const router = Router();
 
@@ -220,10 +221,12 @@ router.get("/projects", requireAuth, async (req, res) => {
 router.post("/projects", requireAuth, requireRole("admin", "editor"), async (req, res) => {
   const { name, description } = req.body as { name?: string; description?: string };
   if (typeof name !== "string" || !name.trim()) { res.status(400).json({ error: "Name is required" }); return; }
-  const [project] = await db
-    .insert(projectsTable)
-    .values({ name: name.trim(), description: description?.trim() ?? "", createdById: req.session.userId!, managerId: req.session.userId! })
-    .returning();
+  const project = await db.transaction(async tx => {
+    const [created] = await tx.insert(projectsTable)
+      .values({ name: name.trim(), description: description?.trim() ?? "", createdById: req.session.userId!, managerId: req.session.userId! }).returning();
+    await enqueueNotification("projectAdded", req.session.userId!, created.id, null, tx);
+    return created;
+  });
   res.status(201).json(project);
 });
 
@@ -290,7 +293,12 @@ router.patch("/projects/:projectId", requireAuth, async (req, res) => {
   }
   if (description !== undefined) updates.description = description.trim();
   if (archived !== undefined) updates.archivedAt = archived ? new Date() : null;
-  const [updated] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, projectId)).returning();
+  const updated = await db.transaction(async tx => {
+    const previous = managerId !== undefined ? await projectAccessUserIds(projectId, tx) : [];
+    const [result] = await tx.update(projectsTable).set(updates).where(eq(projectsTable.id, projectId)).returning();
+    if (managerId !== undefined && managerId !== project.managerId) await enqueueNewProjectAccess(projectId, previous, tx);
+    return result;
+  });
   res.json(updated);
 });
 
@@ -344,7 +352,11 @@ router.post("/projects/:projectId/groups", requireAuth, async (req, res) => {
   if (!canAccess || !isOwner) { res.status(403).json({ error: "Only the project owner can share this project" }); return; }
   const { groupId } = req.body as { groupId?: number };
   if (!groupId) { res.status(400).json({ error: "groupId required" }); return; }
-  await db.insert(projectGroupsTable).values({ projectId, groupId }).onConflictDoNothing();
+  await db.transaction(async tx => {
+    const previous = await projectAccessUserIds(projectId, tx);
+    const added = await tx.insert(projectGroupsTable).values({ projectId, groupId }).onConflictDoNothing().returning();
+    if (added.length) await enqueueNewProjectAccess(projectId, previous, tx);
+  });
   res.status(201).json({ projectId, groupId });
 });
 
@@ -880,7 +892,10 @@ router.post("/cards/:cardId/members", requireAuth, async (req, res) => {
   if (!canAccess) { res.status(403).json({ error: "Access denied" }); return; }
   const { userId } = req.body as { userId?: number };
   if (!userId) { res.status(400).json({ error: "userId required" }); return; }
-  await db.insert(boardCardMembersTable).values({ cardId, userId }).onConflictDoNothing();
+  await db.transaction(async tx => {
+    const added = await tx.insert(boardCardMembersTable).values({ cardId, userId }).onConflictDoNothing().returning();
+    if (added.length) await enqueueNotification("cardAssigned", userId, projectId, cardId, tx);
+  });
   res.status(201).json({ cardId, userId });
 });
 

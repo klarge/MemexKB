@@ -40,19 +40,26 @@ RUN NODE_ENV=production PORT=4000 BASE_PATH=/ \
 # here must match the architecture the container will actually run on.
 FROM node:24-alpine AS runtime
 
+RUN apk add --no-cache chromium font-noto font-noto-cjk
+ENV CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 WORKDIR /app
 
 # Install only the packages that esbuild externalised (not inlined into the bundle):
 #   archiver   — ZIP bulk-export
 #   unzipper   — ZIP bulk-import
 #   pdfkit     — PDF article export
+#   nodemailer — SMTP notification delivery
+#   playwright-core — HTML-to-PDF Chromium driver
 # The MCP server has its own production dependency tree under /app/mcp.
 # All other runtime dependencies (express, pino, drizzle-orm, etc.) are already
 # compiled inline into dist/index.mjs by esbuild.
 RUN npm install --no-save \
     archiver@^8.0.0 \
     unzipper@^0.12.3 \
-    pdfkit@^0.18.0
+    pdfkit@^0.18.0 \
+    nodemailer@10.0.15 \
+    playwright-core@1.63.0
 
 # Compiled API server bundle + pino worker thread files
 COPY --from=builder /app/artifacts/api-server/dist ./dist

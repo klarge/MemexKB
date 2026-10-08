@@ -24,6 +24,80 @@ tags:
   - name: projects
     description: Project workspaces, boards, and documents
 paths:
+  /admin/notifications:
+    get:
+      operationId: getNotificationSettings
+      tags: [admin]
+      summary: Read SMTP configuration without the password
+      responses:
+        "200":
+          description: SMTP settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmtpSettings"
+    put:
+      operationId: updateNotificationSettings
+      tags: [admin]
+      summary: Configure outgoing notification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SmtpUpdate"
+      responses:
+        "200":
+          description: SMTP settings saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmtpSettings"
+  /admin/notifications/test:
+    post:
+      operationId: testNotificationEmail
+      tags: [admin]
+      summary: Send a test email to the signed-in administrator using saved settings
+      responses:
+        "200":
+          description: Test email accepted by SMTP server
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+  /me/notifications:
+    get:
+      operationId: getNotificationPreferences
+      tags: [auth]
+      summary: Read personal email notification preferences
+      responses:
+        "200":
+          description: Preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+    put:
+      operationId: updateNotificationPreferences
+      tags: [auth]
+      summary: Save personal email notification preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationPreferencesUpdate"
+      responses:
+        "200":
+          description: Saved preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
   /favorites:
     get:
       operationId: listFavorites
@@ -1487,6 +1561,48 @@ components:
         type: integer
 
   schemas:
+    SmtpSettings:
+      type: object
+      required: [enabled, host, port, security, username, fromEmail, fromName, hasPassword, appUrl]
+      properties:
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        security: { type: string, enum: [starttls, tls] }
+        username: { type: string }
+        fromEmail: { type: string }
+        fromName: { type: string }
+        hasPassword: { type: boolean }
+        appUrl: { type: string }
+    SmtpUpdate:
+      type: object
+      required: [enabled, host, port, security, username, fromEmail, fromName, appUrl]
+      properties:
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        security: { type: string, enum: [starttls, tls] }
+        username: { type: string }
+        password: { type: string, description: Omit or leave empty to retain the saved password. }
+        clearPassword: { type: boolean }
+        fromEmail: { type: string }
+        fromName: { type: string }
+        appUrl: { type: string, description: Public app URL used in notification links. }
+    NotificationPreferencesUpdate:
+      type: object
+      required: [cardAssigned, projectAdded, cardDue, dueSoonHours]
+      properties:
+        cardAssigned: { type: boolean }
+        projectAdded: { type: boolean }
+        cardDue: { type: boolean }
+        dueSoonHours: { type: integer, enum: [1, 24, 48, 72, 168] }
+    NotificationPreferences:
+      allOf:
+        - $ref: "#/components/schemas/NotificationPreferencesUpdate"
+        - type: object
+          required: [emailAvailable]
+          properties:
+            emailAvailable: { type: boolean }
     FavoriteInput:
       type: object
       required: [entityType, entityId, favorite]

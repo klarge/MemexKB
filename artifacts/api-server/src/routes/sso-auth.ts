@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { accessibleProjectIds, enqueueNotification } from "../lib/notification-events";
 import { createHash } from "node:crypto";
 import { db } from "@workspace/db";
 import { ssoConfigsTable, usersTable, groupMembersTable } from "@workspace/db";
@@ -98,6 +99,7 @@ async function syncSamlGroups(
 
   // Add new memberships
   const toAdd = [...targetIds].filter((id) => !currentIds.has(id));
+  const previousProjects = toAdd.length ? new Set(await accessibleProjectIds(userId)) : new Set<number>();
   if (toAdd.length > 0) {
     await db
       .insert(groupMembersTable)
@@ -116,6 +118,9 @@ async function syncSamlGroups(
           inArray(groupMembersTable.groupId, toRemove),
         ),
       );
+  }
+  if (toAdd.length) for (const projectId of await accessibleProjectIds(userId)) {
+    if (!previousProjects.has(projectId)) await enqueueNotification("projectAdded", userId, projectId);
   }
 }
 

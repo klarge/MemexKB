@@ -18,6 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, KeyRound, Plus, Trash2, Copy, Check, TriangleAlert } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { NotificationPreferencesCard } from "@/components/notification-preferences-card";
 
 // ── Password change ───────────────────────────────────────────────────────────
 
@@ -376,6 +377,7 @@ export default function Settings() {
         </CardHeader>
         <CardContent><p className="text-sm text-muted-foreground">Passwords are managed through your identity provider. Local password changes and password recovery are disabled. Contact an administrator if you need to enable password sign-in.</p></CardContent>
       </Card> : <ChangePasswordCard />}
+      <NotificationPreferencesCard />
       <ApiKeysCard />
     </div>
   );

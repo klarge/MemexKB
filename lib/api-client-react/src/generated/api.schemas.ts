@@ -5,6 +5,75 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export type SmtpSettingsSecurity = typeof SmtpSettingsSecurity[keyof typeof SmtpSettingsSecurity];
+
+
+export const SmtpSettingsSecurity = {
+  starttls: 'starttls',
+  tls: 'tls',
+} as const;
+
+export interface SmtpSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  security: SmtpSettingsSecurity;
+  username: string;
+  fromEmail: string;
+  fromName: string;
+  hasPassword: boolean;
+  appUrl: string;
+}
+
+export type SmtpUpdateSecurity = typeof SmtpUpdateSecurity[keyof typeof SmtpUpdateSecurity];
+
+
+export const SmtpUpdateSecurity = {
+  starttls: 'starttls',
+  tls: 'tls',
+} as const;
+
+export interface SmtpUpdate {
+  enabled: boolean;
+  host: string;
+  /**
+     * @minimum 1
+     * @maximum 65535
+     */
+  port: number;
+  security: SmtpUpdateSecurity;
+  username: string;
+  /** Omit or leave empty to retain the saved password. */
+  password?: string;
+  clearPassword?: boolean;
+  fromEmail: string;
+  fromName: string;
+  /** Public app URL used in notification links. */
+  appUrl: string;
+}
+
+export type NotificationPreferencesUpdateDueSoonHours = typeof NotificationPreferencesUpdateDueSoonHours[keyof typeof NotificationPreferencesUpdateDueSoonHours];
+
+
+export const NotificationPreferencesUpdateDueSoonHours = {
+  NUMBER_1: 1,
+  NUMBER_24: 24,
+  NUMBER_48: 48,
+  NUMBER_72: 72,
+  NUMBER_168: 168,
+} as const;
+
+export interface NotificationPreferencesUpdate {
+  cardAssigned: boolean;
+  projectAdded: boolean;
+  cardDue: boolean;
+  dueSoonHours: NotificationPreferencesUpdateDueSoonHours;
+}
+
+export type NotificationPreferences = NotificationPreferencesUpdate & {
+  emailAvailable: boolean;
+};
+
 export type FavoriteInputEntityType = typeof FavoriteInputEntityType[keyof typeof FavoriteInputEntityType];
 
 
@@ -679,6 +748,10 @@ export interface ApiTokenCreated {
   /** @nullable */
   expiresAt?: string | null;
 }
+
+export type TestNotificationEmail200 = {
+  message: string;
+};
 
 export type ListArticlesParams = {
 /**

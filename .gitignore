@@ -47,6 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.pythonlibs/
 
 # Workflows, need to be added manually
 .github/workflows

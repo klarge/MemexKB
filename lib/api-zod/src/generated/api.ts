@@ -9,6 +9,96 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Read SMTP configuration without the password
+ */
+export const GetNotificationSettingsResponse = zod.object({
+  "enabled": zod.boolean(),
+  "host": zod.string(),
+  "port": zod.number().int(),
+  "security": zod.enum(['starttls', 'tls']),
+  "username": zod.string(),
+  "fromEmail": zod.string(),
+  "fromName": zod.string(),
+  "hasPassword": zod.boolean(),
+  "appUrl": zod.string()
+})
+
+
+/**
+ * @summary Configure outgoing notification email
+ */
+export const updateNotificationSettingsBodyPortMax = 65535;
+
+
+
+export const UpdateNotificationSettingsBody = zod.object({
+  "enabled": zod.boolean(),
+  "host": zod.string(),
+  "port": zod.number().int().min(1).max(updateNotificationSettingsBodyPortMax),
+  "security": zod.enum(['starttls', 'tls']),
+  "username": zod.string(),
+  "password": zod.string().optional().describe('Omit or leave empty to retain the saved password.'),
+  "clearPassword": zod.boolean().optional(),
+  "fromEmail": zod.string(),
+  "fromName": zod.string(),
+  "appUrl": zod.string().describe('Public app URL used in notification links.')
+})
+
+export const UpdateNotificationSettingsResponse = zod.object({
+  "enabled": zod.boolean(),
+  "host": zod.string(),
+  "port": zod.number().int(),
+  "security": zod.enum(['starttls', 'tls']),
+  "username": zod.string(),
+  "fromEmail": zod.string(),
+  "fromName": zod.string(),
+  "hasPassword": zod.boolean(),
+  "appUrl": zod.string()
+})
+
+
+/**
+ * @summary Send a test email to the signed-in administrator using saved settings
+ */
+export const TestNotificationEmailResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Read personal email notification preferences
+ */
+export const GetNotificationPreferencesResponse = zod.object({
+  "cardAssigned": zod.boolean(),
+  "projectAdded": zod.boolean(),
+  "cardDue": zod.boolean(),
+  "dueSoonHours": zod.union([zod.literal(1),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(168)])
+}).and(zod.object({
+  "emailAvailable": zod.boolean()
+}))
+
+
+/**
+ * @summary Save personal email notification preferences
+ */
+export const UpdateNotificationPreferencesBody = zod.object({
+  "cardAssigned": zod.boolean(),
+  "projectAdded": zod.boolean(),
+  "cardDue": zod.boolean(),
+  "dueSoonHours": zod.union([zod.literal(1),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(168)])
+})
+
+export const UpdateNotificationPreferencesResponse = zod.object({
+  "cardAssigned": zod.boolean(),
+  "projectAdded": zod.boolean(),
+  "cardDue": zod.boolean(),
+  "dueSoonHours": zod.union([zod.literal(1),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(168)])
+}).and(zod.object({
+  "emailAvailable": zod.boolean()
+}))
+
+
+/**
  * @summary List the current user's accessible favorites
  */
 export const ListFavoritesResponse = zod.object({
