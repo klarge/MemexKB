@@ -50,3 +50,16 @@ test("an authorized upload can be attached to its article", async () => {
   await attachReferencedArticleImages(tx, sanitizeArticleHtml('<img src="/api/articles/images/42">'), 12, 1, "editor");
   assert.equal(state().attachedTo, 12);
 });
+
+test("authorized editors can retain existing diagrams uploaded by another editor", async () => {
+  const { tx, state } = imageTransaction([{ id: 42, articleId: 12, uploadedById: 2 }]);
+  await attachReferencedArticleImages(tx, sanitizeArticleHtml('<img src="/api/articles/images/42" data-diagram="drawio">'), 12, 1, "editor");
+  assert.equal(state().attachedTo, 12);
+});
+
+test("another user's unattached diagram cannot be claimed", async () => {
+  const { tx, state } = imageTransaction([{ id: 42, articleId: null, uploadedById: 2 }]);
+  await assert.rejects(attachReferencedArticleImages(tx, '<img src="/api/articles/images/42">', 12, 1, "editor"),
+    (error: unknown) => error instanceof ArticleImageAttachmentError && error.status === 403);
+  assert.equal(state().attachedTo, null);
+});

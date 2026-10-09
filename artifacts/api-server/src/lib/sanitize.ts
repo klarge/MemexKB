@@ -24,7 +24,7 @@ export function sanitizeArticleHtml(html: string): string {
       sup: ["data-citation-id", "data-citation-description", "data-citation-url", "data-citation-number"],
       li: ["id"],
       ol: ["type", "start", "data-list-style"],
-      img: ["src", "alt", "title", "width", "height", "style", "data-caption"],
+      img: ["src", "alt", "title", "width", "height", "style", "data-caption", "data-diagram"],
       th: ["colspan", "rowspan", "colwidth"],
       td: ["colspan", "rowspan", "style"],
       p: ["style"],
@@ -46,6 +46,10 @@ export function sanitizeArticleHtml(html: string): string {
     },
     disallowedTagsMode: "discard",
     transformTags: {
+      img: (tagName, attribs) => {
+        if (attribs["data-diagram"] !== "drawio") delete attribs["data-diagram"];
+        return { tagName, attribs };
+      },
       ol: (tagName, attribs) => {
         if (attribs.type && !["1", "a", "A", "i", "I"].includes(attribs.type)) delete attribs.type;
         if (attribs["data-list-style"] !== attribs.type) delete attribs["data-list-style"];

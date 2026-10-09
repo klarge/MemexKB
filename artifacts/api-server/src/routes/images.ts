@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { readDiagramPng } from "../lib/diagram-png";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -22,7 +23,14 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/webp",
 ]);
 
-router.post("/articles/images", requireAuth, upload.single("file"), async (req, res) => {
+router.post("/articles/images", requireAuth, (req, res, next) => {
+  upload.single("file")(req, res, (error) => {
+    if (error) {
+      const tooLarge = error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE";
+      res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "Image exceeds 10 MB." : "Invalid image upload." });
+    } else next();
+  });
+}, async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });
     return;
@@ -34,6 +42,14 @@ router.post("/articles/images", requireAuth, upload.single("file"), async (req, 
     return;
   }
 
+  if (mimetype === "image/png") {
+    try {
+      readDiagramPng(buffer);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid diagram PNG." });
+      return;
+    }
+  }
   const data = buffer.toString("base64");
   const [image] = await db
     .insert(articleImagesTable)

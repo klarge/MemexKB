@@ -1,6 +1,8 @@
 import * as records from "@workspace/db";
+import { readFileSync } from "node:fs";
 import { sql as recordsSql } from "drizzle-orm";
 
+const diagramPng = readFileSync(new URL("../fixtures/drawio-local.png", import.meta.url));
 const when = new Date("2026-01-02T03:04:05.000Z");
 export const sourceSteps = [
   { title: "Review policy", description: '<p>Read [[rule|Policy]].</p><img src="/api/articles/images/51" alt="Step illustration" />' },
@@ -30,7 +32,7 @@ export async function seedBackupFixtures() {
   await db.insert(records.articlesTable).values([
     { id: 11, slug: "rule", title: "Safety rule", kind: "policy", policySubjectId: 8, visibility: "group", isStatic: true, content: "<p>Follow this policy.</p>" },
     { id: 12, slug: "procedure", title: "Ordered procedure", kind: "procedure", visibility: "personal", content: "<p>Introduction only.</p>", procedureSteps: sourceSteps },
-    { id: 13, slug: "knowledge", title: "Knowledge reference", visibility: "public", content: '<p>[[procedure|Procedure]]</p><img src="/api/articles/images/52" alt="Introduction illustration" />' },
+    { id: 13, slug: "knowledge", title: "Knowledge reference", visibility: "public", content: '<p>[[procedure|Procedure]]</p><img src="/api/articles/images/52" alt="Introduction illustration" data-diagram="drawio" width="480" data-caption="Local diagram" />' },
     { id: 15, slug: "log-owner-daily", logSlug: "daily", title: "Daily log", isLogEntry: true, content: "<p>Private log.</p>" },
     { id: 16, slug: "project-document", title: "Project document", projectId: 5, content: "<p>Private project document.</p>" },
   ].map((a) => ({ ...a, createdById: 2, updatedById: 2, createdAt: when, updatedAt: when })) as any);
@@ -40,7 +42,7 @@ export async function seedBackupFixtures() {
   ]);
   await db.insert(records.articleImagesTable).values([
     { id: 51, articleId: 12, filename: "step.png", mimeType: "image/png", data: Buffer.from("step-image-bytes").toString("base64") },
-    { id: 52, articleId: 13, filename: "intro.png", mimeType: "image/png", data: Buffer.from("intro-image-bytes").toString("base64") },
+    { id: 52, articleId: 13, filename: "intro.png", mimeType: "image/png", data: diagramPng.toString("base64") },
   ].map((i) => ({ ...i, uploadedById: 2, createdAt: when })));
   await db.insert(records.articleVersionsTable).values([
     { id: 19, articleId: 12, versionNumber: 1, title: "Before structured steps", content: "<p>Older Knowledge version.</p>", procedureSteps: [], createdById: 2 },

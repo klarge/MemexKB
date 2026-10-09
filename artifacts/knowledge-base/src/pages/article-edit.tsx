@@ -25,7 +25,7 @@ import {
   Loader2, ArrowLeft, Save, Image as ImageIcon, Link as LinkIcon,
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Code, Quote,
   Table as TableIcon, LayoutTemplate, PanelRight, AlertTriangle,
-  Check, CloudOff, RotateCcw, X,
+  Check, CloudOff, RotateCcw, X, Workflow,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -45,6 +45,7 @@ import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table
 import type { SuggestionProps, SuggestionKeyDownProps } from "@tiptap/suggestion";
 import { WikilinkExtension, type WikilinkItem } from "@/lib/wikilink-extension";
 import { WikilinkList, type WikilinkListHandle } from "@/lib/wikilink-list";
+import { DiagramEditorDialog } from "@/components/diagram-editor-dialog";
 import { ResizableImageView } from "@/lib/resizable-image";
 import { InfoBoxExtension } from "@/lib/infobox-extension";
 import { Citation, CitationSources } from "@/lib/citation-extension";
@@ -70,6 +71,11 @@ const ResizableImage = Image.extend({
           const sw = element.style.width;
           return sw ? parseInt(sw, 10) || null : null;
         },
+      },
+      diagram: {
+        default: null,
+        renderHTML: (attributes: Record<string, unknown>) => (attributes.diagram === "drawio" ? { "data-diagram": "drawio" } : {}),
+        parseHTML: (element: HTMLElement) => (element.getAttribute("data-diagram") === "drawio" ? "drawio" : null),
       },
       caption: {
         default: "",
@@ -161,6 +167,9 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [isImageUploading, setIsImageUploading] = useState(false);
+  type DiagramTarget = { mode: "insert"; from: number; to: number } | { mode: "edit"; pos: number; src: string };
+  const [diagramTarget, setDiagramTarget] = useState<DiagramTarget | null>(null);
+  const diagramHoldRef = useRef(false);
   const imageSelectionRef = useRef<{ from: number; to: number } | null>(null);
 
   // ── Autosave state ──────────────────────────────────────────────────────────
@@ -567,9 +576,11 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
   // ─── Autosave: existing articles ──────────────────────────────────────────
   const scheduleAutosave = useCallback(() => {
     if (isNew || !articleSlug || !editor || !canEditArticle) return;
+    if (diagramHoldRef.current) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     autosaveTimerRef.current = setTimeout(async () => {
+      if (diagramHoldRef.current) return;
       if (!lastSavedRef.current) return;
 
       const currentTitle = titleRef.current.trim();
@@ -620,9 +631,11 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
   // ─── Autosave: new articles → localStorage ────────────────────────────────
   const scheduleDraftSave = useCallback(() => {
     if (!isNew || !editor) return;
+    if (diagramHoldRef.current) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     autosaveTimerRef.current = setTimeout(() => {
+      if (diagramHoldRef.current) return;
       const currentTitle = titleRef.current;
       const currentContent = editor.getHTML();
       const stepsBlank = stepsRef.current.every((x) => !x.title.trim() && !x.description.trim());
@@ -644,6 +657,62 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
 
   // Keep the ref current (avoids stale closures in editor.on)
   scheduleAutosaveRef.current = isNew ? scheduleDraftSave : scheduleAutosave;
+
+  // ─── Diagram editor ───────────────────────────────────────────────────────
+  const openInsertDiagram = () => {
+    if (!editor || !canEditArticle) return;
+    const { from, to } = editor.state.selection;
+    diagramHoldRef.current = true;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    setDiagramTarget({ mode: "insert", from, to });
+  };
+  useEffect(() => {
+    if (!editor || !canEditArticle) return;
+    const onEdit = (e: Event) => {
+      const d = (e as CustomEvent<{ editor: unknown; pos: number; src: string }>).detail;
+      if (!d || d.editor !== editor || typeof d.pos !== "number" || typeof d.src !== "string") return;
+      diagramHoldRef.current = true;
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      setDiagramTarget({ mode: "edit", pos: d.pos, src: d.src });
+    };
+    window.addEventListener("lexikon:edit-diagram", onEdit);
+    return () => window.removeEventListener("lexikon:edit-diagram", onEdit);
+  }, [editor, canEditArticle]);
+
+  const closeDiagram = () => {
+    diagramHoldRef.current = false;
+    setDiagramTarget(null);
+    // Resume the existing debounce for unrelated edits, without calling the
+    // article Save handler or applying any changes from the diagram frame.
+    scheduleAutosaveRef.current();
+  };
+  const applyDiagram = (url: string) => {
+    const target = diagramTarget;
+    diagramHoldRef.current = false;
+    setDiagramTarget(null);
+    if (!editor || !target) return;
+    const doc = editor.state.doc;
+    if (target.mode === "edit") {
+      let pos: number | null = null;
+      const at = target.pos <= doc.content.size ? doc.nodeAt(target.pos) : null;
+      if (at?.type.name === "image" && at.attrs.src === target.src) pos = target.pos;
+      else doc.descendants((n, p) => {
+        if (pos === null && n.type.name === "image" && n.attrs.src === target.src) pos = p;
+        return pos === null;
+      });
+      if (pos !== null) {
+        const old = doc.nodeAt(pos)!;
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...old.attrs, src: url, diagram: "drawio" }));
+        editor.commands.focus();
+        return;
+      }
+      toast({ title: "Original image moved", description: "The diagram was inserted at the cursor instead." });
+    }
+    const max = doc.content.size;
+    const from = target.mode === "insert" ? Math.min(target.from, max) : editor.state.selection.from;
+    const to = target.mode === "insert" ? Math.min(target.to, max) : editor.state.selection.to;
+    editor.chain().focus().setTextSelection({ from, to }).setImage({ src: url, diagram: "drawio" } as never).run();
+  };
 
   // Wire up editor → autosave
   useEffect(() => {
@@ -1055,6 +1124,13 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
                   const url = window.prompt("URL");
                   if (url) editor.chain().focus().setLink({ href: url }).run();
                 }} className={editor.isActive("link") ? "bg-muted" : ""}><LinkIcon className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="sm" title="Insert Draw.IO diagram" aria-label="Insert Draw.IO diagram" onClick={openInsertDiagram} data-testid="button-insert-diagram"><Workflow className="h-4 w-4 mr-1" /> Draw.IO</Button>
+                <DiagramEditorDialog
+                  open={diagramTarget !== null}
+                  source={diagramTarget?.mode === "edit" ? diagramTarget.src : null}
+                  onClose={closeDiagram}
+                  onApply={applyDiagram}
+                />
                 <Dialog open={imageDialogOpen} onOpenChange={(open) => { if (!isImageUploading) setImageDialogOpen(open); }}>
                   <Button type="button" variant="ghost" size="sm" title="Add image" aria-label="Add image" onClick={() => {
                     const { from, to } = editor.state.selection;

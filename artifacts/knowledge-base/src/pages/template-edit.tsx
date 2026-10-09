@@ -63,7 +63,20 @@ export default function TemplateEdit({ params }: { params?: { id?: string } }) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
-      Image,
+      // Preserve editable diagram identity when a template containing a
+      // diagram is opened and saved; no new template-authoring surface.
+      Image.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            diagram: {
+              default: null,
+              parseHTML: (element: HTMLElement) => element.getAttribute("data-diagram") === "drawio" ? "drawio" : null,
+              renderHTML: (attrs: Record<string, unknown>) => attrs.diagram === "drawio" ? { "data-diagram": "drawio" } : {},
+            },
+          };
+        },
+      }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Write your template content here…" }),
       Table.configure({ resizable: true }),

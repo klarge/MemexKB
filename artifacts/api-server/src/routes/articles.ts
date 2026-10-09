@@ -33,6 +33,7 @@ import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../l
 import { renderArticlePdf, PdfExportBusyError } from "../lib/article-pdf";
 import TurndownService from "turndown";
 import { preserveCitationHtml } from "../lib/citation-export";
+import { preserveDiagramHtml } from "../lib/diagram-export";
 import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
 
 const router = Router();
@@ -49,6 +50,7 @@ function articleSearchRelevance(term: string) {
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 preserveCitationHtml(turndown);
+preserveDiagramHtml(turndown);
 async function getArticleGroups(articleId: number) {
   const ag = await db.select().from(articleGroupsTable).where(eq(articleGroupsTable.articleId, articleId));
   if (ag.length === 0) return [];

@@ -25,3 +25,4 @@
 - [Page header consistency](page-header-consistency.md) — content and administration headers should match Logs, Tasks, and Projects.
 - [Tiptap list attribute collisions](tiptap-list-attributes.md) — reuse native list types; overlapping rendered HTML attributes can silently erase toolbar choices.
 - [PDF reader fidelity](pdf-rendering.md) — exports must match HTML; printable-width media queries can activate mobile layouts despite desktop screen emulation.
+- [Article diagrams](article-diagrams.md) — normal editing/export must stay self-hosted; historical diagrams must retain their original editable source and preview.

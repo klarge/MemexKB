@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import YAML from "yamljs";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { diagramAssetHeaders, diagramStaticAssets } from "./lib/diagram-assets";
 import { enforceApiTokenAccess } from "./lib/auth";
 import { pool } from "@workspace/db";
 import type { Pool as PgPool } from "pg";
@@ -52,7 +53,7 @@ app.use(
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         connectSrc: ["'self'"],
-        frameSrc: ["'none'"],
+        frameSrc: ["'self'"],
         objectSrc: ["'none'"],
       },
     },
@@ -73,6 +74,10 @@ app.use(
     },
   }),
 );
+
+// Sandboxed static editor assets are public and do not need API rate-limit
+// quota or sessions. Install before generic CORS and application endpoints.
+app.use("/api/diagram-editor", diagramAssetHeaders, diagramStaticAssets);
 
 // Restrict cross-origin requests to explicitly configured origins.
 // Defaults to same-origin only (no cross-origin) when CORS_ORIGIN is unset.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import express from "express";
 import { createServer } from "node:http";
-import { writeFile, mkdtemp } from "node:fs/promises";
+import { writeFile, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { db, pool, usersTable, articlesTable, articleImagesTable } from "@workspace/db";
@@ -23,7 +23,7 @@ const [article] = await db.insert(articlesTable).values({
 const [foreignArticle] = await db.insert(articlesTable).values({
   slug: "unrelated-private", title: "Unrelated", content: "", visibility: "personal", createdById: stranger.id,
 }).returning();
-const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDHsAAAAASUVORK5CYII=";
+const png = (await readFile(new URL("../fixtures/drawio-local.png", import.meta.url))).toString("base64");
 const [image, foreignImage] = await db.insert(articleImagesTable).values([
   { articleId: article.id, filename: "fixture.png", mimeType: "image/png", data: png },
   { articleId: foreignArticle.id, filename: "foreign.png", mimeType: "image/png", data: png },
@@ -43,7 +43,7 @@ await db.update(articlesTable).set({
   <ol type="1" start="3"><li>Numbered entry<ol type="a"><li>Alphabetic nested item<ol type="i"><li>Roman nested item</li></ol></li></ol></li><li>Next numbered entry</li></ol>
   <blockquote><p>A quoted passage should keep its distinct indentation and styling.</p></blockquote>
   <h3>A real table</h3><table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td>Typography</td><td>HTML styling preserved</td></tr><tr><td>Alignment</td><td>Left aligned, not a narrow right-hand column</td></tr></tbody></table>
-  <p><img src="/api/articles/images/${image.id}" width="80" data-caption="Attached image and caption"></p>
+  <p><img src="/api/articles/images/${image.id}" data-diagram="drawio" width="380" data-caption="Attached diagram and caption"></p>
   <p><img src="/api/articles/images/${foreignImage.id}" alt="foreign private image"><img src="http://127.0.0.1:${externalAddress.port}/private" alt="external image"></p>
   <pre><code>const example = "code retains monospace";
 return example;</code></pre>

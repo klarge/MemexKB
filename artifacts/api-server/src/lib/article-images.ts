@@ -54,7 +54,9 @@ export async function attachReferencedArticleImages(
     if (image.articleId !== null && image.articleId !== articleId) {
       throw new ArticleImageAttachmentError(403, "A referenced image is already attached to another article");
     }
-    if (userRole !== "admin" && image.uploadedById !== userId) {
+    // Existing attachments belong to this article, whose edit permission the
+    // caller already checked. Only new, unattached uploads need uploader checks.
+    if (image.articleId === null && userRole !== "admin" && image.uploadedById !== userId) {
       throw new ArticleImageAttachmentError(403, "You can only attach images you uploaded");
     }
   }
