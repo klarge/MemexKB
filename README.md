@@ -8,6 +8,9 @@ A self-hostable wiki and productivity hub with a React frontend and Express back
 
 - **Dashboard** — home page showing recent log entries, recently updated articles, and a "Needs Review" list (oldest by last-updated date)
 - **Articles** — rich-text editing (TipTap), wikilinks, backlinks, version history, tags, PDF/Markdown export
+- **Policies** — a separate content area with a shared nested subject/category tree, policy templates, and the same editing and access controls as articles
+- **Procedures** — reusable documents with ordered steps and procedure templates; admins and editors can run a saved procedure to create an independent Kanban project
+- **Draw.IO diagrams** — create and reopen editable diagrams in the web rich-text editor, with PNG and `.drawio` downloads; the editor and exports are self-hosted
 - **Log Entries** — optional date-titled journal, kept separate from the main article list; togglable by admins
 - **Tasks** — personal to-do lists with multiple named lists, checkbox items, and completed-task collapse; visible only to you; togglable by admins
 - **Projects** — collaborative Kanban boards: create Projects, add Boards, define Columns, drag-and-drop Cards with due dates and member assignment; share Projects with Groups; togglable by admins
@@ -266,7 +269,7 @@ Articles use HTML for `content`. You can link to another article with `[[Article
 | `GET` | `/api/articles/:slug/export/md` | Download the article as Markdown. |
 | `GET` | `/api/articles/:slug/export/pdf` | Download the article as a PDF. |
 | `PUT` | `/api/articles/:slug/groups` | Set access groups (admin/editor) — body: `{ groupIds }`. Editors may only use groups they belong to. |
-| `POST` | `/api/articles/images` | Upload an article image (admin/editor) as `multipart/form-data` with a `file` field. |
+| `POST` | `/api/articles/images` | Upload a document image (authenticated) as `multipart/form-data` with a `file` field. Attachment and retrieval follow document permissions. |
 
 **Example — create an article:**
 
@@ -285,6 +288,98 @@ curl --fail-with-body -X PATCH "$MEMEX_URL/api/articles/working-agreements/slug"
   -H "Content-Type: application/json" \
   --data '{"slug":"team-working-agreements"}'
 ```
+
+---
+
+## Policies
+
+Open **Policies** in the sidebar to browse policies separately from Knowledge. An admin can show this area and manage its defaults in **Admin → Customization → Policies**.
+
+- Policies are grouped by a shared, nested **subject/category tree**, not by execution order. Admins manage subjects in Customization; each policy must have a subject. Filtering by a subject includes its descendants. Move assigned policies and child subjects before deleting a subject.
+- Admins and editors create policies using the existing article editor. Policies retain article visibility (Personal, Group, or Public to signed-in users), tags, version history, edit locking, and PDF/Markdown exports. The subject tree organizes content; it does not grant access.
+- Templates have a content kind: only policy templates appear in the policy editor. Admins manage them under **Templates** and may choose a default policy template in Customization. A template supplies the starting layout; its kind is separate from the category tree, and the policy still needs a subject.
+- Wikilinks work across Knowledge, Policies, and Procedures. Use `[[slug|label]]`, for example `[[security-policy|Security policy]]`, to refer to an existing document. Links resolve to the document's content area and retain its access restrictions.
+- Policies are reference documents: they have **no Run action**.
+
+The shared articles API uses `kind: "policy"` and `policySubjectId`. List policies with `GET /api/articles?kind=policy`; add `subjectId` to include that category and its descendants. Authenticated users can read the subject tree at `GET /api/policy-subjects`; creating, renaming/reparenting, or deleting subjects via that endpoint is admin-only.
+
+---
+
+## Procedures
+
+Open **Procedures** to create reusable instructions. Admins manage the sidebar toggle and default procedure template in **Admin → Customization → Procedures**. Procedure templates are separate from Knowledge and policy templates and can include the initial ordered steps.
+
+1. An admin or editor creates a procedure with the shared rich-text body and **at least one step**. Every step requires a title and description.
+2. Use **Add step**, the up/down controls, and delete controls to maintain the source order. Step descriptions are plain text with wikilink support, not the rich-text body editor.
+3. Save the procedure. On its reader page, an authorized admin or editor clicks **Run procedure**, supplies a project name, and confirms. Ordinary readers cannot run procedures; **Projects must be enabled**, including for administrators.
+
+Each new run creates a **private project owned and managed by the runner**. It does not inherit the source procedure's group sharing; share the generated project separately using the normal project controls. Its board is named after the saved procedure, with **To Do**, **In Progress**, and **Done** columns. Each saved step becomes a numbered card in To Do, in source order, with its description copied as text.
+
+The project is an independent copy: later edits to the procedure do not change existing runs. Cards can be moved, worked on, or completed in any order—there is **no prerequisite/dependency gating**. Procedures otherwise retain the shared article visibility, tags, history, locking, exports, and cross-area wikilinks.
+
+**API:** use `kind: "procedure"` and `procedureSteps: [{ title, description }]` with the shared articles API; list with `GET /api/articles?kind=procedure`. `POST /api/articles/:slug/run` requires an admin/editor and body `{ name, requestId }`, returning `{ projectId, boardId }`. Use a fresh request ID for a new run; retrying the same ID for the same user and procedure returns the previously created project rather than duplicating it.
+
+---
+
+## Editable Draw.IO diagrams
+
+### Create, edit, and download
+
+The shared **web rich-text editor** has a **Draw.IO** toolbar button, including the bodies of Knowledge articles, Policies, and Procedures, and the shared editor used for logs and project documents. Your existing edit permission controls whether you can modify the document.
+
+1. Place the cursor or select the insertion location, click **Draw.IO**, and draw shapes, connectors, and labels in the local editor dialog.
+2. Click **Insert diagram** to upload the diagram and insert its image at the saved selection. Add a caption and use the image's resize handle as with other article images.
+3. In document edit mode, hover/focus the diagram controls and select **Edit diagram** to reopen its original source. **Update diagram** replaces that image while keeping its caption and width.
+4. Use **PNG** or **.drawio** in the dialog or the diagram's image controls to download a raster image containing its source or the editable XML file. Downloads of stored diagrams require access to the underlying article image.
+
+Cancel/Discard does not replace the diagram; discarding unsaved diagram changes requires confirmation. Export or upload failures keep the drawing open for retry. The frame is temporarily non-interactive during export/upload to prevent edits racing the saved snapshot.
+
+Article autosave is paused while the dialog is open. Applying or cancelling the diagram does **not** invoke the whole-article Save action; the document's usual autosave/draft debounce resumes afterward, so unrelated edits remain intact. A new document still needs its normal initial Save.
+
+Readers and PDF exports display an ordinary PNG with its caption. The PDF is a visual export, not an editable diagram file.
+
+### Implementation and storage
+
+- **Pinned, local assets:** the official [draw.io v32.4.1 release](https://github.com/jgraph/drawio/releases/tag/v32.4.1) is vendored as `artifacts/api-server/vendor/drawio/drawio-32.4.1.war`. [The packaging script](artifacts/api-server/build-diagram-editor.mjs) verifies its SHA-256 before extracting static files to the API's `dist/diagram-editor`, then writes the offline `js/PreConfig.js`. Builds do not fetch the editor from the internet.
+- **Local runtime:** Express serves `/api/diagram-editor/`. Docker copies the API's complete `dist` output, so development and production use the same bundled editor. Despite the upstream `.war` archive format, no Java servlet runtime, public diagrams.net editor, remote PNG/PDF exporter, or separate diagram service is required.
+- **Embedding protocol:** [the host dialog](artifacts/knowledge-base/src/components/diagram-editor-dialog.tsx) exchanges JSON messages for configure/load and browser-side `xmlpng` export. It accepts messages only from the mounted frame's window with opaque origin `null`, checks event/state and payload size, and matches export responses to the outstanding request ID.
+- **Isolation:** the iframe uses `sandbox="allow-scripts allow-downloads"`, **without `allow-same-origin`**, and no referrer. [Scoped asset headers](artifacts/api-server/src/lib/diagram-assets.ts) restrict connections to the local editor directory and block remote image/font resources. Anonymous CORS applies only to static editor assets, not application API data. The framing policy includes the trusted Replit workspace ancestor needed inside Preview; do not weaken the sandbox or application API CORS to make embedding work.
+- **One authoritative asset:** the diagram is an XML PNG—a PNG containing draw.io `mxfile` XML metadata. It uses the existing image upload endpoint, database image records, and attachment authorization; there is no independently mutable source record or new diagram-specific database migration. Article HTML identifies the image with `data-diagram="drawio"`.
+- **Immutable revisions:** every diagram update uploads a **new image record/URL**. Old image bytes remain unchanged for article history/restoration. Reopening and `.drawio` downloads extract validated XML from the stored PNG; do not optimize, transcode, or rewrite those attachment bytes.
+- **Portable source:** sanitization and supported serialization preserve the diagram marker. Markdown keeps diagram image markup as raw HTML; a standalone Markdown file is not an image archive. ZIP exports retain HTML and image bytes, while encrypted backups retain image records and history. These source-preserving exports are distinct from the raster-only view in a PDF.
+
+Browser and server validation bound PNG size, check PNG structure/checksums, validate XML, reject unsupported declarations, and bound compressed-page expansion:
+
+| Limit | Value |
+|-------|-------|
+| Diagram PNG | 10 MiB |
+| Editable XML, including expanded compressed pages | 2 MiB |
+| Width or height | 8192 pixels |
+| Total image area | 16,000,000 pixels |
+| Pages in an `mxfile` | 1–100 |
+
+**Limitations:** no hosted-editor fallback, cloud-drive integration, arbitrary plugins/custom libraries, remote image/font imports, SVG insertion, or native mobile diagram authoring. Plain-text procedure-step descriptions do not embed diagrams; use the procedure's rich-text body. Importing an existing `.drawio` file through the host dialog is not currently supported. Re-encoding a downloaded PNG in another image tool may strip its XML metadata and make it no longer editable—retain the original PNG or a `.drawio` download.
+
+### Maintaining or updating the bundled editor
+
+See the detailed [vendor integration, licensing, and update notes](artifacts/api-server/vendor/drawio/README.md). Treat an editor upgrade as a reviewed dependency change, not a switch to a hosted URL:
+
+1. Obtain `draw.war` from the intended **official upstream release** and independently verify its origin and checksum. Vendor it with the matching versioned filename; update `DRAWIO_VERSION` and the expected SHA-256 in the packaging script. Keep the original archive unmodified.
+2. Refresh `LICENSE`, `UPSTREAM-README.md`, and applicable third-party notices such as `LIBAVOID-LICENSE` from that exact release. Review changed icon/visual-asset terms and routing-library obligations; preserve copyright headers and the modification notice for the generated offline configuration.
+3. Review the extraction allowlist, offline configuration, embed protocol, and security headers for upstream changes. Never enable cloud/proxy exporters, plugins, remote resources, or `allow-same-origin` as a silent compatibility workaround. Make changes to the packaging script/configuration, not generated `dist` files.
+4. Rebuild the API and frontend. A changed archive checksum invalidates the extraction cache. For a local build/check from the repository root:
+
+   ```bash
+   pnpm --filter @workspace/api-server run build
+   PORT=4000 BASE_PATH=/ pnpm --filter @workspace/knowledge-base run build
+   pnpm --filter @workspace/api-server run typecheck
+   pnpm --filter @workspace/knowledge-base run typecheck
+   pnpm --filter @workspace/api-server exec tsx --test test/diagram-png.test.ts test/article-images.test.ts
+   ```
+
+   Use the appropriate frontend base path for your environment. Rebuild and roll out the Docker image for self-hosted installations; changing the archive on the host does not update a running container.
+5. With disposable data, test the **actual opaque-origin frame**: configure/load, local shape palettes, shapes/connectors/labels, PNG-with-XML export, save/reload/reopen, immutable replacement, captions/resizing, both downloads, cancellation, and failed-upload retry. Test within workspace Preview as well as directly: a direct test does not exercise the full ancestor framing policy. Check browser network activity for **editor-originated** requests; normal editing/export must remain local, regardless of any separately configured parent-app fonts.
+6. Confirm unauthorized users cannot retrieve private PNG/source, and that old PNG bytes remain unchanged after edits. Inspect reader and PDF rendering and check source retention after history restoration and isolated ZIP/encrypted-backup round trips. Existing [diagram tests](artifacts/api-server/test/diagram-png.test.ts), [attachment tests](artifacts/api-server/test/article-images.test.ts), [PDF tests](artifacts/api-server/test/article-pdf.test.ts), and [backup tests](artifacts/api-server/test/backup-roundtrip.test.ts) provide regression starting points. PDF/backup integration checks need an initialized PostgreSQL schema and the PDF browser runtime; **never exercise a destructive restore against the working or production database**.
 
 ---
 
@@ -437,7 +532,11 @@ curl --fail-with-body -X POST "$MEMEX_URL/api/articles" \
 
 ## Admin Feature Toggles
 
-Admins can enable or disable the Log, Tasks, and Projects features from **Admin → Customization**. Changes take effect immediately for all users — the sidebar item disappears and the API returns `403` for non-admins when a feature is off.
+Admins manage Log, Tasks, Projects, Policies, and Procedures from **Admin → Customization**.
+
+- Log, Tasks, and Projects toggles hide their navigation and gate the corresponding feature APIs for non-admins when off.
+- **Policies and Procedures toggles control sidebar visibility, not authorization.** Hiding an area does not delete its content or disable existing document links or the shared articles API; normal document permissions still apply. Missing settings are treated as hidden for these two areas.
+- Each structured area also has an optional, kind-matched default template (`policyTemplateId` / `procedureTemplateId`). Templates and policy subjects remain separately manageable. Turning **Projects off prevents procedure runs**, even for admins.
 
 **API:**
 
@@ -445,7 +544,7 @@ Admins can enable or disable the Log, Tasks, and Projects features from **Admin 
 curl --fail-with-body -X PATCH "$MEMEX_URL/api/admin/settings" \
   -H "Authorization: Bearer $MEMEX_TOKEN" \
   -H "Content-Type: application/json" \
-  --data '{"logEntriesEnabled":true,"tasksEnabled":true,"projectsEnabled":false}'
+  --data '{"logEntriesEnabled":true,"tasksEnabled":true,"projectsEnabled":false,"policiesEnabled":true,"proceduresEnabled":true}'
 ```
 
 **Read current settings (public):**
@@ -558,6 +657,7 @@ A GitHub Actions workflow (`.github/workflows/build-android.yml`) builds a debug
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
 - Frontend: React 19 + Vite 7 + TipTap editor + @dnd-kit (drag-and-drop)
+- Diagrams: pinned draw.io static bundle; sandboxed local editor and browser-side XML PNG export
 - Mobile: Expo (React Native) — managed workflow
 - Validation: Zod, `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec in `lib/api-spec/openapi.yaml`)
@@ -574,7 +674,14 @@ A GitHub Actions workflow (`.github/workflows/build-android.yml`) builds a debug
 | `artifacts/api-server/src/routes/projects.ts` | Projects, boards, columns, cards API |
 | `artifacts/api-server/src/routes/tasks.ts` | Tasks and task lists API |
 | `artifacts/api-server/src/routes/settings.ts` | Site settings and feature flag toggles |
+| `artifacts/api-server/src/routes/policy-subjects.ts` | Shared policy category tree and admin management |
+| `artifacts/api-server/src/routes/articles.ts` | Shared content kinds, ordered procedure steps, and procedure-to-project runs |
+| `artifacts/api-server/vendor/drawio/` | Pinned editor archive, licenses, and integration/update notes |
+| `artifacts/api-server/build-diagram-editor.mjs` | Checksum-verified static editor packaging and offline configuration |
+| `artifacts/api-server/src/lib/diagram-assets.ts` | Local editor asset serving and scoped security headers |
 | `artifacts/knowledge-base/src/` | React SPA — pages, components, hooks |
+| `artifacts/knowledge-base/src/components/procedure-steps-editor.tsx` | Plain-text ordered step editor |
+| `artifacts/knowledge-base/src/components/diagram-editor-dialog.tsx` | Sandboxed Draw.IO dialog, export protocol, and upload recovery |
 | `artifacts/knowledge-base/src/pages/board.tsx` | Kanban board with drag-and-drop |
 | `artifacts/knowledge-base/src/pages/tasks.tsx` | Personal tasks page |
 | `artifacts/knowledge-base/src/pages/projects.tsx` | Projects list page |
@@ -599,7 +706,9 @@ A GitHub Actions workflow (`.github/workflows/build-android.yml`) builds a debug
 - **Multi-platform build**: The `builder` stage uses `--platform=$BUILDPLATFORM` so Node.js compilation always runs natively on the CI runner (amd64). Only the lightweight runtime stage adopts the target platform (arm64), making cross-platform builds fast without QEMU overhead.
 - **esbuild bundle**: The API server compiles to a single `dist/index.mjs` with all deps inlined, except `archiver`, `unzipper`, and `pdfkit` (CJS packages that must remain external).
 - **Session-based auth + bearer tokens**: `express-session` + `connect-pg-simple` for browser sessions; SHA-256-hashed bearer tokens in `api_tokens` for API/MCP access.
-- **Feature flags in `site_settings`**: Log, Tasks, and Projects can be toggled on/off at runtime. The setting is a key-value row; absent key = feature enabled (Tasks/Projects default on; Log defaults off).
+- **Feature flags in `site_settings`**: Tasks/Projects are on unless explicitly disabled; Log is on only when explicitly enabled. Policies/Procedures sidebar visibility requires an explicit enabled setting and does not gate document access. See [Admin Feature Toggles](#admin-feature-toggles).
+- **Shared structured content**: Policies and Procedures reuse articles, permissions, history, and exports, with kind-specific templates and metadata. Policy categories organize documents; saved procedure steps are copied into independent projects, not live-linked workflows.
+- **Self-hosted diagram attachments**: A sandboxed local draw.io frame exports one PNG containing preview and XML source. Immutable replacement preserves earlier revisions; see [Editable Draw.IO diagrams](#editable-drawio-diagrams) for storage, security, and upgrades.
 - **Edit locks in Postgres**: Lock state is a single row in `edit_locks` with a `lockedAt` timestamp; expiry is enforced at read time rather than via a background job.
 - **DnD with @dnd-kit**: Kanban drag-and-drop uses the multi-container sortable pattern. Cards move in local state immediately (optimistic) and are persisted via a bulk reorder endpoint that accepts the full new column order.
 
