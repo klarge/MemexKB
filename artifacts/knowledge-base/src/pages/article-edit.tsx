@@ -1120,7 +1120,7 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
                   const url = window.prompt("URL");
                   if (url) editor.chain().focus().setLink({ href: url }).run();
                 }} className={editor.isActive("link") ? "bg-muted" : ""}><LinkIcon className="h-4 w-4" /></Button>
-                <Button type="button" variant="ghost" size="sm" title="Insert Draw.IO diagram" aria-label="Insert Draw.IO diagram" onClick={openInsertDiagram} data-testid="button-insert-diagram"><Workflow className="h-4 w-4 mr-1" /> Draw.IO</Button>
+                <Button type="button" variant="ghost" size="sm" title="Insert Draw.IO diagram" aria-label="Insert Draw.IO diagram" onClick={openInsertDiagram} data-testid="button-insert-diagram"><Workflow className="h-4 w-4" aria-hidden="true" /></Button>
                 <DiagramEditorDialog
                   open={diagramTarget !== null}
                   source={diagramTarget?.mode === "edit" ? diagramTarget.src : null}
@@ -1402,8 +1402,6 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
                 <li>Type <kbd className="bg-muted px-1 rounded border">[[</kbd> to link to another article with autocomplete.</li>
                 <li>You can paste images directly into the editor.</li>
                 <li>Drag the corner handle of any image to resize it.</li>
-                <li>Use the <kbd className="bg-muted px-1 rounded border"><TableIcon className="h-3 w-3 inline" /></kbd> button to insert a table.</li>
-                <li>Changes are saved automatically as you type.</li>
               </ul>
             </CardContent>
           </Card>

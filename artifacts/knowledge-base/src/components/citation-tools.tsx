@@ -80,12 +80,13 @@ export function CitationTools({ editor }: { editor: Editor }) {
   };
   return <>
     <Button type="button" variant="ghost" size="sm" disabled={!canCite}
+      title="Cite Source" aria-label="Cite Source"
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => {
         const { from, to } = editor.state.selection;
         setDescription(""); setUrl(""); setError(""); setTarget({ from, to });
       }}>
-      <BookOpen className="mr-1.5 h-4 w-4" />Cite Source
+      <BookOpen className="h-4 w-4" aria-hidden="true" />
     </Button>
     <Dialog open={target !== null} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent onCloseAutoFocus={(event) => {
