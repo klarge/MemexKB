@@ -5,7 +5,6 @@ import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import swaggerUi from "swagger-ui-express";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import YAML from "yamljs";
@@ -13,6 +12,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { diagramAssetHeaders, diagramStaticAssets } from "./lib/diagram-assets";
 import { enforceApiTokenAccess } from "./lib/auth";
+import { createApiRateLimiters } from "./lib/rate-limits";
 import { pool } from "@workspace/db";
 import type { Pool as PgPool } from "pg";
 
@@ -148,31 +148,12 @@ app.use(
 // consistently across every mutating endpoint.
 app.use("/api", enforceApiTokenAccess);
 
-// Apply a baseline limit to the entire API route tree. Authenticated callers
-// receive an account-specific quota; unauthenticated callers fall back to a
-// normalized IP key that safely handles IPv6 addresses.
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 1_000,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  keyGenerator: (req) =>
-    req.session?.userId
-      ? `user:${req.session.userId}`
-      : `ip:${ipKeyGenerator(req.ip ?? "unknown")}`,
-  message: { error: "Too many requests, please try again later." },
-});
+// Authenticated browsing, anonymous traffic and session controls have separate
+// budgets; exhausting an article quota must not block login or session checks.
+const { apiLimiter, authLimiter } = createApiRateLimiters();
 app.use("/api", apiLimiter);
 
-// Rate limiting on authentication endpoints to prevent brute-force attacks.
-// 10 attempts per 15-minute window per IP.
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: { error: "Too many attempts, please try again later." },
-});
+// Brute-force protection: 10 unsuccessful attempts per 15 minutes per IP.
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/setup", authLimiter);
 

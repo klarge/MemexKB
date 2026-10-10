@@ -14,7 +14,7 @@ let lastResolvedUserId: number | null | undefined;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useGetMe({
+  const { data: user, error, isLoading, isFetching, refetch } = useGetMe({
     query: {
       queryKey: getGetMeQueryKey(),
       retry: false,
@@ -23,8 +23,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  if (!isLoading) {
-    const currentUserId = user?.id ?? null;
+  const signedOut = error?.status === 401;
+  const resolvedUser = signedOut ? null : user ?? null;
+
+  // A network/server/429 error is not evidence that the session has expired.
+  if (!isLoading && (!error || signedOut)) {
+    const currentUserId = resolvedUser?.id ?? null;
     if (lastResolvedUserId !== undefined && lastResolvedUserId !== currentUserId) {
       const authQueryKey = getGetMeQueryKey();
       queryClient.removeQueries({
@@ -42,10 +46,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  if (error && !signedOut && !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-6">
+        <div className="max-w-md space-y-4 text-center" role="alert">
+          <h1 className="text-xl font-semibold">Unable to check your session</h1>
+          <p className="text-sm text-muted-foreground">
+            {error.status === 429
+              ? "The server is temporarily limiting requests. Wait a minute, then try again. This does not mean you have been signed out."
+              : "The server could not be reached. Try again to continue without signing out."}
+          </p>
+          <button
+            type="button"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {isFetching ? "Checking…" : "Try again"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AuthContext.Provider
       value={{
-        user: user ?? null,
+        user: resolvedUser,
         isLoading,
         logout: () => {
           // handled in MainLayout via useLogout

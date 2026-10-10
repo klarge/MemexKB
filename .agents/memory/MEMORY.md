@@ -4,7 +4,7 @@
 - [Development schema sync](dev-schema-sync.md) — API dev workflow skips startup migrations; align the development database before testing new schema code.
 - [Article URL policy](article-url-policy.md) — titles retain stable URLs; only deliberate administrator URL changes migrate internal links.
 - [Private log URLs](private-log-urls.md) — personal logs use immutable owner-scoped paths and always require server-side owner/admin checks.
-- [Web login navigation](web-login-navigation.md) — after local login or initial setup, reload the destination so a fresh browser starts with the new session.
+- [Web session handling](web-login-navigation.md) — reload after local login; distinguish confirmed session expiry from transient errors and retained cached identity.
 - [Infobox textarea sizing](infobox-textarea-sizing.md) — node-view textareas need a nonzero first-line height before auto-grow can measure them.
 - [Article visibility policy](article-visibility-policy.md) — visibility is explicit; authorization, counts, pagination, stats, caches, and derived surfaces must all use the same policy.
 - [Docker database modes](docker-database-modes.md) — external-DB Compose is standalone so local DB dependencies cannot leak into external deployments.
