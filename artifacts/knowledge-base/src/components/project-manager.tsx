@@ -40,7 +40,6 @@ export function ProjectManager({ projectId, manager, canManage }: {
         <>
           <select
             id={`project-manager-${projectId}`}
-            aria-describedby={`project-manager-help-${projectId}`}
             className="h-9 max-w-full min-w-56 rounded-md border border-input bg-background px-3 text-sm"
             value={manager?.id ?? ""}
             disabled={candidates.isLoading || candidates.isError || assign.isPending}
@@ -50,7 +49,6 @@ export function ProjectManager({ projectId, manager, canManage }: {
             {manager && !candidates.data?.some((person) => person.id === manager.id) && <option value={manager.id}>{manager.name}</option>}
             {candidates.data?.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
           </select>
-          <p id={`project-manager-help-${projectId}`} className="text-xs text-muted-foreground">The manager can manage settings, sharing and deletion. The creator and administrators retain control.</p>
           {assign.isPending && <p role="status" className="text-xs text-muted-foreground">Saving manager…</p>}
           {(error || candidates.isError) && <p role="alert" className="text-sm text-destructive">{error || "Unable to load manager choices."}</p>}
         </>
