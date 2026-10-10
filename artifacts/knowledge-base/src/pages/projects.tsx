@@ -3,8 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FolderKanban, Loader2, X, LayoutGrid, Archive, ArchiveRestore, ChevronDown, ChevronRight } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, FolderKanban, Loader2, X, Archive, ArchiveRestore, ChevronDown, ChevronRight } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useVisibleItems } from "@/hooks/use-visible-items";
 import { LoadMore } from "@/components/load-more";
@@ -239,38 +238,35 @@ function ProjectCard({
         <div className="cursor-pointer">
           <p className="mb-1 text-xs font-medium text-muted-foreground" data-testid={`project-id-${project.id}`}>PROJ-{project.id}</p>
           <div className="flex items-start justify-between gap-2">
-            <h3 className="min-h-9 pr-24 font-semibold text-base group-hover:text-primary transition-colors leading-snug">
-              {project.name}
+            <h3 className="flex items-start gap-2 min-h-9 pr-20 font-semibold text-base group-hover:text-primary transition-colors leading-snug">
+              <FolderKanban className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words">{project.name}</span>
             </h3>
           </div>
           {project.description && (
             <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{project.description}</p>
           )}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-3 border-t border-border/50 mt-3">
-            <span className="flex items-center gap-1">
-              <LayoutGrid className="h-3 w-3" />
-              {project.boardCount} {project.boardCount === 1 ? "board" : "boards"}
-              {project.managerName && <span className="ml-3">PM: {project.managerName}</span>}
-            </span>
-            {isArchived ? (
-              <span className="ml-auto flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                <Archive className="h-3 w-3" /> Archived
-              </span>
-            ) : (
-              <span className="ml-auto">Updated {format(new Date(project.updatedAt), "MMM d")}</span>
-            )}
-          </div>
+          {(project.managerName || isArchived) && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground pt-3 border-t border-border/50 mt-3">
+              {project.managerName && <span>PM: {project.managerName}</span>}
+              {isArchived && (
+                <span className="ml-auto flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                  <Archive className="h-3 w-3" /> Archived
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </Link>
 
-      {/* Keep card controls in a row so hover actions cannot overlap the folder. */}
+      {/* Keep card controls visible and separate from the project link. */}
       <div className="absolute top-5 right-5 flex items-center gap-1">
         <FavoriteButton entityType="project" entityId={project.id} title={project.name} />
-        <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
         {isArchived && onUnarchive ? (
           <button
             type="button"
             title="Restore project"
+            aria-label={`Restore project: ${project.name}`}
             onClick={(e) => { e.preventDefault(); onUnarchive(project.id); }}
             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
@@ -280,14 +276,13 @@ function ProjectCard({
           <button
             type="button"
             title="Archive project"
+            aria-label={`Archive project: ${project.name}`}
             onClick={(e) => { e.preventDefault(); onArchive(project.id); }}
             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <Archive className="h-3.5 w-3.5" />
           </button>
         ) : null}
-        </div>
-        <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0" />
       </div>
     </div>
   );
