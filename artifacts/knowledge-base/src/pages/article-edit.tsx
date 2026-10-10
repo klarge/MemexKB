@@ -1050,7 +1050,7 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Q3 Engineering Guidelines"
+              placeholder="e.g. Documentation Policy"
               className="text-lg font-medium py-6"
               data-testid="input-article-title"
             />
