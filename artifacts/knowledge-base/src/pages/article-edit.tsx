@@ -1098,10 +1098,6 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
             </DialogContent>
           </Dialog>
 
-          {kind === "procedure" && (
-            <ProcedureStepsEditor steps={steps} onChange={setSteps} />
-          )}
-
           <div className="space-y-2">
             <Label className="text-base">{kind === "procedure" ? "Description" : "Content"}</Label>
 
@@ -1273,6 +1269,10 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
 
             <EditorContent editor={editor} />
           </div>
+
+          {kind === "procedure" && (
+            <ProcedureStepsEditor steps={steps} onChange={setSteps} />
+          )}
         </div>
 
         <div className="w-full lg:w-72 shrink-0 space-y-6">
