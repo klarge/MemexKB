@@ -77,6 +77,8 @@ onlyBuiltDependencies:
 overrides:
   # Security-patched transitive dependencies whose direct parents have not
   # released compatible updates yet.
+  shell-quote: "1.11.0"
+  proxy-addr: "2.0.8"
   # No published image-size version fixes GHSA-5p2g-fcmc-qvqq or
   # GHSA-w3rx-r6r6-pgpr, so Metro uses a compatible local adapter.
   image-size: "link:./lib/image-size-safe"
