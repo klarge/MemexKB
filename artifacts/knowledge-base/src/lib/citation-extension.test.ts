@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSchema } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
+import { Editor, getSchema } from "@tiptap/core";
+import StarterKit from "./editor-starter-kit";
 import { EditorState, Plugin } from "@tiptap/pm/state";
 import { undo, redo, history } from "@tiptap/pm/history";
 import { Citation, CitationSources, normalizeCitations, sourceNodes, validCitation } from "./citation-extension";
@@ -77,4 +77,50 @@ test("source validation rejects unsafe schemes, empty fields and oversized metad
 test("citation-free documents are unchanged", () => {
   const s = state();
   assert.equal(normalizeCitations(s), null);
+});
+
+test("real editor plugins converge when adding, editing and removing citations", () => {
+  const editor = new Editor({
+    element: null,
+    extensions: [StarterKit.configure({ link: false }), Citation, CitationSources],
+    content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Selected text" }] }] },
+  });
+  // Unlike the isolated normalizer tests, include StarterKit's TrailingNode.
+  // Bound appended transactions so a regression fails rather than hangs.
+  const plugins = editor.extensionManager.plugins;
+  let appended = 0;
+  for (const plugin of plugins) {
+    const append = plugin.spec.appendTransaction;
+    if (append) plugin.spec.appendTransaction = function (...args) {
+      assert.ok(++appended < 30, "editor plugins must converge without a transaction loop");
+      return append.apply(this, args);
+    };
+  }
+  let s = editor.state.reconfigure({ plugins });
+  const apply = (tr: ReturnType<typeof s.tr.insert>) => {
+    appended = 0;
+    const result = s.applyTransaction(tr);
+    assert.ok(result.transactions.length < 5);
+    s = result.state;
+  };
+  const end = s.doc.firstChild!.nodeSize - 1;
+  apply(s.tr.insert(end, s.schema.nodes.citation.create({
+    id: "c-real", description: "Source", url: "https://example.test/source", number: 1,
+  })));
+  assert.equal(s.doc.textContent, "Selected text");
+  assert.equal(s.doc.childCount, 2);
+  assert.equal(entries(s)[0].description, "Source");
+  assert.equal(normalizeCitations(s), null);
+  apply(s.tr.setNodeMarkup(end, undefined, {
+    ...s.doc.nodeAt(end)!.attrs, description: "Updated source",
+  }));
+  assert.equal(entries(s)[0].description, "Updated source");
+  apply(s.tr.delete(end, end + 1));
+  assert.equal(s.doc.childCount, 1);
+  assert.equal(s.doc.textContent, "Selected text");
+  assert.equal(normalizeCitations(s), null);
+  // Trailing paragraphs still work for other non-text blocks.
+  apply(s.tr.insert(s.doc.content.size, s.schema.nodes.horizontalRule.create()));
+  assert.equal(s.doc.lastChild?.type.name, "paragraph");
+  editor.destroy();
 });

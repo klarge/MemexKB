@@ -15,4 +15,8 @@ export default StarterKit.extend({
       }) : extension,
     );
   },
+}).configure({
+  // Sources must remain the final block. Otherwise TrailingNode appends a
+  // paragraph and citation normalization moves Sources after it, indefinitely.
+  trailingNode: { notAfter: ["citationSources"] },
 });
