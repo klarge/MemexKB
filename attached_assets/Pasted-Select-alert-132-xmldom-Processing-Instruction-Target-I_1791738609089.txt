@@ -1,0 +1,134 @@
+Select alert #132: xmldom: Processing Instruction Target Injection Bypasses requireWellFormed
+[xmldom: Processing Instruction Target Injection Bypasses requireWellFormed #132](https://github.com/klarge/MemexKB/security/dependabot/132)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #131: xmldom: DocType `name` Injection Bypasses requireWellFormed
+[xmldom: DocType `name` Injection Bypasses requireWellFormed #131](https://github.com/klarge/MemexKB/security/dependabot/131)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #125: xmldom: Element name injection via createElement() bypasses requireWellFormed
+[xmldom: Element name injection via createElement() bypasses requireWellFormed #125](https://github.com/klarge/MemexKB/security/dependabot/125)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #124: xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed
+[xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed #124](https://github.com/klarge/MemexKB/security/dependabot/124)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #123: xmldom: Processing Instruction Target Injection Bypasses requireWellFormed
+[xmldom: Processing Instruction Target Injection Bypasses requireWellFormed #123](https://github.com/klarge/MemexKB/security/dependabot/123)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #122: xmldom: DocType `name` Injection Bypasses requireWellFormed
+[xmldom: DocType `name` Injection Bypasses requireWellFormed #122](https://github.com/klarge/MemexKB/security/dependabot/122)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #116: xmldom: Element name injection via createElement() bypasses requireWellFormed
+[xmldom: Element name injection via createElement() bypasses requireWellFormed #116](https://github.com/klarge/MemexKB/security/dependabot/116)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #115: xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed
+[xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed #115](https://github.com/klarge/MemexKB/security/dependabot/115)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #129: xmldom: Quadratic-time attribute deduplication
+[xmldom: Quadratic-time attribute deduplication #129](https://github.com/klarge/MemexKB/security/dependabot/129)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #120: xmldom: Quadratic-time attribute deduplication
+[xmldom: Quadratic-time attribute deduplication #120](https://github.com/klarge/MemexKB/security/dependabot/120)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #127: xmldom: Quadratic-memory consumption
+[xmldom: Quadratic-memory consumption #127](https://github.com/klarge/MemexKB/security/dependabot/127)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #126: xmldom: Quadratic-time parsing via the malformed-input recovery path — `parseElementStartPart` re-scan and `normalize()` adjacent-text merge
+[xmldom: Quadratic-time parsing via the malformed-input recovery path — `parseElementStartPart` re-scan and `normalize()` adjacent-text merge #126](https://github.com/klarge/MemexKB/security/dependabot/126)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #118: xmldom: Quadratic-memory consumption
+[xmldom: Quadratic-memory consumption #118](https://github.com/klarge/MemexKB/security/dependabot/118)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #117: xmldom: Quadratic-time parsing via the malformed-input recovery path — `parseElementStartPart` re-scan and `normalize()` adjacent-text merge
+[xmldom: Quadratic-time parsing via the malformed-input recovery path — `parseElementStartPart` re-scan and `normalize()` adjacent-text merge #117](https://github.com/klarge/MemexKB/security/dependabot/117)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #104: http-cache-semantics max-stale handling can disclose cross-user cached responses
+[http-cache-semantics max-stale handling can disclose cross-user cached responses #104](https://github.com/klarge/MemexKB/security/dependabot/104)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 4 days ago·Detected in http-cache-semantics (npm)·pnpm-lock.yaml
+Select alert #128: xmldom: End-tag Whitespace-Trim Regex ReDoS — quadratic backtracking in the 0.8.x end-tag parser
+[xmldom: End-tag Whitespace-Trim Regex ReDoS — quadratic backtracking in the 0.8.x end-tag parser #128](https://github.com/klarge/MemexKB/security/dependabot/128)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·pnpm-lock.yaml
+Select alert #119: xmldom: End-tag Whitespace-Trim Regex ReDoS — quadratic backtracking in the 0.8.x end-tag parser
+[xmldom: End-tag Whitespace-Trim Regex ReDoS — quadratic backtracking in the 0.8.x end-tag parser #119](https://github.com/klarge/MemexKB/security/dependabot/119)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+    [Direct](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+relationship%3Adirect)
+
+Opened 3 days ago·Detected in @xmldom/xmldom (npm)·artifacts/api-server/package.json
+Select alert #102: node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements
+[node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements #102](https://github.com/klarge/MemexKB/security/dependabot/102)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 4 days ago·Detected in node-forge (npm)·pnpm-lock.yaml
+Select alert #107: compression vulnerable to Denial of Service via memory leak on premature response close
+[compression vulnerable to Denial of Service via memory leak on premature response close #107](https://github.com/klarge/MemexKB/security/dependabot/107)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 4 days ago·Detected in compression (npm)·pnpm-lock.yaml
+Select alert #86: undici vulnerable to Denial of Service via unrequested WebSocket subprotocol
+[undici vulnerable to Denial of Service via unrequested WebSocket subprotocol #86](https://github.com/klarge/MemexKB/security/dependabot/86)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 4 days ago·Detected in undici (npm)·pnpm-lock.yaml
+Select alert #78: fast-uri vulnerable to host confusion via an unclosed bracket in the URI authority
+[fast-uri vulnerable to host confusion via an unclosed bracket in the URI authority #78](https://github.com/klarge/MemexKB/security/dependabot/78)
+
+    [high](https://github.com/klarge/MemexKB/security/dependabot?q=is%3Aopen+severity%3Ahigh)
+
+Opened 2 weeks ago·Detected in fast-uri (npm)·pnpm-lock.yaml
