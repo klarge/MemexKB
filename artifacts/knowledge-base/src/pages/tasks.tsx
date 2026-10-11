@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EditTask } from "@/components/edit-task";
+import { TaskDeleteDialog, type TaskDeletion } from "@/components/task-delete-dialog";
 import { useVisibleItems } from "@/hooks/use-visible-items";
 import { LoadMore } from "@/components/load-more";
 import { DueDateBadge } from "@/components/due-date-badge";
@@ -176,6 +177,7 @@ function ListCard({
   onAddTask,
   onToggleTask,
   onDeleteTask,
+  onDeleteCompleted,
   onReorderTasks,
   onMoveList,
   canMoveUp,
@@ -188,6 +190,7 @@ function ListCard({
   onAddTask: (listId: number, title: string) => void;
   onToggleTask: (id: number, completed: boolean) => void;
   onDeleteTask: (id: number) => void;
+  onDeleteCompleted: (ids: number[]) => void;
   onReorderTasks: (listId: number, taskIds: number[]) => void;
   onMoveList: (id: number, direction: "up" | "down") => void;
   canMoveUp: boolean;
@@ -260,16 +263,6 @@ function ListCard({
         >
           {collapsed ? <ChevronRight className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-          disabled={!canMoveUp || moving} onClick={() => onMoveList(list.id, "up")}
-          aria-label={`Move ${list.name} up`} title="Move list up">
-          <ArrowUp className="h-4 w-4" aria-hidden="true" />
-        </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-          disabled={!canMoveDown || moving} onClick={() => onMoveList(list.id, "down")}
-          aria-label={`Move ${list.name} down`} title="Move list down">
-          <ArrowDown className="h-4 w-4" aria-hidden="true" />
-        </Button>
         {editing ? (
           <>
             <input
@@ -308,6 +301,16 @@ function ListCard({
             <span className="text-xs text-muted-foreground tabular-nums shrink-0">
               {activeTasks.length} remaining
             </span>
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+              disabled={!canMoveUp || moving} onClick={() => onMoveList(list.id, "up")}
+              aria-label={`Move ${list.name} up`} title="Move list up">
+              <ArrowUp className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+              disabled={!canMoveDown || moving} onClick={() => onMoveList(list.id, "down")}
+              aria-label={`Move ${list.name} down`} title="Move list down">
+              <ArrowDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
             <button
               type="button"
               onClick={() => onDeleteList(list.id)}
@@ -350,12 +353,7 @@ function ListCard({
                     }
                     onToggleTask(id, completed);
                   }}
-                  onDelete={(id) => {
-                    if (localActiveIds) {
-                      setLocalActiveIds(localActiveIds.filter((i) => i !== id));
-                    }
-                    onDeleteTask(id);
-                  }}
+                  onDelete={onDeleteTask}
                 />
               ))}
             </SortableContext>
@@ -389,7 +387,7 @@ function ListCard({
               </button>
               <button
                 type="button"
-                onClick={() => completedTasks.forEach((t) => onDeleteTask(t.id))}
+                onClick={() => onDeleteCompleted(completedTasks.map((t) => t.id))}
                 className="px-3 py-2.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
                 aria-label="Delete all completed tasks"
                 title="Delete all completed"
@@ -423,6 +421,7 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TaskDeletion | null>(null);
 
   const { data: listsData, isLoading } = useQuery<TaskListsResponse>({
     queryKey: ["task-lists"],
@@ -452,11 +451,6 @@ export default function TasksPage() {
     onSuccess: invalidate,
   });
 
-  const deleteList = useMutation({
-    mutationFn: (id: number) => fetch(`/api/tasks/lists/${id}`, { method: "DELETE" }),
-    onSuccess: invalidate,
-  });
-
   const addTask = useMutation({
     mutationFn: ({ listId, title }: { listId: number; title: string }) =>
       json("POST", "/api/tasks", { listId, title }),
@@ -466,11 +460,6 @@ export default function TasksPage() {
   const toggleTask = useMutation({
     mutationFn: ({ id, completed }: { id: number; completed: boolean }) =>
       json("PATCH", `/api/tasks/${id}`, { completed }),
-    onSuccess: invalidate,
-  });
-
-  const deleteTask = useMutation({
-    mutationFn: (id: number) => fetch(`/api/tasks/${id}`, { method: "DELETE" }),
     onSuccess: invalidate,
   });
 
@@ -579,17 +568,21 @@ export default function TasksPage() {
               canMoveUp={lists.findIndex((item) => item.id === list.id) > 0}
               canMoveDown={lists.findIndex((item) => item.id === list.id) < lists.length - 1}
               moving={moveList.isPending}
-              onDeleteList={(id) => deleteList.mutate(id)}
+              onDeleteList={(id) => setDeleteTarget({ kind: "list", id, name: list.name })}
               onRenameList={(id, name) => renameList.mutate({ id, name })}
               onAddTask={(listId, title) => addTask.mutate({ listId, title })}
               onToggleTask={(id, completed) => toggleTask.mutate({ id, completed })}
-              onDeleteTask={(id) => deleteTask.mutate(id)}
+              onDeleteTask={(id) => setDeleteTarget({
+                kind: "task", id, name: list.tasks.find((task) => task.id === id)?.title ?? "this task",
+              })}
+              onDeleteCompleted={(ids) => setDeleteTarget({ kind: "completed", ids, name: list.name })}
               onReorderTasks={(listId, taskIds) => reorderTasks.mutate({ listId, taskIds })}
             />
           ))}
           <LoadMore hasMore={listWindow.hasMore} onClick={listWindow.loadMore} />
         </div>
       )}
+      <TaskDeleteDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={invalidate} />
     </div>
   );
 
