@@ -99,6 +99,8 @@ export * from './tagInput';
 export * from './tagUpdate';
 export * from './task';
 export * from './taskList';
+export * from './taskListMove';
+export * from './taskListMoveDirection';
 export * from './taskListsResponse';
 export * from './taskUpdate';
 export * from './testNotificationEmail200';

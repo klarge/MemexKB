@@ -15,6 +15,7 @@ export const GetTaskListsResponse = zod.object({
   "lists": zod.array(zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
+  "position": zod.number().int(),
   "createdAt": zod.coerce.date(),
   "tasks": zod.array(zod.object({
   "id": zod.number().int(),
@@ -29,6 +30,23 @@ export const GetTaskListsResponse = zod.object({
 })),
   "truncated": zod.boolean()
 })
+
+
+/**
+ * @summary Move a personal task list up or down one place
+ */
+
+
+
+export const MoveTaskListParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const MoveTaskListBody = zod.object({
+  "direction": zod.enum(['up', 'down'])
+})
+
+export const MoveTaskListResponse = zod.void()
 
 
 /**

@@ -38,6 +38,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TaskListsResponse"
+  /tasks/lists/{id}/move:
+    patch:
+      operationId: moveTaskList
+      tags: [tasks]
+      summary: Move a personal task list up or down one place
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskListMove"
+      responses:
+        "204":
+          description: Order saved (unchanged at the first or last position)
+        "400":
+          description: Invalid direction or list ID
+        "401":
+          description: Authentication required
+        "403":
+          description: Tasks feature disabled
+        "404":
+          description: List not found
   /tasks/{id}:
     patch:
       operationId: updateTask
@@ -1635,12 +1662,18 @@ components:
           type: ["string", "null"]
           pattern: '^\d{4}-\d{2}-\d{2}$'
           description: Calendar date in YYYY-MM-DD format, stored at UTC midnight like project-card dates. Null clears the date; omission leaves it unchanged.
+    TaskListMove:
+      type: object
+      required: [direction]
+      properties:
+        direction: { type: string, enum: [up, down] }
     TaskList:
       type: object
-      required: [id, name, createdAt, tasks]
+      required: [id, name, position, createdAt, tasks]
       properties:
         id: { type: integer }
         name: { type: string }
+        position: { type: integer }
         createdAt: { type: string, format: date-time }
         tasks:
           type: array

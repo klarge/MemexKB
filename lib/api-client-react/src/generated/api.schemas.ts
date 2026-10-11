@@ -30,9 +30,22 @@ export interface TaskUpdate {
   dueDate?: string | null;
 }
 
+export type TaskListMoveDirection = typeof TaskListMoveDirection[keyof typeof TaskListMoveDirection];
+
+
+export const TaskListMoveDirection = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+export interface TaskListMove {
+  direction: TaskListMoveDirection;
+}
+
 export interface TaskList {
   id: number;
   name: string;
+  position: number;
   createdAt: string;
   tasks: Task[];
 }

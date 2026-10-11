@@ -36,6 +36,8 @@ import {
   Check,
   X,
   GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -175,6 +177,10 @@ function ListCard({
   onToggleTask,
   onDeleteTask,
   onReorderTasks,
+  onMoveList,
+  canMoveUp,
+  canMoveDown,
+  moving,
 }: {
   list: TaskList;
   onDeleteList: (id: number) => void;
@@ -183,6 +189,10 @@ function ListCard({
   onToggleTask: (id: number, completed: boolean) => void;
   onDeleteTask: (id: number) => void;
   onReorderTasks: (listId: number, taskIds: number[]) => void;
+  onMoveList: (id: number, direction: "up" | "down") => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  moving: boolean;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -250,6 +260,16 @@ function ListCard({
         >
           {collapsed ? <ChevronRight className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
         </button>
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+          disabled={!canMoveUp || moving} onClick={() => onMoveList(list.id, "up")}
+          aria-label={`Move ${list.name} up`} title="Move list up">
+          <ArrowUp className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+          disabled={!canMoveDown || moving} onClick={() => onMoveList(list.id, "down")}
+          aria-label={`Move ${list.name} down`} title="Move list down">
+          <ArrowDown className="h-4 w-4" aria-hidden="true" />
+        </Button>
         {editing ? (
           <>
             <input
@@ -460,6 +480,14 @@ export default function TasksPage() {
     // No invalidate — optimistic local state handles the UI; server syncs quietly
   });
 
+  const moveList = useMutation({
+    mutationFn: async ({ id, direction }: { id: number; direction: "up" | "down" }) => {
+      const response = await json("PATCH", `/api/tasks/lists/${id}/move`, { direction });
+      if (!response.ok) throw new Error("Could not save list order. Please try again.");
+    },
+    onSuccess: invalidate,
+  });
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
@@ -542,10 +570,15 @@ export default function TasksPage() {
         </div>
       ) : (
         <div className="space-y-4">
+          {moveList.isError && <p role="alert" className="text-sm text-destructive">{moveList.error.message}</p>}
           {listWindow.items.map((list) => (
             <ListCard
               key={list.id}
               list={list}
+              onMoveList={(id, direction) => moveList.mutate({ id, direction })}
+              canMoveUp={lists.findIndex((item) => item.id === list.id) > 0}
+              canMoveDown={lists.findIndex((item) => item.id === list.id) < lists.length - 1}
+              moving={moveList.isPending}
               onDeleteList={(id) => deleteList.mutate(id)}
               onRenameList={(id, name) => renameList.mutate({ id, name })}
               onAddTask={(listId, title) => addTask.mutate({ listId, title })}

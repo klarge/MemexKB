@@ -80,6 +80,7 @@ import type {
   TagInput,
   TagUpdate,
   Task,
+  TaskListMove,
   TaskListsResponse,
   TaskUpdate,
   TestNotificationEmail200,
@@ -191,6 +192,87 @@ export function useGetTaskLists<TData = Awaited<ReturnType<typeof getTaskLists>>
 
 
 
+
+export const getMoveTaskListUrl = (id: number,) => {
+
+
+
+
+  return `/api/tasks/lists/${id}/move`
+}
+
+/**
+ * @summary Move a personal task list up or down one place
+ */
+export const moveTaskList = async (id: number,
+    taskListMove: TaskListMove, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getMoveTaskListUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(taskListMove)
+  }
+);}
+
+
+
+
+
+export const getMoveTaskListMutationKey = () => ['moveTaskList'] as const;
+
+export const getMoveTaskListMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moveTaskList>>, TError,MoveTaskListMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof moveTaskList>>, TError,MoveTaskListMutationVariables, TContext> => {
+
+const mutationKey = getMoveTaskListMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof moveTaskList>>, MoveTaskListMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  moveTaskList(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MoveTaskListMutationResult = NonNullable<Awaited<ReturnType<typeof moveTaskList>>>
+    export type MoveTaskListMutationBody = BodyType<TaskListMove>
+    export type MoveTaskListMutationError = ErrorType<void>
+    export type MoveTaskListMutationVariables = {id: number;data: BodyType<TaskListMove>}
+
+    /**
+ * @summary Move a personal task list up or down one place
+ */
+export const useMoveTaskList = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moveTaskList>>, TError,MoveTaskListMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof moveTaskList>>,
+        TError,
+        MoveTaskListMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMoveTaskListMutationOptions(options));
+    }
 
 export const getUpdateTaskUrl = (id: number,) => {
 

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, taskListsTable, tasksTable, siteSettingsTable } from "@workspace/db";
 import { eq, and, asc, inArray, max, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
-import { UpdateTaskBody } from "@workspace/api-zod";
+import { UpdateTaskBody, MoveTaskListBody, MoveTaskListParams } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -32,7 +32,7 @@ router.get("/tasks/lists", requireAuth, async (req, res) => {
     .select()
     .from(taskListsTable)
     .where(eq(taskListsTable.userId, userId))
-    .orderBy(asc(taskListsTable.createdAt), asc(taskListsTable.id));
+    .orderBy(asc(taskListsTable.position), asc(taskListsTable.createdAt), asc(taskListsTable.id));
 
   const allTasks = lists.length > 0
     ? await db
@@ -61,11 +61,46 @@ router.post("/tasks/lists", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Name is required" });
     return;
   }
+  const [{ maxPosition }] = await db.select({ maxPosition: max(taskListsTable.position) })
+    .from(taskListsTable).where(eq(taskListsTable.userId, req.session.userId!));
   const [list] = await db
     .insert(taskListsTable)
-    .values({ userId: req.session.userId!, name: name.trim() })
+    .values({ userId: req.session.userId!, name: name.trim(), position: (maxPosition ?? -1) + 1 })
     .returning();
   res.status(201).json(list);
+});
+
+// PATCH /api/tasks/lists/:id/move — change the current user's list order
+router.patch("/tasks/lists/:id/move", requireAuth, async (req, res): Promise<void> => {
+  const params = MoveTaskListParams.safeParse(req.params);
+  const body = MoveTaskListBody.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: "Provide a valid list ID and direction (up or down)" });
+    return;
+  }
+  const found = await db.transaction(async (tx) => {
+    const lists = await tx.select().from(taskListsTable)
+      .where(eq(taskListsTable.userId, req.session.userId!))
+      .orderBy(asc(taskListsTable.position), asc(taskListsTable.createdAt), asc(taskListsTable.id))
+      .for("update");
+    const index = lists.findIndex((list) => list.id === params.data.id);
+    if (index < 0) return false;
+    const next = index + (body.data.direction === "up" ? -1 : 1);
+    if (next < 0 || next >= lists.length) return true;
+    [lists[index], lists[next]] = [lists[next], lists[index]];
+    // Normalize all positions as well, so restored legacy lists with tied
+    // positions can still be moved. Updates are atomic and owner-scoped.
+    for (const [position, list] of lists.entries()) {
+      await tx.update(taskListsTable).set({ position })
+        .where(and(eq(taskListsTable.id, list.id), eq(taskListsTable.userId, req.session.userId!)));
+    }
+    return true;
+  });
+  if (!found) {
+    res.status(404).json({ error: "List not found" });
+    return;
+  }
+  res.status(204).send();
 });
 
 // PATCH /api/tasks/lists/:id — rename a list
