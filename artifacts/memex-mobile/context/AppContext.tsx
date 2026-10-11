@@ -206,6 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const url = `${serverUrl}/api${path}`;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        'X-Memex-Client': 'native',
         ...(sessionCookie ? { Cookie: `connect.sid=${sessionCookie}` } : {}),
         ...(options.headers as Record<string, string> | undefined),
       };
@@ -240,7 +241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!serverUrl) throw new Error('Server URL not configured');
       const res = await fetch(`${serverUrl}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Memex-Client': 'native' },
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {

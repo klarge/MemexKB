@@ -7,11 +7,6 @@ const router = Router();
 
 if (process.env.NODE_ENV !== "production") {
   router.get("/dev/autologin", async (req, res) => {
-    const rawRedirect = (req.query.redirect as string) || "/";
-    // Only allow same-origin relative paths to prevent open-redirect abuse
-    const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
-      ? rawRedirect
-      : "/";
     const [admin] = await db
       .select()
       .from(usersTable)
@@ -28,7 +23,8 @@ if (process.env.NODE_ENV !== "production") {
     await new Promise<void>((resolve, reject) =>
       req.session.save((err) => (err ? reject(err) : resolve()))
     );
-    res.redirect(302, redirect);
+    // Never pass request-controlled URLs to a redirect, even in development.
+    res.redirect(302, "/");
   });
 }
 

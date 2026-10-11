@@ -1,3 +1,4 @@
+import { bearerToken } from "./bearer-header";
 import { createHash } from "node:crypto";
 import { type Request, type Response, type NextFunction } from "express";
 import { db } from "@workspace/db";
@@ -41,9 +42,7 @@ function hasBearerAuth(req: Request): boolean {
 }
 
 function readBearerToken(req: Request): string | null {
-  const match = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "");
-  const rawToken = match?.[1]?.trim();
-  return rawToken || null;
+  return bearerToken(req.headers.authorization);
 }
 
 export async function resolveTokenAuth(req: Request): Promise<boolean> {

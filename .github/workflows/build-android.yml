@@ -1,5 +1,8 @@
 name: Build Android APK
 
+permissions:
+  contents: read
+
 # Triggers: every push to main/master, every PR into main/master,
 # and on-demand via the Actions tab (workflow_dispatch).
 on:

@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import type { AddressInfo } from "node:net";
-import { createApiRateLimiters } from "../src/lib/rate-limits";
+import { createApiRateLimiters, ingressRateLimitOptions } from "../src/lib/rate-limits";
 
 async function withApi(
   run: (request: (path: string, user?: number, successful?: boolean) => Promise<Response>) => Promise<void>,
 ) {
   const app = express();
+  app.use("/api", rateLimit(ingressRateLimitOptions));
   app.use(express.json());
   // Synthetic session identities for an isolated server; no real DB/accounts.
   app.use((req, _res, next) => {
@@ -82,4 +84,33 @@ test("session controls retain an independent limit, including query/trailing-sla
     assert.equal((await request("/auth/me", 2)).status, 200);
     assert.equal((await request("/auth/login/", 1)).status, 200);
   });
+});
+
+test("ingress limiting runs before expensive handlers and isolates credentials and session controls", async () => {
+  const app = express();
+  let handled = 0;
+  app.use("/api", rateLimit({ ...ingressRateLimitOptions, limit: 2 }));
+  app.use("/api", (_req, res) => { handled++; res.json({}); });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  async function request(path: string, method = "GET") {
+    const response = await fetch(`${base}/api${path}`, { method });
+    await response.text();
+    return response.status;
+  }
+  try {
+    assert.equal(await request("/articles"), 200);
+    assert.equal(await request("/articles"), 200);
+    assert.equal(await request("/articles"), 429);
+    assert.equal(handled, 2);
+    assert.equal(await request("/auth/me/?q=1"), 200);
+    assert.equal(await request("/auth/logout/", "POST"), 200);
+    assert.equal(await request("/auth/me"), 429);
+    assert.equal(await request("/auth/login", "POST"), 200);
+    assert.equal(await request("/auth/setup/", "POST"), 200);
+    assert.equal(await request("/auth/login", "POST"), 429);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });

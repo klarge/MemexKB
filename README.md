@@ -149,6 +149,24 @@ See `.env.example` for the full list. Minimum required:
 | `DATABASE_URL` | PostgreSQL URL; constructed from `POSTGRES_PASSWORD` in local Compose, required in external Compose and ECS |
 | `COOKIE_SECURE`, `TRUST_PROXY` | Set to `true` and `1` respectively behind one HTTPS-terminating proxy such as an ALB |
 
+### Request security
+
+Mutating browser API requests must have a same-origin `Origin` or `Referer`, or
+an origin explicitly trusted by `CORS_ORIGIN` / `APP_BASE_URL`. This also protects
+login and initial setup. Configure the public origin and trusted proxy correctly
+when serving the browser through a reverse proxy.
+
+Native clients that use session cookies and do not send browser origin headers
+must send `X-Memex-Client: native`; the mobile app supplies this automatically.
+Origin-less API clients may instead use a valid Bearer API key. A supplied
+untrusted or opaque (`null`) origin is rejected even with these headers.
+SAML assertion POSTs are exempt only at the exact numeric-provider callback
+path, where the existing SAML handler validates the signed assertion.
+
+An early per-IP request limit protects parsing and database-backed authentication.
+Its ordinary API, credential, and session-control budgets are independent;
+the existing per-user and failed-sign-in limits still apply afterward.
+
 ### Schema migrations
 
 The Docker image includes `lib/db/migrations` and sets `MIGRATIONS_DIR=/app/migrations`. On **every** container startup the API runs the ordered Drizzle migrations before listening; already-applied migrations are not rerun. This works for either Compose file and for ECS. Review new migration SQL and take a database backup before upgrading. If a database already has application tables created outside the migration history (for example, by a previous `drizzle-kit push`), do **not** point a new container at it and assume the migrations can replay safely. Reconcile its migration history and schema first.

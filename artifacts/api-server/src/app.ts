@@ -12,7 +12,9 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { diagramAssetHeaders, diagramStaticAssets } from "./lib/diagram-assets";
 import { enforceApiTokenAccess } from "./lib/auth";
-import { createApiRateLimiters } from "./lib/rate-limits";
+import rateLimit from "express-rate-limit";
+import { createApiRateLimiters, ingressRateLimitOptions } from "./lib/rate-limits";
+import { csrfProtection } from "./lib/csrf";
 import { pool } from "@workspace/db";
 import type { Pool as PgPool } from "pg";
 
@@ -86,6 +88,13 @@ const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
   : false;
 app.use(cors({ origin: corsOrigins, credentials: true }));
+
+// Explicit ingress middleware bounds work before body parsing and DB-backed auth.
+app.use("/api", rateLimit(ingressRateLimitOptions));
+app.use("/api", csrfProtection({
+  baseUrl: process.env.APP_BASE_URL,
+  allowedOrigins: corsOrigins || [],
+}));
 
 // Reduced body limits — 20 MB was unnecessarily large and enabled easy DoS.
 // Images are stored via the dedicated /api/articles/images endpoint (base64, ~2 MB).

@@ -29,6 +29,7 @@ const { ZipArchive } = _require("archiver") as {
 import { requireAuth, requireRole } from "../lib/auth";
 import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
+import { trimTrailingCharacter } from "../lib/string-boundaries";
 import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
 import { marked } from "marked";
 import TurndownService from "turndown";
@@ -146,7 +147,7 @@ function extractImageIds(html: string): number[] {
  */
 function rewriteImageRefs(md: string, imagePathMap: Map<string, number>): string {
   let result = md;
-  result = result.replace(/\(\.\.\/images\/([^)\s]+)\)/g, (full, path: string) => {
+  result = result.replace(/\(\.\.\/images\/([^()\s]+)\)/g, (full, path: string) => {
     const newId = imagePathMap.get(path);
     return newId !== undefined ? `(/api/articles/images/${newId})` : full;
   });
@@ -176,12 +177,11 @@ async function importMarkdownBuffer(
   overwrite: boolean,
   imagePathMap: Map<string, number> = new Map(),
 ): Promise<{ result: ImportResult; articleId: number | null }> {
-  const slug = fileName
+  const slug = trimTrailingCharacter(fileName
     .replace(/\.md$/i, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
+    .replace(/^-+/, ""), "-");
   const h1 = extractH1(rawMd);
   const title = h1 ?? titleFromSlug(slug);
   const bodyMd = rewriteImageRefs(rawMd.replace(/^# .+\n\n?/, ""), imagePathMap);

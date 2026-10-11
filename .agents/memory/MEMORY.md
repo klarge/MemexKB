@@ -28,3 +28,4 @@
 - [PDF reader fidelity](pdf-rendering.md) — exports must match HTML; printable-width media queries can activate mobile layouts despite desktop screen emulation.
 - [Article diagrams](article-diagrams.md) — normal editing/export must stay self-hosted; historical diagrams must retain their original editable source and preview.
 - [Personal task due dates](task-due-date-policy.md) — match card-date behavior; task reminder emails are a separate opt-in with shared advance timing.
+- [Request security compatibility](request-security-compatibility.md) — coordinate browser uploads, native cookie sessions and signed SAML posts before changing the CSRF protocol.

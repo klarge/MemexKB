@@ -13,8 +13,10 @@ export function slugify(title: string): string {
 export function extractWikilinks(html: string): string[] {
   const matches: string[] = [];
   outsideCitations(html, (text) => {
-    matches.push(...(text.match(/\[\[([^\]]+)\]\]/g) ?? []));
-    return text;
+    return transformWikilinks(text, (match) => {
+      matches.push(match);
+      return match;
+    });
   });
   return [...new Set(matches.map((m) => {
     const body = m.slice(2, -2);
@@ -23,12 +25,28 @@ export function extractWikilinks(html: string): string[] {
   }))];
 }
 
+/** Visit each bracket span once, including malformed/unclosed input. */
+function transformWikilinks(text: string, transform: (match: string, body: string) => string): string {
+  let cursor = 0, copied = 0, result = "";
+  while (cursor < text.length) {
+    const start = text.indexOf("[[", cursor);
+    if (start === -1) break;
+    const close = text.indexOf("]", start + 2);
+    if (close === -1) break;
+    cursor = close + (text[close + 1] === "]" ? 2 : 1);
+    if (close === start + 2 || text[close + 1] !== "]") continue;
+    result += text.slice(copied, start) + transform(text.slice(start, close + 2), text.slice(start + 2, close));
+    copied = close + 2;
+  }
+  return result + text.slice(copied);
+}
+
 export function wikilinkSlug(title: string): string {
   return slugify(title);
 }
 
 export function rewriteWikilinksForSlug(html: string, oldSlug: string, newSlug: string): string {
-  return outsideCitations(html, (text) => text.replace(/\[\[([^\]]+)\]\]/g, (match, rawBody: string) => {
+  return outsideCitations(html, (text) => transformWikilinks(text, (match, rawBody) => {
     const divider = rawBody.indexOf("|");
     const target = (divider === -1 ? rawBody : rawBody.slice(0, divider)).trim();
     if (slugify(target) !== oldSlug) return match;

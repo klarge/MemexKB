@@ -1,5 +1,6 @@
 import type { Request, RequestHandler } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { trimTrailingCharacter } from "./string-boundaries";
 
 interface RateLimitOptions {
   authenticatedLimit?: number;
@@ -12,8 +13,25 @@ const credentialRoutes = new Set(["POST /auth/login", "POST /auth/setup"]);
 const sessionRoutes = new Set(["GET /auth/me", "POST /auth/logout"]);
 
 function routeKey(req: Request) {
-  return `${req.method} ${req.path.toLowerCase().replace(/\/+$/, "")}`;
+  return `${req.method} ${trimTrailingCharacter(req.path.toLowerCase(), "/")}`;
 }
+
+export function ingressBudget(req: Request): "credentials" | "session" | "api" {
+  const route = routeKey(req);
+  if (credentialRoutes.has(route)) return "credentials";
+  if (sessionRoutes.has(route)) return "session";
+  return "api";
+}
+
+/** Before parsing or session/token DB access; each critical route class has its own quota. */
+export const ingressRateLimitOptions = {
+  windowMs: 60_000,
+  limit: (req: Request) => ({ credentials: 1_000, session: 600, api: 6_000 })[ingressBudget(req)],
+  keyGenerator: (req: Request) => `${ingressBudget(req)}:${ipKeyGenerator(req.ip ?? "unknown")}`,
+  standardHeaders: "draft-7" as const,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait a minute and try again." },
+};
 
 function callerKey(req: Request) {
   return req.session?.userId
