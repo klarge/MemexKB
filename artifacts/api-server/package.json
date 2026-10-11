@@ -30,7 +30,7 @@
     "helmet": "^8.1.0",
     "html-to-text": "^10.0.1",
     "marked": "^18.0.3",
-    "multer": "^2.3.0",
+    "multer": "^2.4.0",
     "nodemailer": "^10.0.15",
     "openid-client": "^5.7.1",
     "pdfkit": "^0.18.0",
