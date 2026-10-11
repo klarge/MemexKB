@@ -373,6 +373,9 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+      xml-crypto:
+        specifier: 6.1.2
+        version: 6.1.2
 
   artifacts/knowledge-base:
     dependencies:
