@@ -30,6 +30,7 @@ const router = Router();
 
 // Feature flag — admins always bypass; others blocked if projects_enabled = "false"
 router.use(async (req, res, next) => {
+  if (!/^\/(projects|boards|columns|cards)(\/|$)/.test(req.path)) { next(); return; }
   if (!req.session?.userId) { next(); return; }
   if (req.session.userRole === "admin") { next(); return; }
   const [row] = await db.select().from(siteSettingsTable).where(eq(siteSettingsTable.key, "projects_enabled")).limit(1);

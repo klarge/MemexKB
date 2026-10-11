@@ -40,6 +40,7 @@ import type {
   ArticleUpdate,
   AuthUser,
   ChangePasswordInput,
+  Dashboard,
   EditLockStatus,
   ErrorResponse,
   FavoriteInput,
@@ -78,6 +79,9 @@ import type {
   Tag,
   TagInput,
   TagUpdate,
+  Task,
+  TaskListsResponse,
+  TaskUpdate,
   TestNotificationEmail200,
   User,
   UserInput,
@@ -110,6 +114,241 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetTaskListsUrl = () => {
+
+
+
+
+  return `/api/tasks/lists`
+}
+
+/**
+ * @summary Get the current user's personal task lists
+ */
+export const getTaskLists = async ( options?: Parameters<typeof customFetch>[1]): Promise<TaskListsResponse> => {
+
+  return customFetch<TaskListsResponse>(getGetTaskListsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTaskListsQueryKey = () => {
+    return [
+    `/api/tasks/lists`
+    ] as const;
+    }
+
+
+export const getGetTaskListsQueryOptions = <TData = Awaited<ReturnType<typeof getTaskLists>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTaskLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTaskListsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTaskLists>>> = ({ signal }) => getTaskLists({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTaskLists>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTaskListsQueryResult = NonNullable<Awaited<ReturnType<typeof getTaskLists>>>
+export type GetTaskListsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the current user's personal task lists
+ */
+
+export function useGetTaskLists<TData = Awaited<ReturnType<typeof getTaskLists>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTaskLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTaskListsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/tasks/${id}`
+}
+
+/**
+ * @summary Edit a personal task's title, due date, or completion status
+ */
+export const updateTask = async (id: number,
+    taskUpdate: TaskUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Task> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<Task>(getUpdateTaskUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(taskUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateTaskMutationKey = () => ['updateTask'] as const;
+
+export const getUpdateTaskMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTask>>, TError,UpdateTaskMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTask>>, TError,UpdateTaskMutationVariables, TContext> => {
+
+const mutationKey = getUpdateTaskMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTask>>, UpdateTaskMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTaskMutationResult = NonNullable<Awaited<ReturnType<typeof updateTask>>>
+    export type UpdateTaskMutationBody = BodyType<TaskUpdate>
+    export type UpdateTaskMutationError = ErrorType<void>
+    export type UpdateTaskMutationVariables = {id: number;data: BodyType<TaskUpdate>}
+
+    /**
+ * @summary Edit a personal task's title, due date, or completion status
+ */
+export const useUpdateTask = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTask>>, TError,UpdateTaskMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTask>>,
+        TError,
+        UpdateTaskMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateTaskMutationOptions(options));
+    }
+
+export const getGetDashboardUrl = () => {
+
+
+
+
+  return `/api/dashboard`
+}
+
+/**
+ * @summary Personal active tasks and upcoming task and assigned-card due dates
+ */
+export const getDashboard = async ( options?: Parameters<typeof customFetch>[1]): Promise<Dashboard> => {
+
+  return customFetch<Dashboard>(getGetDashboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardQueryKey = () => {
+    return [
+    `/api/dashboard`
+    ] as const;
+    }
+
+
+export const getGetDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getDashboard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboard>>> = ({ signal }) => getDashboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboard>>>
+export type GetDashboardQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Personal active tasks and upcoming task and assigned-card due dates
+ */
+
+export function useGetDashboard<TData = Awaited<ReturnType<typeof getDashboard>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetNotificationSettingsUrl = () => {
 

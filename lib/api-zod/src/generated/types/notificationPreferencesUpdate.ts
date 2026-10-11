@@ -11,5 +11,7 @@ export interface NotificationPreferencesUpdate {
   cardAssigned: boolean;
   projectAdded: boolean;
   cardDue: boolean;
+  /** Opt in to reminders for personal tasks. Omission preserves the existing preference. */
+  taskDue?: boolean;
   dueSoonHours: NotificationPreferencesUpdateDueSoonHours;
 }

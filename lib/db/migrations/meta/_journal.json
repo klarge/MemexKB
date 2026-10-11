@@ -183,6 +183,13 @@
       "when": 1791244800003,
       "tag": "0025_add_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0026_add_task_due_dates",
+      "breakpoints": true
     }
   ]
 }

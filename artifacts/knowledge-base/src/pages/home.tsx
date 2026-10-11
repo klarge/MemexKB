@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useSiteSettings } from "@/lib/site-settings";
 import { HomeFavorites } from "@/components/home-favorites";
+import { DueDateBadge } from "@/components/due-date-badge";
+import type { Dashboard as DashboardData } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,7 +28,7 @@ import {
   CheckSquare,
   KanbanSquare,
 } from "lucide-react";
-import { formatDistanceToNow, format, isPast, isToday } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,29 +86,6 @@ type SearchResults = {
   logEntries: SearchResult[];
   tasks: TaskSearchResult[];
   cards: CardSearchResult[];
-};
-
-type ActiveTask = {
-  id: number;
-  title: string;
-  listId: number;
-  listName: string;
-};
-
-type UpcomingCard = {
-  id: number;
-  title: string;
-  dueDate: string | null;
-  boardId: number;
-  boardName: string;
-  projectId: number;
-  projectName: string;
-  columnName: string;
-};
-
-type DashboardData = {
-  activeTasks: ActiveTask[];
-  upcomingCards: UpcomingCard[];
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -206,26 +185,6 @@ function logHref(result: { kind?: string; logOwnerId?: number | null; logSlug?: 
   return result.logOwnerId && result.logSlug ? `/logs/${result.logOwnerId}/${result.logSlug}` : articlePathFor(result);
 }
 
-function DueDateBadge({ dueDate }: { dueDate: string }) {
-  const d = new Date(dueDate);
-  const overdue = isPast(d) && !isToday(d);
-  const today = isToday(d);
-  return (
-    <span
-      className={`shrink-0 text-xs font-medium px-1.5 py-0.5 rounded ${
-        overdue
-          ? "bg-destructive/10 text-destructive"
-          : today
-          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-          : "bg-muted text-muted-foreground"
-      }`}
-    >
-      {overdue ? "Overdue · " : today ? "Today · " : ""}
-      {format(d, "MMM d")}
-    </span>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -299,7 +258,19 @@ export default function Home() {
   };
 
   const activeTasks = (dashboard?.activeTasks ?? []).slice(0, 5);
-  const upcomingCards = (dashboard?.upcomingCards ?? []).slice(0, 5);
+  const upcomingDueDates = [
+    ...(dashboard?.upcomingTasks ?? []).map(task => ({
+      key: `task-${task.id}`, kind: "task", title: task.title,
+      subtitle: task.listName, href: "/tasks", dueDate: task.dueDate,
+    })),
+    ...(dashboard?.upcomingCards ?? []).map(card => ({
+      key: `card-${card.id}`, kind: "card", title: card.title,
+      subtitle: `${card.projectName} · ${card.columnName}`,
+      href: `/projects/${card.projectId}/boards/${card.boardId}`, dueDate: card.dueDate,
+    })),
+  ].filter(item => item.dueDate !== null)
+    .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
+    .slice(0, 5);
 
   return (
     <div className="space-y-8 max-w-5xl">
@@ -520,32 +491,36 @@ export default function Home() {
                           <p className="font-medium text-sm truncate">{task.title}</p>
                           <p className="text-xs text-muted-foreground mt-0.5 truncate">{task.listName}</p>
                         </div>
+                        {task.dueDate && <DueDateBadge dueDate={task.dueDate} />}
                       </div>
                     </Link>
                   ))}
                 </SectionShell>
               )}
 
-              {projectsEnabled && (
+              {(tasksEnabled || projectsEnabled) && (
                 <SectionShell
                   icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
                   title="Upcoming Due Dates"
-                  viewAllHref="/projects"
-                  viewAllLabel="All projects"
+                  viewAllHref={projectsEnabled ? "/projects" : "/tasks"}
+                  viewAllLabel={projectsEnabled ? "All projects" : "All tasks"}
+                  action={tasksEnabled && projectsEnabled ? (
+                    <Link href="/tasks"><Button variant="ghost" size="sm" className="text-muted-foreground gap-1">All tasks <ArrowRight className="h-3.5 w-3.5" /></Button></Link>
+                  ) : undefined}
                   loading={dashboardLoading}
-                  empty={!dashboardLoading && upcomingCards.length === 0}
+                  empty={!dashboardLoading && upcomingDueDates.length === 0}
                 >
-                  {upcomingCards.map((card) => (
-                    <Link key={card.id} href={`/projects/${card.projectId}/boards/${card.boardId}`}>
+                  {upcomingDueDates.map((item) => (
+                    <Link key={item.key} href={item.href}>
                       <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer">
-                        <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        {item.kind === "task" ? <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" /> : <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{card.title}</p>
+                          <p className="font-medium text-sm truncate">{item.title}</p>
                           <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                            {card.projectName} · {card.columnName}
+                            {item.subtitle}
                           </p>
                         </div>
-                        {card.dueDate && <DueDateBadge dueDate={card.dueDate} />}
+                        {item.dueDate && <DueDateBadge dueDate={item.dueDate} />}
                       </div>
                     </Link>
                   ))}

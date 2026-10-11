@@ -2,11 +2,13 @@ import { Router } from "express";
 import { db, taskListsTable, tasksTable, siteSettingsTable } from "@workspace/db";
 import { eq, and, asc, inArray, max, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { UpdateTaskBody } from "@workspace/api-zod";
 
 const router = Router();
 
 // Feature flag — admins always bypass; others blocked if tasks_enabled = "false"
 router.use(async (req, res, next) => {
+  if (req.path !== "/tasks" && !req.path.startsWith("/tasks/")) { next(); return; }
   if (!req.session?.userId) { next(); return; }
   if (req.session.userRole === "admin") { next(); return; }
   const [row] = await db.select().from(siteSettingsTable).where(eq(siteSettingsTable.key, "tasks_enabled")).limit(1);
@@ -165,10 +167,9 @@ router.patch("/tasks/lists/:listId/reorder", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// PATCH /api/tasks/:id — toggle completion or rename
+// PATCH /api/tasks/:id — toggle completion, rename, or set/clear a due date
 router.patch("/tasks/:id", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const { completed, title } = req.body as { completed?: boolean; title?: string };
 
   // Verify ownership via the task's list
   const [owned] = await db
@@ -185,6 +186,12 @@ router.patch("/tasks/:id", requireAuth, async (req, res) => {
     return;
   }
 
+  const parsed = UpdateTaskBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Provide a valid title, completion status, or due date (YYYY-MM-DD)." });
+    return;
+  }
+  const { completed, title, dueDate } = parsed.data;
   if (title !== undefined && (typeof title !== "string" || !title.trim())) {
     res.status(400).json({ error: "Title is required" });
     return;
@@ -192,6 +199,14 @@ router.patch("/tasks/:id", requireAuth, async (req, res) => {
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (title !== undefined) updates.title = title.trim();
   if (completed !== undefined) updates.completedAt = completed ? new Date() : null;
+  if (dueDate !== undefined) {
+    const date = dueDate === null ? null : new Date(`${dueDate}T00:00:00.000Z`);
+    if (date && (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== dueDate)) {
+      res.status(400).json({ error: "Due date must be a valid calendar date (YYYY-MM-DD)." });
+      return;
+    }
+    updates.dueDate = date;
+  }
 
   const [task] = await db
     .update(tasksTable)

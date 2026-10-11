@@ -9,4 +9,5 @@ import type { NotificationPreferencesUpdate } from './notificationPreferencesUpd
 
 export type NotificationPreferences = NotificationPreferencesUpdate & {
   emailAvailable: boolean;
+  taskDue: boolean;
 };

@@ -5,6 +5,70 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface Task {
+  id: number;
+  listId: number;
+  title: string;
+  position: number;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  dueDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskUpdate {
+  /** @minLength 1 */
+  title?: string;
+  completed?: boolean;
+  /**
+     * Calendar date in YYYY-MM-DD format, stored at UTC midnight like project-card dates. Null clears the date; omission leaves it unchanged.
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  dueDate?: string | null;
+}
+
+export interface TaskList {
+  id: number;
+  name: string;
+  createdAt: string;
+  tasks: Task[];
+}
+
+export interface TaskListsResponse {
+  lists: TaskList[];
+  truncated: boolean;
+}
+
+export interface DashboardTask {
+  id: number;
+  title: string;
+  listId: number;
+  listName: string;
+  /** @nullable */
+  dueDate: string | null;
+}
+
+export interface DashboardCard {
+  id: number;
+  title: string;
+  /** @nullable */
+  dueDate: string | null;
+  boardId: number;
+  boardName: string;
+  projectId: number;
+  projectName: string;
+  columnName: string;
+}
+
+export interface Dashboard {
+  activeTasks: DashboardTask[];
+  upcomingTasks: DashboardTask[];
+  upcomingCards: DashboardCard[];
+}
+
 export type SmtpSettingsSecurity = typeof SmtpSettingsSecurity[keyof typeof SmtpSettingsSecurity];
 
 
@@ -67,11 +131,14 @@ export interface NotificationPreferencesUpdate {
   cardAssigned: boolean;
   projectAdded: boolean;
   cardDue: boolean;
+  /** Opt in to reminders for personal tasks. Omission preserves the existing preference. */
+  taskDue?: boolean;
   dueSoonHours: NotificationPreferencesUpdateDueSoonHours;
 }
 
 export type NotificationPreferences = NotificationPreferencesUpdate & {
   emailAvailable: boolean;
+  taskDue: boolean;
 };
 
 export type FavoriteInputEntityType = typeof FavoriteInputEntityType[keyof typeof FavoriteInputEntityType];

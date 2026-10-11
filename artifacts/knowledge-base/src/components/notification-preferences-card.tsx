@@ -22,8 +22,8 @@ const HOURS = [
 ] as const;
 
 type Hours = (typeof HOURS)[number]["value"];
-type Prefs = { cardAssigned: boolean; projectAdded: boolean; cardDue: boolean; dueSoonHours: Hours };
-const DEFAULTS: Prefs = { cardAssigned: false, projectAdded: false, cardDue: false, dueSoonHours: 24 };
+type Prefs = { cardAssigned: boolean; projectAdded: boolean; cardDue: boolean; taskDue: boolean; dueSoonHours: Hours };
+const DEFAULTS: Prefs = { cardAssigned: false, projectAdded: false, cardDue: false, taskDue: false, dueSoonHours: 24 };
 
 export function NotificationPreferencesCard() {
   const { user } = useAuth();
@@ -43,6 +43,7 @@ export function NotificationPreferencesCard() {
         cardAssigned: data.cardAssigned,
         projectAdded: data.projectAdded,
         cardDue: data.cardDue,
+        taskDue: data.taskDue,
         dueSoonHours: data.dueSoonHours,
       };
       setForm(p);
@@ -65,6 +66,7 @@ export function NotificationPreferencesCard() {
             cardAssigned: res.cardAssigned,
             projectAdded: res.projectAdded,
             cardDue: res.cardDue,
+            taskDue: res.taskDue,
             dueSoonHours: res.dueSoonHours,
           };
           setForm(p);
@@ -79,10 +81,11 @@ export function NotificationPreferencesCard() {
     );
   };
 
-  const rows: { key: "cardAssigned" | "projectAdded" | "cardDue"; title: string; desc: string }[] = [
+  const rows: { key: "cardAssigned" | "projectAdded" | "cardDue" | "taskDue"; title: string; desc: string }[] = [
     { key: "cardAssigned", title: "Card assigned to me", desc: "Email me when someone assigns me a board card." },
     { key: "projectAdded", title: "Added to a project", desc: "Email me when I am added to a project." },
     { key: "cardDue", title: "Card due soon", desc: "Email me before a card assigned to me is due." },
+    { key: "taskDue", title: "Task due soon", desc: "Email me before one of my personal tasks is due." },
   ];
 
   return (
@@ -137,7 +140,7 @@ export function NotificationPreferencesCard() {
               <select
                 id="pref-due-soon-hours"
                 value={form.dueSoonHours}
-                disabled={!form.cardDue}
+                disabled={!form.cardDue && !form.taskDue}
                 onChange={(e) => set("dueSoonHours", Number(e.target.value) as Hours)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
                 data-testid="select-due-soon-hours"

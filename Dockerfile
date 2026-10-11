@@ -64,6 +64,10 @@ RUN npm install --no-save \
 # Compiled API server bundle + pino worker thread files
 COPY --from=builder /app/artifacts/api-server/dist ./dist
 
+# Preserve the application's license and separate third-party license notices.
+COPY --from=builder /app/LICENSE ./LICENSE
+COPY --from=builder /app/third_party_licenses ./third_party_licenses
+
 # MCP HTTP server and its production-only SDK dependencies. Keep this in a
 # separate package root so its ESM metadata and node_modules stay isolated from
 # the API runtime.

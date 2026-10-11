@@ -734,6 +734,21 @@ node docs/take-screenshots.mjs
 
 ---
 
+## License
+
+Memex's original code is licensed under the [MIT License](LICENSE), copyright
+2026 Kristopher J Large.
+
+Bundled third-party components retain their own licenses and notices. The
+self-hosted draw.io editor uses Apache 2.0, includes libavoid under LGPL 2.1, and
+has separate terms for certain icons and stencil libraries. See
+[third_party_licenses](third_party_licenses/README.md) for the preserved license
+texts, upstream asset terms, and redistribution considerations.
+
+The Docker image includes the MIT license at `/app/LICENSE` and the third-party
+notices at `/app/third_party_licenses`; the editor bundle also retains its
+upstream vendor notices.
+
 ## User preferences
 
 _Populate as you build — explicit user instructions worth remembering across sessions._

@@ -9,6 +9,92 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Get the current user's personal task lists
+ */
+export const GetTaskListsResponse = zod.object({
+  "lists": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "tasks": zod.array(zod.object({
+  "id": zod.number().int(),
+  "listId": zod.number().int(),
+  "title": zod.string(),
+  "position": zod.number().int(),
+  "completedAt": zod.coerce.date().nullable(),
+  "dueDate": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})),
+  "truncated": zod.boolean()
+})
+
+
+/**
+ * @summary Edit a personal task's title, due date, or completion status
+ */
+
+
+
+export const UpdateTaskParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+
+export const updateTaskBodyDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const UpdateTaskBody = zod.object({
+  "title": zod.string().min(1).optional(),
+  "completed": zod.boolean().optional(),
+  "dueDate": zod.string().regex(updateTaskBodyDueDateRegExp).nullish().describe('Calendar date in YYYY-MM-DD format, stored at UTC midnight like project-card dates. Null clears the date; omission leaves it unchanged.')
+})
+
+export const UpdateTaskResponse = zod.object({
+  "id": zod.number().int(),
+  "listId": zod.number().int(),
+  "title": zod.string(),
+  "position": zod.number().int(),
+  "completedAt": zod.coerce.date().nullable(),
+  "dueDate": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Personal active tasks and upcoming task and assigned-card due dates
+ */
+export const GetDashboardResponse = zod.object({
+  "activeTasks": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "listId": zod.number().int(),
+  "listName": zod.string(),
+  "dueDate": zod.coerce.date().nullable()
+})),
+  "upcomingTasks": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "listId": zod.number().int(),
+  "listName": zod.string(),
+  "dueDate": zod.coerce.date().nullable()
+})),
+  "upcomingCards": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "dueDate": zod.coerce.date().nullable(),
+  "boardId": zod.number().int(),
+  "boardName": zod.string(),
+  "projectId": zod.number().int(),
+  "projectName": zod.string(),
+  "columnName": zod.string()
+}))
+})
+
+
+/**
  * @summary Read SMTP configuration without the password
  */
 export const GetNotificationSettingsResponse = zod.object({
@@ -72,9 +158,11 @@ export const GetNotificationPreferencesResponse = zod.object({
   "cardAssigned": zod.boolean(),
   "projectAdded": zod.boolean(),
   "cardDue": zod.boolean(),
+  "taskDue": zod.boolean().describe('Opt in to reminders for personal tasks. Omission preserves the existing preference.'),
   "dueSoonHours": zod.union([zod.literal(1),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(168)])
 }).and(zod.object({
-  "emailAvailable": zod.boolean()
+  "emailAvailable": zod.boolean(),
+  "taskDue": zod.boolean()
 }))
 
 
@@ -85,6 +173,7 @@ export const UpdateNotificationPreferencesBody = zod.object({
   "cardAssigned": zod.boolean(),
   "projectAdded": zod.boolean(),
   "cardDue": zod.boolean(),
+  "taskDue": zod.boolean().optional().describe('Opt in to reminders for personal tasks. Omission preserves the existing preference.'),
   "dueSoonHours": zod.union([zod.literal(1),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(168)])
 })
 
@@ -92,9 +181,11 @@ export const UpdateNotificationPreferencesResponse = zod.object({
   "cardAssigned": zod.boolean(),
   "projectAdded": zod.boolean(),
   "cardDue": zod.boolean(),
+  "taskDue": zod.boolean().describe('Opt in to reminders for personal tasks. Omission preserves the existing preference.'),
   "dueSoonHours": zod.union([zod.literal(1),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(168)])
 }).and(zod.object({
-  "emailAvailable": zod.boolean()
+  "emailAvailable": zod.boolean(),
+  "taskDue": zod.boolean()
 }))
 
 

@@ -23,7 +23,60 @@ tags:
     description: Tag management
   - name: projects
     description: Project workspaces, boards, and documents
+  - name: tasks
+    description: Personal task lists, due dates, and dashboard
 paths:
+  /tasks/lists:
+    get:
+      operationId: getTaskLists
+      tags: [tasks]
+      summary: Get the current user's personal task lists
+      responses:
+        "200":
+          description: Lists with embedded tasks and a truncation indicator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskListsResponse"
+  /tasks/{id}:
+    patch:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Edit a personal task's title, due date, or completion status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskUpdate"
+      responses:
+        "200":
+          description: Updated personal task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: Invalid task update
+        "404":
+          description: Task not found or not owned by this user
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [tasks]
+      summary: Personal active tasks and upcoming task and assigned-card due dates
+      responses:
+        "200":
+          description: Current user's dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
   /admin/notifications:
     get:
       operationId: getNotificationSettings
@@ -1561,6 +1614,79 @@ components:
         type: integer
 
   schemas:
+    Task:
+      type: object
+      required: [id, listId, title, position, completedAt, dueDate, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        listId: { type: integer }
+        title: { type: string }
+        position: { type: integer }
+        completedAt: { type: ["string", "null"], format: date-time }
+        dueDate: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TaskUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 1 }
+        completed: { type: boolean }
+        dueDate:
+          type: ["string", "null"]
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Calendar date in YYYY-MM-DD format, stored at UTC midnight like project-card dates. Null clears the date; omission leaves it unchanged.
+    TaskList:
+      type: object
+      required: [id, name, createdAt, tasks]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+    TaskListsResponse:
+      type: object
+      required: [lists, truncated]
+      properties:
+        lists:
+          type: array
+          items: { $ref: "#/components/schemas/TaskList" }
+        truncated: { type: boolean }
+    DashboardTask:
+      type: object
+      required: [id, title, listId, listName, dueDate]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        listId: { type: integer }
+        listName: { type: string }
+        dueDate: { type: ["string", "null"], format: date-time }
+    DashboardCard:
+      type: object
+      required: [id, title, dueDate, boardId, boardName, projectId, projectName, columnName]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        dueDate: { type: ["string", "null"], format: date-time }
+        boardId: { type: integer }
+        boardName: { type: string }
+        projectId: { type: integer }
+        projectName: { type: string }
+        columnName: { type: string }
+    Dashboard:
+      type: object
+      required: [activeTasks, upcomingTasks, upcomingCards]
+      properties:
+        activeTasks:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardTask" }
+        upcomingTasks:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardTask" }
+        upcomingCards:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardCard" }
     SmtpSettings:
       type: object
       required: [enabled, host, port, security, username, fromEmail, fromName, hasPassword, appUrl]
@@ -1595,14 +1721,16 @@ components:
         cardAssigned: { type: boolean }
         projectAdded: { type: boolean }
         cardDue: { type: boolean }
+        taskDue: { type: boolean, description: Opt in to reminders for personal tasks. Omission preserves the existing preference. }
         dueSoonHours: { type: integer, enum: [1, 24, 48, 72, 168] }
     NotificationPreferences:
       allOf:
         - $ref: "#/components/schemas/NotificationPreferencesUpdate"
         - type: object
-          required: [emailAvailable]
+          required: [emailAvailable, taskDue]
           properties:
             emailAvailable: { type: boolean }
+            taskDue: { type: boolean }
     FavoriteInput:
       type: object
       required: [entityType, entityId, favorite]

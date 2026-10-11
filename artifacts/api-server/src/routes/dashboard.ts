@@ -50,7 +50,9 @@ router.get("/dashboard", requireAuth, async (req, res) => {
     title: string;
     listId: number;
     listName: string;
+    dueDate: Date | null;
   }[] = [];
+  let upcomingTasks: typeof activeTasks = [];
 
   if (tasksEnabled || userRole === "admin") {
     activeTasks = await db
@@ -59,6 +61,7 @@ router.get("/dashboard", requireAuth, async (req, res) => {
         title: tasksTable.title,
         listId: tasksTable.listId,
         listName: taskListsTable.name,
+        dueDate: tasksTable.dueDate,
       })
       .from(tasksTable)
       .innerJoin(
@@ -67,6 +70,22 @@ router.get("/dashboard", requireAuth, async (req, res) => {
       )
       .where(isNull(tasksTable.completedAt))
       .orderBy(asc(tasksTable.position), asc(tasksTable.createdAt))
+      .limit(10);
+
+    // Query due tasks independently: a task beyond the active-task preview
+    // still needs to appear if it has one of the earliest due dates.
+    upcomingTasks = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        listId: tasksTable.listId,
+        listName: taskListsTable.name,
+        dueDate: tasksTable.dueDate,
+      })
+      .from(tasksTable)
+      .innerJoin(taskListsTable, and(eq(tasksTable.listId, taskListsTable.id), eq(taskListsTable.userId, userId)))
+      .where(and(isNull(tasksTable.completedAt), isNotNull(tasksTable.dueDate)))
+      .orderBy(asc(tasksTable.dueDate), asc(tasksTable.id))
       .limit(10);
   }
 
@@ -135,7 +154,7 @@ router.get("/dashboard", requireAuth, async (req, res) => {
     }
   }
 
-  res.json({ activeTasks, upcomingCards });
+  res.json({ activeTasks, upcomingTasks, upcomingCards });
 });
 
 export default router;

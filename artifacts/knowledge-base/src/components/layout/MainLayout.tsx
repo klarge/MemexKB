@@ -52,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSiteSettings, LOGO_URL } from "@/lib/site-settings";
+import { APP_INFO } from "@/lib/app-info";
 
 export function MainLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -368,6 +369,12 @@ export function MainLayout({ children }: { children: ReactNode }) {
                   <LogOut className="h-4 w-4" />
                   Log out
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-2 text-xs text-muted-foreground space-y-1" data-testid="user-menu-app-info">
+                  <p>{APP_INFO.copyright}</p>
+                  <p>{APP_INFO.license}</p>
+                  <p>Version v{APP_INFO.version}</p>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarFooter>

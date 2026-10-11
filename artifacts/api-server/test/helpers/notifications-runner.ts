@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import express from "express";
 import nodemailer from "nodemailer";
-import { db, pool, usersTable, projectsTable, groupsTable, groupMembersTable, boardsTable, boardColumnsTable, boardCardsTable, notificationOutboxTable, siteSettingsTable } from "@workspace/db";
+import { db, pool, usersTable, projectsTable, groupsTable, groupMembersTable, boardsTable, boardColumnsTable, boardCardsTable, tasksTable, notificationOutboxTable, siteSettingsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import notifications from "../../src/routes/notifications";
 import projects from "../../src/routes/projects";
 import groups from "../../src/routes/groups";
+import tasks from "../../src/routes/tasks";
 import { runNotificationTick, scanDueNotifications, deliveryContext } from "../../src/lib/notification-worker";
 import { decryptSmtpPassword, readSmtpSettings, createSmtpTransport, smtpInputSchema } from "../../src/lib/notification-config";
 
@@ -42,7 +43,7 @@ app.use((req, _res, next) => {
   (req as any).session = person ? { userId: person.id, userRole: person.role } : {};
   next();
 });
-app.use("/api", notifications, projects, groups);
+app.use("/api", notifications, projects, groups, tasks);
 const server = app.listen(0, "127.0.0.1");
 await new Promise<void>(resolve => server.once("listening", resolve));
 const address = server.address();
@@ -61,6 +62,7 @@ try {
   const initial = await ok(recipient.id, "GET", "/me/notifications");
   assert.equal(initial.cardAssigned, false);
   assert.equal(initial.cardDue, false);
+  assert.equal(initial.taskDue, false);
   assert.equal(initial.projectAdded, false);
   assert.equal(initial.emailAvailable, false);
   const input = { enabled: true, host: "smtp.example.test", port: 587, security: "starttls", username: "smtp-user", password: "not-a-real-password", fromEmail: "sender@example.test", fromName: "Memex", appUrl: "https://app.example.test" };
@@ -178,6 +180,85 @@ try {
   assert.equal(failedTest.status, 502);
   assert.equal((await failedTest.json()).error, "SMTP authentication failed. Check the username and password.");
   fail = false;
+  // Personal reminders are separately opt-in, use the shared timing, and
+  // never rely on project membership. The SMTP transport remains mocked.
+  const personalList = await ok(recipient.id, "POST", "/tasks/lists", { name: "Personal reminder list" });
+  const personalTask = await ok(recipient.id, "POST", "/tasks", { listId: personalList.id, title: "Personal due task" });
+  const taskPrefs = { cardAssigned: false, projectAdded: false, cardDue: false, dueSoonHours: 24, taskDue: true };
+  const taskJobs = () => db.select().from(notificationOutboxTable).where(eq(notificationOutboxTable.taskId, personalTask.id));
+  const redue = async (hours: number) => {
+    const dueDate = new Date(Date.now() + hours * 3600000);
+    await db.update(tasksTable).set({ dueDate, completedAt: null }).where(eq(tasksTable.id, personalTask.id));
+    await scanDueNotifications();
+    return (await taskJobs()).find(job => job.status === "pending" && job.dueDate?.getTime() === dueDate.getTime())!;
+  };
+  await redue(2);
+  assert.equal((await taskJobs()).length, 0); // opted out by default
+  await ok(recipient.id, "PUT", "/me/notifications", { ...taskPrefs, dueSoonHours: 1 });
+  await scanDueNotifications();
+  assert.equal((await taskJobs()).length, 0); // outside the chosen window
+  await ok(recipient.id, "PUT", "/me/notifications", taskPrefs);
+  await scanDueNotifications();
+  await scanDueNotifications();
+  const [taskJob] = await taskJobs();
+  assert.equal((await taskJobs()).length, 1);
+  assert.equal(taskJob.projectId, null);
+  assert.equal(taskJob.cardId, null);
+  assert.equal(taskJob.kind, "taskDue");
+  assert.equal(await deliveryContext({ ...taskJob, userId: creator.id }), null);
+  const mailCount = sent.length;
+  await runNotificationTick();
+  assert.equal(sent.length, mailCount + 1);
+  assert.equal(sent.at(-1)!.to, recipient.email);
+  assert.equal(sent.at(-1)!.subject, "Task due soon: Personal due task");
+  assert.ok(sent.at(-1)!.text.includes("Personal reminder list"));
+  assert.ok(sent.at(-1)!.text.includes("/tasks"));
+  assert.ok(sent.at(-1)!.text.includes("/settings"));
+  await runNotificationTick();
+  assert.equal(sent.length, mailCount + 1);
+
+  // Old clients that omit the new switch must not reset it.
+  const { taskDue: _taskDue, ...legacyPrefs } = taskPrefs;
+  await ok(recipient.id, "PUT", "/me/notifications", legacyPrefs);
+  assert.equal((await ok(recipient.id, "GET", "/me/notifications")).taskDue, true);
+
+  const staleDateJob = await redue(3);
+  const completedJob = await redue(4);
+  assert.equal(await deliveryContext(staleDateJob), null);
+  await ok(recipient.id, "PATCH", `/tasks/${personalTask.id}`, { completed: true });
+  assert.equal(await deliveryContext(completedJob), null);
+  await runNotificationTick();
+  assert.equal(sent.length, mailCount + 1);
+  const queuedCount = (await taskJobs()).length;
+  await db.update(tasksTable).set({ completedAt: null, dueDate: new Date(Date.now() - 1000) }).where(eq(tasksTable.id, personalTask.id));
+  await scanDueNotifications();
+  assert.equal((await taskJobs()).length, queuedCount); // overdue tasks do not send mail
+
+  const clearedJob = await redue(5);
+  await ok(recipient.id, "PATCH", `/tasks/${personalTask.id}`, { dueDate: null });
+  assert.equal(await deliveryContext(clearedJob), null);
+  await runNotificationTick();
+  assert.equal(sent.length, mailCount + 1);
+
+  const optedOutJob = await redue(6);
+  await ok(recipient.id, "PUT", "/me/notifications", { ...taskPrefs, taskDue: false });
+  assert.equal(await deliveryContext(optedOutJob), null);
+  await runNotificationTick();
+  assert.equal(sent.length, mailCount + 1);
+  await ok(recipient.id, "PUT", "/me/notifications", taskPrefs);
+
+  const disabledJob = await redue(7);
+  await db.insert(siteSettingsTable).values({ key: "tasks_enabled", value: "false" })
+    .onConflictDoUpdate({ target: siteSettingsTable.key, set: { value: "false" } });
+  assert.equal(await deliveryContext(disabledJob), null);
+  await runNotificationTick();
+  assert.equal(sent.length, mailCount + 1);
+  await db.delete(siteSettingsTable).where(eq(siteSettingsTable.key, "tasks_enabled"));
+
+  assert.ok(await redue(8));
+  await ok(recipient.id, "DELETE", `/tasks/lists/${personalList.id}`);
+  assert.equal((await taskJobs()).length, 0); // deletion cascades into the outbox
+
   await ok(admin.id, "PUT", "/admin/notifications", { ...input, enabled: false });
   const countBeforeDisabled = (await db.select().from(notificationOutboxTable)).length;
   await ok(creator.id, "POST", `/cards/${card.id}/members`, { userId: later.id });

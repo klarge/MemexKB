@@ -9,9 +9,10 @@ import { smtpInputSchema, readSmtpSettings, publicSmtpSettings, saveSmtpSettings
 const router = Router();
 export const preferenceInputSchema = z.object({
   cardAssigned: z.boolean(), projectAdded: z.boolean(), cardDue: z.boolean(),
+  taskDue: z.boolean().optional(),
   dueSoonHours: z.number().int().refine(value => [1, 24, 48, 72, 168].includes(value), "Choose a supported reminder time"),
 });
-const defaultPreferences = { cardAssigned: false, projectAdded: false, cardDue: false, dueSoonHours: 24 };
+const defaultPreferences = { cardAssigned: false, projectAdded: false, cardDue: false, taskDue: false, dueSoonHours: 24 };
 const testLimiter = rateLimit({ windowMs: 60000, limit: 3, standardHeaders: true, legacyHeaders: false,
   message: { error: "Please wait before sending another test email." } });
 

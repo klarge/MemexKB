@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { EditTask } from "@/components/edit-task";
 import { useVisibleItems } from "@/hooks/use-visible-items";
 import { LoadMore } from "@/components/load-more";
+import { DueDateBadge } from "@/components/due-date-badge";
+import type { Task, TaskList, TaskListsResponse } from "@workspace/api-client-react";
 import {
   DndContext,
   closestCenter,
@@ -37,23 +39,6 @@ import {
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type Task = {
-  id: number;
-  listId: number;
-  title: string;
-  position: number;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type TaskList = {
-  id: number;
-  name: string;
-  tasks: Task[];
-  createdAt: string;
-};
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -122,13 +107,16 @@ function SortableTaskItem({
         )}
       </button>
 
-      <span
-        className={`min-w-0 flex-1 break-words text-sm leading-snug select-none ${
-          done ? "line-through text-muted-foreground" : ""
-        }`}
-      >
-        {task.title}
-      </span>
+      <div className="min-w-0 flex-1 space-y-1">
+        <span
+          className={`block break-words text-sm leading-snug select-none ${
+            done ? "line-through text-muted-foreground" : ""
+          }`}
+        >
+          {task.title}
+        </span>
+        {task.dueDate && <DueDateBadge dueDate={task.dueDate} completed={done} />}
+      </div>
 
       <EditTask task={task} />
 
@@ -197,6 +185,7 @@ function ListCard({
   onReorderTasks: (listId: number, taskIds: number[]) => void;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameValue, setNameValue] = useState(list.name);
 
@@ -249,7 +238,18 @@ function ListCard({
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/25">
+      <div className={`flex items-center gap-2 px-4 py-3 bg-muted/25 ${collapsed ? "" : "border-b"}`}>
+        <button
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={!collapsed}
+          aria-controls={`task-list-content-${list.id}`}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} task list ${list.name}`}
+          title={collapsed ? "Expand list" : "Collapse list"}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+        </button>
         {editing ? (
           <>
             <input
@@ -300,96 +300,99 @@ function ListCard({
         )}
       </div>
 
-      {/* Active tasks — sortable */}
-      <div className="py-1">
-        {activeTasks.length === 0 && (
-          <p className="px-10 py-2 text-xs text-muted-foreground/60 italic">
-            No tasks yet — add one below.
-          </p>
-        )}
+      {/* Keep the body mounted so collapsing preserves unfinished task text. */}
+      <div id={`task-list-content-${list.id}`} hidden={collapsed}>
+        {/* Active tasks — sortable */}
+        <div className="py-1">
+          {activeTasks.length === 0 && (
+            <p className="px-10 py-2 text-xs text-muted-foreground/60 italic">
+              No tasks yet — add one below.
+            </p>
+          )}
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={activeTasksOrdered.map((t) => t.id)}
-            strategy={verticalListSortingStrategy}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            {activeWindow.items.map((task) => (
-              <SortableTaskItem
-                key={task.id}
-                task={task}
-                onToggle={(id, completed) => {
-                  // Remove from local order when completed
-                  if (completed && localActiveIds) {
-                    setLocalActiveIds(localActiveIds.filter((i) => i !== id));
-                  }
-                  onToggleTask(id, completed);
-                }}
-                onDelete={(id) => {
-                  if (localActiveIds) {
-                    setLocalActiveIds(localActiveIds.filter((i) => i !== id));
-                  }
-                  onDeleteTask(id);
-                }}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-        <LoadMore hasMore={activeWindow.hasMore} onClick={activeWindow.loadMore} />
-
-        <AddTaskRow
-          onAdd={(title) => {
-            setLocalActiveIds(null); // reset local order so new task appears at end
-            onAddTask(list.id, title);
-          }}
-        />
-      </div>
-
-      {/* Completed section */}
-      {completedTasks.length > 0 && (
-        <div className="border-t">
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setShowCompleted((s) => !s)}
-              className="flex items-center gap-1.5 flex-1 px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            <SortableContext
+              items={activeTasksOrdered.map((t) => t.id)}
+              strategy={verticalListSortingStrategy}
             >
-              {showCompleted ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-              {completedTasks.length}{" "}
-              {completedTasks.length === 1 ? "completed task" : "completed tasks"}
-            </button>
-            <button
-              type="button"
-              onClick={() => completedTasks.forEach((t) => onDeleteTask(t.id))}
-              className="px-3 py-2.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
-              aria-label="Delete all completed tasks"
-              title="Delete all completed"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {showCompleted && (
-            <div className="pb-1 bg-muted/10">
-              {completedWindow.items.map((task) => (
+              {activeWindow.items.map((task) => (
                 <SortableTaskItem
                   key={task.id}
                   task={task}
-                  onToggle={onToggleTask}
-                  onDelete={onDeleteTask}
+                  onToggle={(id, completed) => {
+                    // Remove from local order when completed
+                    if (completed && localActiveIds) {
+                      setLocalActiveIds(localActiveIds.filter((i) => i !== id));
+                    }
+                    onToggleTask(id, completed);
+                  }}
+                  onDelete={(id) => {
+                    if (localActiveIds) {
+                      setLocalActiveIds(localActiveIds.filter((i) => i !== id));
+                    }
+                    onDeleteTask(id);
+                  }}
                 />
               ))}
-              <LoadMore hasMore={completedWindow.hasMore} onClick={completedWindow.loadMore} />
-            </div>
-          )}
+            </SortableContext>
+          </DndContext>
+          <LoadMore hasMore={activeWindow.hasMore} onClick={activeWindow.loadMore} />
+
+          <AddTaskRow
+            onAdd={(title) => {
+              setLocalActiveIds(null); // reset local order so new task appears at end
+              onAddTask(list.id, title);
+            }}
+          />
         </div>
-      )}
+
+        {/* Completed section */}
+        {completedTasks.length > 0 && (
+          <div className="border-t">
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowCompleted((s) => !s)}
+                className="flex items-center gap-1.5 flex-1 px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showCompleted ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+                {completedTasks.length}{" "}
+                {completedTasks.length === 1 ? "completed task" : "completed tasks"}
+              </button>
+              <button
+                type="button"
+                onClick={() => completedTasks.forEach((t) => onDeleteTask(t.id))}
+                className="px-3 py-2.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                aria-label="Delete all completed tasks"
+                title="Delete all completed"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {showCompleted && (
+              <div className="pb-1 bg-muted/10">
+                {completedWindow.items.map((task) => (
+                  <SortableTaskItem
+                    key={task.id}
+                    task={task}
+                    onToggle={onToggleTask}
+                    onDelete={onDeleteTask}
+                  />
+                ))}
+                <LoadMore hasMore={completedWindow.hasMore} onClick={completedWindow.loadMore} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -401,7 +404,7 @@ export default function TasksPage() {
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
 
-  const { data: listsData, isLoading } = useQuery<{ lists: TaskList[]; truncated: boolean }>({
+  const { data: listsData, isLoading } = useQuery<TaskListsResponse>({
     queryKey: ["task-lists"],
     queryFn: () => fetch("/api/tasks/lists").then((r) => r.json()),
   });
@@ -409,7 +412,10 @@ export default function TasksPage() {
   const listWindow = useVisibleItems(lists, "task-lists");
   const tasksTruncated = listsData?.truncated ?? false;
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["task-lists"] });
+  const invalidate = () => Promise.all([
+    qc.invalidateQueries({ queryKey: ["task-lists"] }),
+    qc.invalidateQueries({ queryKey: ["dashboard"] }),
+  ]);
 
   const createList = useMutation({
     mutationFn: (name: string) => json("POST", "/api/tasks/lists", { name }),

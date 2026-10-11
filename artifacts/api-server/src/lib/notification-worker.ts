@@ -5,8 +5,9 @@ import { logger } from "./logger";
 import { createHash } from "node:crypto";
 
 type DeliveryContext = {
-  email: string; name: string; projectName: string; projectId: number;
+  email: string; name: string; projectName: string | null; projectId: number | null;
   cardTitle: string | null; boardId: number | null; dueDate: Date | null;
+  taskTitle?: string; listName?: string; taskId?: number;
 };
 type Job = typeof notificationOutboxTable.$inferSelect;
 
@@ -25,10 +26,44 @@ export async function scanDueNotifications() {
       AND c.due_date <= now() + n.due_soon_hours * interval '1 hour'
     ON CONFLICT (dedupe_key) DO NOTHING
   `);
+  await db.execute(sql`
+    INSERT INTO notification_outbox (dedupe_key, user_id, task_id, kind, due_date)
+    SELECT 'task-due:' || t.id || ':' || l.user_id || ':' || extract(epoch FROM t.due_date),
+      l.user_id, t.id, 'taskDue', t.due_date
+    FROM tasks t
+    JOIN task_lists l ON l.id = t.list_id
+    JOIN users u ON u.id = l.user_id
+    JOIN notification_preferences n ON n.user_id = l.user_id AND n.task_due = true
+    WHERE t.completed_at IS NULL AND t.due_date > now()
+      AND t.due_date <= now() + n.due_soon_hours * interval '1 hour'
+      AND (u.role = 'admin' OR NOT EXISTS (
+        SELECT 1 FROM site_settings WHERE key = 'tasks_enabled' AND value = 'false'
+      ))
+    ON CONFLICT (dedupe_key) DO NOTHING
+  `);
 }
 
 export async function deliveryContext(job: Job): Promise<DeliveryContext | null> {
-  // Re-check preferences, project permissions and assignment at delivery time.
+  // Re-check preferences and access at delivery time, not just queue time.
+  if (job.kind === "taskDue") {
+    const result = await db.execute<DeliveryContext>(sql`
+      SELECT u.email, u.name, NULL AS "projectName", NULL AS "projectId",
+        NULL AS "cardTitle", NULL AS "boardId", t.due_date AS "dueDate",
+        t.title AS "taskTitle", l.name AS "listName", t.id AS "taskId"
+      FROM tasks t
+      JOIN task_lists l ON l.id = t.list_id AND l.user_id = ${job.userId}
+      JOIN users u ON u.id = l.user_id
+      JOIN notification_preferences n ON n.user_id = u.id AND n.task_due = true
+      WHERE t.id = ${job.taskId} AND t.completed_at IS NULL
+        AND t.due_date = ${job.dueDate} AND t.due_date > now()
+        AND t.due_date <= now() + n.due_soon_hours * interval '1 hour'
+        AND (u.role = 'admin' OR NOT EXISTS (
+          SELECT 1 FROM site_settings WHERE key = 'tasks_enabled' AND value = 'false'
+        ))
+      LIMIT 1
+    `);
+    return result.rows[0] ?? null;
+  }
   const preference = job.kind === "cardAssigned" ? "card_assigned" : job.kind === "projectAdded" ? "project_added" : "card_due";
   if (!["cardAssigned", "projectAdded", "cardDue"].includes(job.kind)) return null;
   const result = await db.execute<DeliveryContext>(sql`
@@ -62,6 +97,12 @@ export async function deliveryContext(job: Job): Promise<DeliveryContext | null>
 }
 
 export function notificationMessage(job: Job, context: DeliveryContext, appUrl: string) {
+  if (job.kind === "taskDue") {
+    return {
+      subject: `Task due soon: ${context.taskTitle}`,
+      text: `Hi ${context.name},\n\nYour task "${context.taskTitle}" in "${context.listName}" is due on ${new Date(context.dueDate!).toISOString().slice(0, 10)}.\n\nOpen your tasks:\n${appUrl}/tasks\n\nManage your notification preferences:\n${appUrl}/settings`,
+    };
+  }
   const project = `PROJ-${context.projectId}: ${context.projectName}`;
   const link = `${appUrl}/projects/${context.projectId}${context.boardId && job.kind !== "projectAdded" ? `/boards/${context.boardId}` : ""}`;
   const event = job.kind === "projectAdded" ? `You've been added to project ${project}.`
@@ -89,7 +130,7 @@ export async function runNotificationTick() {
     await scanDueNotifications();
     const result = await db.execute<Job>(sql`
       SELECT id, dedupe_key AS "dedupeKey", user_id AS "userId", project_id AS "projectId",
-        card_id AS "cardId", kind, due_date AS "dueDate", status, attempts,
+        card_id AS "cardId", task_id AS "taskId", kind, due_date AS "dueDate", status, attempts,
         available_at AS "availableAt", created_at AS "createdAt", sent_at AS "sentAt", last_error AS "lastError"
       FROM notification_outbox WHERE status = 'pending' AND available_at <= now()
       ORDER BY id LIMIT 20
