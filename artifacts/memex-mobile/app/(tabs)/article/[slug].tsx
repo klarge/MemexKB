@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { OfflineReader } from '@/components/OfflineReader';
 import { saveLabel, saveState } from '@/components/offlineStatus';
 import { confirmLocalRemoval } from '@/components/confirmLocalRemoval';
+import { contentKindLabel } from '@/offline/content';
 
 export default function ArticleDetail() {
   const { slug, fragment } = useLocalSearchParams<{ slug: string; fragment?: string }>();
@@ -83,7 +84,7 @@ export default function ArticleDetail() {
   };
   const remove = () => {
     if (!slug) return;
-    confirmLocalRemoval('Remove download', 'Delete the saved copy and images of this article from this device?',
+    confirmLocalRemoval('Remove download', 'Delete the saved copy and images of this document from this device?',
       async () => {
         setBusy(true);
         try { await removeDownload(slug); } finally { setBusy(false); }
@@ -136,7 +137,7 @@ export default function ArticleDetail() {
           <Text style={s.title}>{summary.title}</Text>
           <View style={s.metaRow}>
             <Text style={s.metaText}>
-              Updated {format(new Date(summary.updatedAt), 'MMM d, yyyy')}
+              <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold' }}>{contentKindLabel(summary)}</Text> · Updated {format(new Date(summary.updatedAt), 'MMM d, yyyy')}
               {summary.updatedByName ? ` · ${summary.updatedByName}` : ''}
             </Text>
           </View>
@@ -163,7 +164,7 @@ export default function ArticleDetail() {
             {(state !== 'saved') && (
               <Pressable style={[s.actionBtn, { backgroundColor: colors.primary }, (!isOnline || busy) && { opacity: 0.5 }]}
                 onPress={download} disabled={!isOnline || busy} accessibilityRole="button"
-                accessibilityLabel={state === 'none' ? 'Download article' : 'Retry download'} testID="reader-download">
+                accessibilityLabel={state === 'none' ? 'Download document' : 'Retry download'} testID="reader-download">
                 <Feather name="download" size={14} color="#fff" />
                 <Text style={s.actionTextLight}>{busy ? 'Working…' : state === 'none' ? 'Download' : state === 'stale' ? 'Update' : 'Retry'}</Text>
               </Pressable>

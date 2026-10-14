@@ -1,4 +1,4 @@
-import { assetsIn, canonicalServer, textFromHtml } from './content';
+import { assetsIn, canonicalServer, documentHtml, documentSearchText } from './content';
 import type { CacheScope, CachedArticle, LibraryState, OfflineStore } from './types';
 
 export class SessionExpired extends Error {}
@@ -12,6 +12,7 @@ export class OfflineLibrary {
   state = empty();
   private generation = 0;
   private authority = 0;
+  private mutations = 0;
   private revisions = new Map<string, number>();
   private scope: CacheScope | null = null;
   constructor(
@@ -57,6 +58,10 @@ export class OfflineLibrary {
     if (!scope || this.state.busy) return;
     const generation = this.generation;
     const valid = () => this.current(generation);
+    // A listing is not permission to restore an older snapshot after a detail
+    // request revokes access or a user removes a download during storage awaits.
+    const mutation = this.mutations;
+    const catalogValid = () => valid() && this.mutations === mutation;
     this.emit({ busy: true, error: null, progress: { current: 0, total: 0, phase: 'summaries' } });
     try {
       const summaries: CachedArticle[] = [];
@@ -65,10 +70,10 @@ export class OfflineLibrary {
       // Stable ID ordering reduces movement between pages. If the collection
       // changes size mid-fetch, abort without pruning any previous downloads.
       while (true) {
-        const res = await this.response(scope, `/articles?kind=knowledge&limit=100&offset=${offset}&sort=created_at&order=asc`, generation);
+        const res = await this.response(scope, `/articles?kind=all&limit=100&offset=${offset}&sort=created_at&order=asc`, generation);
         if (!res.ok) throw new Error(`Article list refresh failed (${res.status}). Saved downloads were kept.`);
         const data = await res.json() as { articles: CachedArticle[]; total: number };
-        if (!valid()) throw new Cancelled();
+        if (!catalogValid()) throw new Cancelled();
         if (!Array.isArray(data.articles) || !Number.isSafeInteger(data.total) || data.total < 0 ||
           (expectedTotal !== undefined && data.total !== expectedTotal)) throw new Error('The article list changed during refresh. Try again; saved downloads were kept.');
         expectedTotal = data.total;
@@ -83,13 +88,13 @@ export class OfflineLibrary {
         if (offset >= data.total) break;
         if (!data.articles.length) throw new Error('Incomplete article listing. Saved downloads were kept.');
       }
-      if (summaries.length !== expectedTotal || !valid()) throw new Cancelled();
+      if (summaries.length !== expectedTotal || !catalogValid()) throw new Cancelled();
       // Only a complete successful listing may prune deleted/revoked records.
       this.authority++;
       const authorizedIds = new Set(summaries.map(a => a.id));
       for (const article of this.state.articles.filter(a => !authorizedIds.has(a.id))) {
-        await this.store.remove(scope, article, valid);
-        if (!valid()) throw new Cancelled();
+        await this.store.remove(scope, article, catalogValid);
+        if (!catalogValid()) throw new Cancelled();
         this.emit({ articles: this.state.articles.filter(a => a.id !== article.id) });
       }
       const previous = new Map(this.state.articles.map(a => [a.id, a]));
@@ -98,6 +103,9 @@ export class OfflineLibrary {
         const old = previous.get(summary.id);
         const merged: CachedArticle = {
           ...summary, content: old?.content ?? '', searchText: old?.searchText ?? summary.title.toLowerCase(),
+          kind: old?.contentCached ? old.kind ?? 'knowledge' : summary.kind ?? 'knowledge',
+          procedureSteps: old?.contentCached ? old.procedureSteps : undefined,
+          policySubjectId: old?.contentCached ? old.policySubjectId : summary.policySubjectId,
           contentCached: old?.contentCached ?? false,
           downloadedAt: old?.downloadedAt, downloadComplete: old?.downloadComplete,
           downloadError: old?.downloadError, assetFiles: old?.assetFiles,
@@ -106,10 +114,11 @@ export class OfflineLibrary {
           updatedAt: old?.contentCached ? old.updatedAt : summary.updatedAt,
           remoteUpdatedAt: summary.updatedAt,
         };
-        await this.store.save(scope, merged, valid);
-        if (!valid()) throw new Cancelled();
+        await this.store.save(scope, merged, catalogValid);
+        if (!catalogValid()) throw new Cancelled();
         catalog.push(merged);
       }
+      if (!catalogValid()) throw new Cancelled();
       this.emit({ articles: catalog });
       const targets = catalog.filter(a => downloadAll || a.contentCached);
       const targetRevisions = new Map(targets.map(a => [a.slug, this.revisions.get(a.slug) ?? 0]));
@@ -144,6 +153,7 @@ export class OfflineLibrary {
   async download(slug: string): Promise<CachedArticle | null> {
     const scope = this.scope;
     if (!scope) return null;
+    this.mutations++;
     const generation = this.generation, authority = this.authority;
     const revision = (this.revisions.get(slug) ?? 0) + 1;
     this.revisions.set(slug, revision);
@@ -155,8 +165,10 @@ export class OfflineLibrary {
       const res = await this.response(scope, `/articles/${encodeURIComponent(slug)}`, generation);
       if (!valid()) throw new Cancelled();
       if (res.status === 403 || res.status === 404) {
+        this.mutations++;
         this.revisions.set(slug, revision + 1);
         if (previous) await this.store.remove(scope, previous, () => this.current(generation));
+        this.mutations++;
         if (this.current(generation)) this.emit({ articles: this.state.articles.filter(a => a.slug !== slug) });
         return null;
       }
@@ -166,9 +178,14 @@ export class OfflineLibrary {
       if (body.canAccess !== true || body.slug !== slug || !Number.isSafeInteger(body.id) || typeof body.content !== 'string') {
         throw new Error('Invalid article response.');
       }
-      const assets = assetsIn(body.content, scope.server);
+      if ((body.kind !== undefined && !['knowledge', 'policy', 'procedure'].includes(body.kind)) ||
+        (body.kind === 'procedure' && (!Array.isArray(body.procedureSteps) ||
+          body.procedureSteps.some(step => !step || typeof step.title !== 'string' || typeof step.description !== 'string')))) {
+        throw new Error('Invalid document type or procedure steps.');
+      }
+      const assets = assetsIn(documentHtml(body), scope.server);
       const files: Record<string, string> = {};
-      candidate = { ...body, searchText: `${body.title} ${textFromHtml(body.content)}`.toLowerCase(),
+      candidate = { ...body, searchText: documentSearchText(body),
         contentCached: true, downloadedAt: new Date().toISOString(), remoteUpdatedAt: body.updatedAt,
         downloadComplete: false, assetFiles: files, externalAssetCount: assets.external };
       for (const path of assets.paths) {
@@ -192,8 +209,10 @@ export class OfflineLibrary {
           const confirmation = await this.response(scope, `/articles/${encodeURIComponent(slug)}`, generation);
           if (!valid()) throw new Cancelled();
           if (confirmation.status === 403 || confirmation.status === 404) {
+            this.mutations++;
             this.revisions.set(slug, revision + 1);
             await this.store.remove(scope, cleaned, () => this.current(generation));
+            this.mutations++;
             if (this.current(generation)) this.emit({ articles: this.state.articles.filter(a => a.slug !== slug), error: 'Article access changed. Its downloaded copy was removed.' });
             throw new Cancelled();
           }
@@ -222,7 +241,7 @@ export class OfflineLibrary {
       }
       if (unavailable.size) throw new Error('A referenced image is missing or unavailable. Article text was retained.');
       const article: CachedArticle = {
-        ...body, searchText: `${body.title} ${textFromHtml(body.content)}`.toLowerCase(),
+        ...body, searchText: documentSearchText(body),
         contentCached: true, downloadedAt: new Date().toISOString(), remoteUpdatedAt: body.updatedAt,
         downloadComplete: true, downloadError: undefined, assetFiles: files, externalAssetCount: assets.external,
       };
@@ -247,12 +266,15 @@ export class OfflineLibrary {
     const scope = this.scope;
     const previous = this.state.articles.find(a => a.slug === slug);
     if (!scope || !previous) return;
+    this.mutations++;
     const generation = this.generation;
     this.revisions.set(slug, (this.revisions.get(slug) ?? 0) + 1);
     const valid = () => this.current(generation);
     await this.store.remove(scope, previous, valid);
+    this.mutations++;
     if (!valid()) return;
     const removed: CachedArticle = { ...previous, content: '', searchText: previous.title.toLowerCase(), contentCached: false,
+      procedureSteps: undefined,
       downloadedAt: undefined, downloadComplete: false, downloadError: undefined, assetFiles: {},
     };
     // Removal has already happened even if persisting the remaining title-only

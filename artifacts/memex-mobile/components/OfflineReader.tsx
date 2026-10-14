@@ -4,7 +4,7 @@ import RenderHtml, { HTMLElementModel, HTMLContentModel } from 'react-native-ren
 import { parseDocument } from 'htmlparser2';
 import serialize from 'dom-serializer';
 import { Element, type AnyNode } from 'domhandler';
-import { readerHtml, articleLink } from '@/offline/content';
+import { readerHtml, articleLink, canonicalServer } from '@/offline/content';
 import { useColors } from '@/hooks/useColors';
 import type { CachedArticle } from '@/context/AppContext';
 
@@ -31,7 +31,7 @@ function findIds(nodes: AnyNode[], index: number, map: Record<string, number>) {
   }
 }
 
-function makeTable(colors: Colors, tagsStyles: Record<string, any>, renderersProps: Record<string, any>) {
+function makeTable(colors: Colors, tagsStyles: Record<string, any>, renderersProps: Record<string, any>, baseUrl: string) {
   return function NativeTable(props: any) {
     const dom = props.tnode?.domNode as Element | undefined;
     if (!dom) return null;
@@ -52,7 +52,7 @@ function makeTable(colors: Colors, tagsStyles: Record<string, any>, renderersPro
                 <View key={j} style={{ width: cellWidth, padding: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
                   backgroundColor: cell.name === 'th' ? colors.muted : 'transparent' }}>
                   <RenderHtml contentWidth={cellWidth - 12} tagsStyles={tagsStyles} renderersProps={renderersProps}
-                    source={{ html: `<div>${serialize(cell.children)}</div>` }} />
+                    source={{ html: `<div>${serialize(cell.children)}</div>`, baseUrl }} />
                 </View>
               ))}
             </View>
@@ -73,6 +73,7 @@ export function OfflineReader({ article, server, onArticle, onFragmentMissing, s
 }) {
   const colors = useColors();
   const { width } = useWindowDimensions();
+  const baseUrl = `${canonicalServer(server)}/knowledge/${encodeURIComponent(article.slug)}`;
   const ys = useRef<Record<number, number>>({});
   const baseY = useRef(0);
 
@@ -135,13 +136,13 @@ export function OfflineReader({ article, server, onArticle, onFragmentMissing, s
     }
     onFragmentMissing('External links are not opened in this reader.');
   }, [article.slug, server, jump, onArticle, onFragmentMissing]);
-  const renderers = useMemo(() => ({ table: makeTable(colors, tagsStyles, { a: { onPress: onLinkPress } }) }), [colors, tagsStyles, onLinkPress]);
+  const renderers = useMemo(() => ({ table: makeTable(colors, tagsStyles, { a: { onPress: onLinkPress } }, baseUrl) }), [colors, tagsStyles, onLinkPress, baseUrl]);
 
   return (
     <View onLayout={e => { baseY.current = e.nativeEvent.layout.y; }} testID="reader-content">
       {blocks.map((html, i) => (
         <View key={i} onLayout={e => onLayoutBlock(i, e.nativeEvent.layout.y)}>
-          <RenderHtml contentWidth={width - 32} source={{ html }} tagsStyles={tagsStyles} customHTMLElementModels={models}
+          <RenderHtml contentWidth={width - 32} source={{ html, baseUrl }} tagsStyles={tagsStyles} customHTMLElementModels={models}
             renderers={renderers} renderersProps={{ a: { onPress: onLinkPress } }}
             defaultTextProps={{ selectable: true }} enableExperimentalMarginCollapsing />
         </View>

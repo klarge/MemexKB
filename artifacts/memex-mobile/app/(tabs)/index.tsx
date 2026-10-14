@@ -20,6 +20,14 @@ import { format } from 'date-fns';
 import { BottomTabBar } from '@/components/BottomTabBar';
 import { saveLabel, saveState } from '@/components/offlineStatus';
 import { confirmLocalRemoval } from '@/components/confirmLocalRemoval';
+import { contentKind, contentKindLabel } from '@/offline/content';
+
+type KindFilter = 'all' | 'knowledge' | 'policy' | 'procedure';
+const KIND_FILTERS: { key: KindFilter; label: string }[] = [
+  { key: 'all', label: 'All content' }, { key: 'knowledge', label: 'Knowledge' },
+  { key: 'policy', label: 'Policies' }, { key: 'procedure', label: 'Procedures' },
+];
+const KIND_ICON = { knowledge: 'file-text', policy: 'shield', procedure: 'list' } as const;
 
 // ─── Article card ─────────────────────────────────────────────────────────────
 
@@ -32,15 +40,16 @@ function ArticleCard({ article, onPress, onDownload, onRemove, canDownload, busy
   return (
     <View style={s.cardWrap}>
     <Pressable style={({ pressed }) => [s.card, pressed && { opacity: 0.75 }]} onPress={onPress}
-      accessibilityRole="button" accessibilityLabel={`${article.title}. ${saveLabel(article)}`} testID={`article-${article.slug}`}>
+      accessibilityRole="button" accessibilityLabel={`${contentKindLabel(article)}: ${article.title}. ${saveLabel(article)}`} testID={`article-${article.slug}`}>
       <View style={s.iconBox}>
         {article.isRestricted
           ? <Feather name="lock" size={16} color={colors.primary} />
-          : <Feather name="file-text" size={16} color={colors.primary} />}
+          : <Feather name={KIND_ICON[contentKind(article)]} size={16} color={colors.primary} />}
       </View>
       <View style={s.content}>
         <Text style={s.title} numberOfLines={2}>{article.title}</Text>
         <View style={s.meta}>
+          <Text style={[s.metaText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>{contentKindLabel(article)} · </Text>
           <Text style={s.metaText}>
             {format(new Date(article.updatedAt), 'MMM d, yyyy')}
           </Text>
@@ -113,7 +122,7 @@ const cardStyles = (c: ReturnType<typeof useColors>) =>
       color: c.foreground,
       lineHeight: 20,
     },
-    meta: { flexDirection: 'row' },
+    meta: { flexDirection: 'row', flexWrap: 'wrap' },
     metaText: { fontSize: 12, color: c.mutedForeground, fontFamily: 'Inter_400Regular' },
     tagScroll: { marginTop: 4 },
     tag: {
@@ -137,6 +146,7 @@ export default function ArticleList() {
     syncArticles, lastSyncedAt, downloadAllArticles, downloadArticle, removeDownload, clearDownloads, downloadError, isHydrating,
   } = useApp();
   const [filter, setFilter] = useState<'all' | 'downloaded'>('all');
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -158,6 +168,7 @@ export default function ArticleList() {
   const filtered = useMemo(() => {
     let list = [...cachedArticles];
     if (filter === 'downloaded') list = list.filter((a) => a.contentCached);
+    if (kindFilter !== 'all') list = list.filter((a) => contentKind(a) === kindFilter);
     if (selectedTagId !== null) {
       list = list.filter((a) => a.tags.some((t) => t.id === selectedTagId));
     }
@@ -166,7 +177,7 @@ export default function ArticleList() {
       list = list.filter((a) => a.searchText.includes(q) || a.title.toLowerCase().includes(q));
     }
     return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [cachedArticles, search, selectedTagId, filter]);
+  }, [cachedArticles, search, selectedTagId, filter, kindFilter]);
 
   const downloadedCount = cachedArticles.filter((a) => a.contentCached).length;
   const partialCount = cachedArticles.filter((a) => ['partial', 'stale'].includes(saveState(a))).length;
@@ -177,7 +188,7 @@ export default function ArticleList() {
   };
   const confirmRemove = (a: CachedArticle) => confirmLocalRemoval('Remove download', `Delete the saved copy of "${a.title}" from this device?`,
     () => removeDownload(a.slug), setActionError);
-  const confirmClear = () => confirmLocalRemoval('Clear all downloads', 'Delete every saved article and image on this device? The article list stays; you can download again while online.',
+  const confirmClear = () => confirmLocalRemoval('Clear all downloads', 'Delete every saved document and image on this device? The article list stays; you can download again while online.',
     clearDownloads, setActionError);
 
   const handleLogout = async () => {
@@ -248,7 +259,7 @@ export default function ArticleList() {
 
         <Text style={s.lastSync} testID="download-summary">
           {downloadedCount} of {cachedArticles.length} saved offline{partialCount ? ` · ${partialCount} partial or out of date` : ''}
-          {!isOnline ? ' · Offline: only saved articles open. Offline access lasts up to 7 days after sign-in and ends on sign-out or server change; revoked access is only detected when you reconnect.' : ''}
+          {!isOnline ? ' · Offline: only saved documents open. Offline access lasts up to 7 days after sign-in and ends on sign-out or server change; revoked access is only detected when you reconnect.' : ''}
         </Text>
         <Text style={s.lastSync}>External sites, external images and interactive editors are unavailable in the reader.</Text>
         {(downloadError || actionError) ? (
@@ -271,23 +282,33 @@ export default function ArticleList() {
         <View style={s.actionRow}>
           {(['all', 'downloaded'] as const).map((f) => (
             <Pressable key={f} style={[s.pill, filter === f && s.pillPrimary]} onPress={() => setFilter(f)}
-              accessibilityRole="button" accessibilityState={{ selected: filter === f }} accessibilityLabel={f === 'all' ? 'Show all articles' : 'Show downloaded articles'}
+              accessibilityRole="button" accessibilityState={{ selected: filter === f }} accessibilityLabel={f === 'all' ? 'Show all documents' : 'Show downloaded documents'}
               testID={`filter-${f}`}>
               <Text style={[s.pillText, filter === f && { color: '#fff' }]}>{f === 'all' ? 'All' : 'Downloaded'}</Text>
             </Pressable>
           ))}
         </View>
 
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tagFilterRow}>
+          {KIND_FILTERS.map(({ key, label }) => (
+            <Pressable key={key} style={[s.pill, kindFilter === key && s.pillPrimary]} onPress={() => setKindFilter(key)}
+              accessibilityRole="button" accessibilityState={{ selected: kindFilter === key }}
+              accessibilityLabel={`Show ${label.toLowerCase()}`} testID={`kind-${key}`}>
+              <Text style={[s.pillText, kindFilter === key && { color: '#fff' }]}>{label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
         {/* Search */}
         <View style={s.searchRow}>
           <Feather name="search" size={15} color={colors.mutedForeground} style={s.searchIcon} />
           <TextInput
             testID="article-search"
-            accessibilityLabel="Search saved articles"
+            accessibilityLabel="Search saved documents"
             style={s.searchInput}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search articles…"
+            placeholder="Search documents…"
             placeholderTextColor={colors.mutedForeground}
             returnKeyType="search"
             clearButtonMode="while-editing"
@@ -329,19 +350,19 @@ export default function ArticleList() {
 
       {/* Article list / empty states */}
       {isHydrating ? (
-        <View style={s.empty}><ActivityIndicator color={colors.primary} /><Text style={s.emptySub}>Loading saved articles…</Text></View>
+        <View style={s.empty}><ActivityIndicator color={colors.primary} /><Text style={s.emptySub}>Loading saved documents…</Text></View>
       ) : cachedArticles.length === 0 && !isSyncing ? (
         <View style={s.empty}>
           <Feather name="book-open" size={40} color={colors.mutedForeground} />
-          <Text style={s.emptyTitle}>No articles</Text>
+          <Text style={s.emptyTitle}>No documents</Text>
           <Text style={s.emptySub}>
             {isOnline
-              ? 'Sync your Memex instance to list articles.'
-              : 'Connect to your Memex server to sync articles.'}
+              ? 'Sync your Memex instance to list documents.'
+              : 'Connect to your Memex server to sync documents.'}
           </Text>
           {isOnline && (
             <Pressable style={s.emptyBtn} onPress={() => { void syncArticles(); }} accessibilityRole="button" testID="empty-sync-button">
-              <Text style={s.emptyBtnText}>Sync articles</Text>
+              <Text style={s.emptyBtnText}>Sync documents</Text>
             </Pressable>
           )}
         </View>
@@ -350,10 +371,10 @@ export default function ArticleList() {
           <Feather name="search" size={36} color={colors.mutedForeground} />
           <Text style={s.emptyTitle}>No results</Text>
           <Text style={s.emptySub}>
-            {filter === 'downloaded' ? 'No downloaded articles match. Download articles to read them offline.' : 'Try a different search or tag.'}
+            {filter === 'downloaded' ? 'No downloaded documents match. Download documents to read them offline.' : 'Try a different search, tag or content type.'}
           </Text>
           <Pressable style={s.emptyBtn} testID="empty-reset-button" accessibilityRole="button"
-            onPress={() => { setSearch(''); setSelectedTagId(null); setFilter('all'); }}>
+            onPress={() => { setSearch(''); setSelectedTagId(null); setFilter('all'); setKindFilter('all'); }}>
             <Text style={s.emptyBtnText}>Reset filters</Text>
           </Pressable>
           {filter === 'downloaded' && isOnline && (

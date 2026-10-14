@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OfflineLibrary, Cancelled } from '../offline/library';
-import { scopeKey, assetsIn, readerHtml, articleLink, canonicalServer, textFromHtml } from '../offline/content';
+import { scopeKey, assetsIn, readerHtml, articleLink, canonicalServer, textFromHtml, contentKind, documentHtml } from '../offline/content';
 import type { CacheScope, CachedArticle, OfflineStore } from '../offline/types';
 
 const scope: CacheScope = { server: 'https://memex.test', userId: 1, cookie: 'fixture-cookie' };
@@ -285,4 +285,107 @@ test('native reader handles infoboxes, wikilinks, citations, media placeholders 
   assert.deepEqual(assetsIn('<img src="/api/articles/images/1">', `${scope.server}/memex`).paths, ['/api/articles/images/1']);
   assert.equal(canonicalServer('HTTPS://MEMEX.TEST///'), scope.server);
   assert.throws(() => canonicalServer('https://name:password@memex.test'));
+});
+
+test('all content types persist offline with ordered searchable procedure steps and step images', async () => {
+  const docs: CachedArticle[] = [
+    { ...article('guide'), kind: 'knowledge' },
+    { ...article('policy', '<p>POLICY_OFFLINE_BODY</p>'), id: 2, kind: 'policy', policySubjectId: 7 },
+    { ...article('procedure', '<p>Preparation</p>'), id: 3, kind: 'procedure', procedureSteps: [
+      { title: 'Inspect <equipment>', description: '<p>STEP_ONLY_SEARCH_TOKEN</p><img src="/api/articles/images/9"><a href="/policies/policy">Policy</a>' },
+      { title: 'Report findings', description: '<p>Second step</p>' },
+    ] },
+  ];
+  const calls: string[] = [];
+  const { library, store } = await harness(async path => {
+    calls.push(path);
+    if (path.startsWith('/articles?')) {
+      assert.equal(new URL(path, scope.server).searchParams.get('kind'), 'all');
+      return json({ articles: docs.map(({ content, procedureSteps, ...summary }) => summary), total: docs.length });
+    }
+    if (path === '/articles/images/9') return new Response(png, { headers: { 'content-type': 'image/png' } });
+    return json(docs.find(a => path === `/articles/${a.slug}`));
+  });
+  await library.refresh(true);
+  assert.equal(library.state.error, null);
+  assert.equal(library.state.articles.filter(a => a.downloadComplete).length, 3);
+  assert.ok(calls.includes('/articles/images/9'));
+  const restarted = new OfflineLibrary(store, async () => { throw new Error('offline'); }, () => {}, () => {});
+  await restarted.activate(scope);
+  assert.match(restarted.cached('policy')!.content, /POLICY_OFFLINE_BODY/);
+  assert.equal(restarted.cached('policy')!.policySubjectId, 7);
+  const saved = restarted.cached('procedure')!;
+  assert.match(saved.searchText, /step_only_search_token/);
+  assert.deepEqual(saved.procedureSteps, docs[2].procedureSteps);
+  const html = readerHtml(saved, scope.server);
+  assert.match(html, /1\. Inspect &lt;equipment&gt;/);
+  assert.ok(html.indexOf('1. Inspect') < html.indexOf('2. Report'));
+  assert.match(html, /file:\/\/\/private\/3\/9/);
+  assert.match(html, /href="https:\/\/memex.test\/policies\/policy"/);
+  await restarted.removeDownload('procedure');
+  assert.equal(restarted.cached('procedure'), null);
+  assert.equal(restarted.state.articles.find(a => a.slug === 'procedure')!.procedureSteps, undefined);
+  assert.doesNotMatch(JSON.stringify(await store.load(scope)), /STEP_ONLY_SEARCH_TOKEN/);
+});
+
+test('policy and procedure links stay native, scoped to the trusted server and base path', () => {
+  for (const kind of ['policies', 'procedures']) {
+    for (const server of [scope.server, `${scope.server}/memex`]) {
+      assert.deepEqual(articleLink(`/${kind}/guide#procedure-step-2`, server), { slug: 'guide', fragment: 'procedure-step-2' });
+      assert.deepEqual(articleLink(`${server}/${kind}/guide`, server), { slug: 'guide', fragment: '' });
+    }
+    assert.equal(articleLink(`https://evil.test/${kind}/guide`, scope.server), null);
+    assert.equal(articleLink(`/${kind}/guide/edit`, scope.server), null);
+    assert.match(readerHtml(article('guide', `<p><a href="/${kind}/guide">Read</a></p>`), `${scope.server}/memex`),
+      new RegExp(`href="https://memex.test/memex/${kind}/guide"`));
+  }
+  assert.equal(contentKind(article()), 'knowledge');
+  assert.equal(documentHtml(article()), article().content);
+});
+
+test('failed procedure updates retain the downloaded step version, not new summary metadata', async () => {
+  const saved: CachedArticle = { ...article(), kind: 'procedure', procedureSteps: [{ title: 'Old step', description: '<p>Saved instructions</p>' }] };
+  const { library } = await harness(async path => path.startsWith('/articles?')
+    ? json({ articles: [{ ...saved, updatedAt: '2026-02-01T00:00:00Z', procedureSteps: [{ title: 'Unsaved new step', description: '' }] }], total: 1 })
+    : json({}, 503), [saved]);
+  await library.refresh();
+  assert.deepEqual(library.cached('guide')!.procedureSteps, saved.procedureSteps);
+  assert.equal(library.cached('guide')!.updatedAt, saved.updatedAt);
+  assert.match(library.state.error!, /incomplete/);
+});
+
+test('malformed procedure steps fail explicitly without replacing a readable saved version', async () => {
+  const { library } = await harness(async () => json({ ...article(), kind: 'procedure', procedureSteps: [{ title: 'Invalid', description: 42 }] }), [article()]);
+  await assert.rejects(library.download('guide'), /Invalid document/);
+  assert.equal(library.cached('guide')!.content, article().content);
+  assert.equal(library.cached('guide')!.downloadComplete, false);
+});
+
+test('a concurrent catalog save cannot restore a definitively revoked document, including after reload', async () => {
+  for (const persistBeforePause of [false, true]) {
+    const saved = { ...article('guide', '<p>Revoked private policy</p>'), kind: 'policy' as const };
+    const { library, store } = await harness(async path => path.startsWith('/articles?')
+      ? json({ articles: [saved], total: 1 }) : json({}, 403), [saved]);
+    let resume!: () => void, entered!: () => void;
+    const paused = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    const originalSave = store.save.bind(store);
+    store.save = async (s, a, valid) => {
+      if (persistBeforePause) await originalSave(s, a, valid);
+      entered();
+      await gate;
+      if (!persistBeforePause) await originalSave(s, a, valid);
+    };
+    const refresh = library.refresh();
+    await paused;
+    assert.equal(await library.download('guide'), null);
+    resume();
+    await refresh;
+    assert.equal(library.cached('guide'), null);
+    assert.equal(library.state.busy, false);
+    const restarted = new OfflineLibrary(store, async () => { throw new Error('offline'); }, () => {}, () => {});
+    await restarted.activate(scope);
+    assert.equal(restarted.cached('guide'), null);
+    assert.doesNotMatch(JSON.stringify(await store.load(scope)), /Revoked private policy/);
+  }
 });

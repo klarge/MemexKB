@@ -1,8 +1,14 @@
 export interface CachedTag { id: number; name: string; color: string }
+export type ContentKind = 'knowledge' | 'policy' | 'procedure';
+export interface ProcedureStep { title: string; description: string }
 export interface CachedArticle {
   id: number;
   slug: string;
   title: string;
+  /** Absent only in legacy knowledge-only downloads. */
+  kind?: ContentKind;
+  policySubjectId?: number | null;
+  procedureSteps?: ProcedureStep[];
   content: string;
   searchText: string;
   contentCached: boolean;

@@ -1,6 +1,27 @@
 import { parseDocument } from 'htmlparser2';
 import serialize from 'dom-serializer';
 import { Element, Text, type AnyNode } from 'domhandler';
+import type { CachedArticle, ContentKind, ProcedureStep } from './types';
+
+export function contentKind(article: { kind?: ContentKind }): ContentKind {
+  return article.kind ?? 'knowledge';
+}
+
+export function contentKindLabel(article: { kind?: ContentKind }): string {
+  return { knowledge: 'Knowledge', policy: 'Policy', procedure: 'Procedure' }[contentKind(article)];
+}
+
+/** Descriptions are stored HTML; escape step titles, never their trusted markup.
+ * Rendering, image discovery and search all consume this same saved document. */
+export function documentHtml(article: { content: string; kind?: ContentKind; procedureSteps?: ProcedureStep[] }): string {
+  if (contentKind(article) !== 'procedure' || !article.procedureSteps?.length) return article.content;
+  return `${article.content}<h2 id="procedure-steps">Procedure steps</h2>${article.procedureSteps.map((step, index) =>
+    `<section id="procedure-step-${index + 1}"><h3>${index + 1}. ${escape(step.title)}</h3>${step.description}</section>`).join('')}`;
+}
+
+export function documentSearchText(article: Pick<CachedArticle, 'title' | 'content' | 'kind' | 'procedureSteps'>): string {
+  return `${article.title} ${textFromHtml(documentHtml(article))}`.toLowerCase();
+}
 
 export function canonicalServer(value: string): string {
   const url = new URL(value.trim());
@@ -34,9 +55,9 @@ export function articleLink(href: string, server: string): { slug: string; fragm
   try {
     const base = canonicalServer(server);
     const prefix = new URL(base).pathname.replace(/\/$/, '');
-    const url = new URL(prefix && /^\/(?:knowledge|wiki)\//.test(href) ? `${base}${href}` : href, `${base}/`);
+    const url = new URL(prefix && /^\/(?:knowledge|wiki|policies|procedures)\//.test(href) ? `${base}${href}` : href, `${base}/`);
     if (url.origin !== new URL(base).origin || !url.pathname.startsWith(`${prefix}/`)) return null;
-    const match = /^\/(?:knowledge|wiki)\/([^/]+)\/?$/.exec(url.pathname.slice(prefix.length));
+    const match = /^\/(?:knowledge|wiki|policies|procedures)\/([^/]+)\/?$/.exec(url.pathname.slice(prefix.length));
     if (!match) return null;
     return { slug: decodeURIComponent(match[1]), fragment: url.hash.slice(1) };
   } catch { return null; }
@@ -74,9 +95,18 @@ const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&l
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** Reader-only normalization. It never changes the stored server document. */
-export function readerHtml(article: { content: string; assetFiles?: Record<string, string> }, server: string): string {
-  const doc = parseDocument(article.content);
+export function readerHtml(article: { content: string; kind?: ContentKind; procedureSteps?: ProcedureStep[]; assetFiles?: Record<string, string> }, server: string): string {
+  const doc = parseDocument(documentHtml(article));
   elements(doc.children, node => {
+    // Resolve trusted document links before the renderer's URI normalizer,
+    // which otherwise resolves relative links against the preview/app origin.
+    const href = node.name === 'a' ? node.attribs.href : undefined;
+    if (href && articleLink(href, server)) {
+      const base = canonicalServer(server);
+      const prefix = new URL(base).pathname;
+      node.attribs.href = new URL(prefix && /^\/(?:knowledge|wiki|policies|procedures)\//.test(href)
+        ? `${base}${href}` : href, `${base}/`).href;
+    }
     if (node.attribs['data-type'] === 'infobox') {
       let rows: { label: string; value: string }[] = [];
       try {

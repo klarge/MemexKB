@@ -71,6 +71,29 @@ try {
   adb('shell', 'svc', 'wifi', 'disable');
   launch();
   await find('article-offline-field-guide', 'resource-id');
+  await tap('kind-policy', 'resource-id');
+  await find('article-safety-policy', 'resource-id');
+  await tap('article-safety-policy', 'resource-id');
+  await find('POLICY_OFFLINE_BODY');
+  screenshot('offline-policy');
+  await tap('Safety Procedure');
+  await find('PROCEDURE_OFFLINE_BODY');
+  await find('1. Inspect equipment');
+  await find('PROCEDURE_STEP_SEARCH_TOKEN');
+  screenshot('offline-procedure');
+  await tap('Safety Policy');
+  await find('POLICY_OFFLINE_BODY');
+  // Return through native history to the filtered list.
+  for (let i = 0; i < 3; i++) {
+    adb('shell', 'input', 'keyevent', '4');
+    await sleep(600);
+  }
+  await tap('kind-procedure', 'resource-id');
+  await type('article-search', 'PROCEDURE_STEP_SEARCH_TOKEN');
+  await find('article-safety-procedure', 'resource-id');
+  screenshot('offline-procedure-search');
+  await type('article-search', '');
+  await tap('kind-knowledge', 'resource-id');
   await type('article-search', 'FIELD_GUIDE_OFFLINE_BODY');
   await find('article-offline-field-guide', 'resource-id');
   if (xml().includes('article-linked-reference')) throw new Error('Offline body search did not filter out the unrelated article.');
@@ -87,7 +110,7 @@ try {
   await tap('button1', 'resource-id'); // Native confirmation dialog.
   await find('Not downloaded');
   screenshot('removed-local-copy');
-  console.log('PASS: native standalone startup, cold airplane-mode reading, internal link and local removal.');
+  console.log('PASS: native standalone startup, cold airplane-mode KB/policy/procedure reading, step search, internal links and local removal.');
 } catch (error) {
   screenshot('failure');
   writeFileSync(`${evidence}/logcat.txt`, adb('logcat', '-d'));

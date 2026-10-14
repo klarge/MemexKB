@@ -32,4 +32,5 @@
 - [Request security compatibility](request-security-compatibility.md) — coordinate browser uploads, native cookie sessions and signed SAML posts before changing the CSRF protocol.
 - [Android product goals](android-product-goals.md) — Android should approach web feature parity with native Android behavior and offline KB access, delivered through the Android action.
 - [Expo image adapter](expo-image-adapter.md) — keep hardened parsing compatible with Expo filenames and Metro cross-realm bytes; verify native export, not only web/type checks.
+- [Native reader links](native-reader-links.md) — rendered anchors normalize before callbacks; test real reader links and resolve them against the trusted server.
 - [Native SSO boundaries](native-sso-handoff.md) — app schemes are not identity proof; use PKCE and HTTPS, and correlate mobile SAML without relying on browser cookies.

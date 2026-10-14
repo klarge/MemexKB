@@ -8,7 +8,8 @@ Existing Logs and Tasks features are unchanged.
 1. Connect to your trusted Memex server and sign in. Prefer HTTPS. A deliberately
    selected HTTP server is supported, but HTTP exposes sign-in and content to
    anyone able to observe that network.
-2. **Download all** saves the accessible KB. Opening an article online also saves
+2. **Download all** saves accessible knowledge articles, policies, and procedures.
+   Opening any of these documents online also saves
    its text and supported Memex-hosted images. **Refresh saved** updates the
    catalog and articles already saved; it does not download every new article.
 3. Check each article's status. Partial downloads are not advertised as complete.
@@ -19,6 +20,15 @@ Existing Logs and Tasks features are unchanged.
 5. **Remove** and **Clear** delete device copies only. They never delete or edit
    server articles. Internal links open native article screens; a missing saved
    target is explicitly unavailable offline.
+
+Use the content-type filters to browse Knowledge, Policies, or Procedures alongside
+the existing Downloaded and tag filters. Procedure steps retain their saved order,
+titles, rich-text descriptions, and supported local images; offline search includes
+step titles and descriptions. Policy subject IDs are retained, but the web policy
+category tree is not reproduced. Procedure execution/project creation is not offered:
+this is read-only reference access. Existing downloads without a content type remain
+knowledge articles. Reconnect and use Refresh saved to discover policies/procedures,
+then Download all (or download individual documents) before going offline.
 
 “Saved offline” means the supported local content is downloaded. External-image
 exceptions are stated in the status. The saved date belongs to the actual local
@@ -68,6 +78,8 @@ timestamp. Known newer server versions are labelled out of date.
 | Infoboxes | Title, plain-text fields, and downloaded image; fields use the native table presentation |
 | Manual sources/citations | Saved text and anchors; source links are not fetched or opened as external websites |
 | Same-server KB links and wikilinks | Native navigation; missing downloads explicitly unavailable offline |
+| Policies and procedures | Native read-only documents, type filters, offline search, and links across all three content types |
+| Procedure steps | Ordered step headings and rich-text descriptions, downloaded images, and links; no execution or editing |
 | Heading/source fragment links | Scroll to the containing top-level block, not an exact text-line position |
 | Memex images and static diagram previews | Downloaded local raster images; no diagram editor or editable XML |
 | External images/sites | Explicit unavailable notice; no claim of offline website access |
@@ -85,9 +97,10 @@ Play Store or treat that public certificate as production signing.
 The artifact is `memex-android-standalone-test-<run number>`. The action checks
 that the APK contains its bundle/fonts, runs the offline engine regression suite,
 and installs it on an Android emulator with no Metro. An isolated, synthetic
-fixture server supplies two articles and protected images. The smoke check
+fixture server supplies knowledge articles, a policy, a procedure with steps, and
+protected images. The smoke check
 downloads them, force-stops the app, disables networking, relaunches, checks
-native reading/internal links, and removes a local copy. Screenshots/logs are
+native reading/cross-type links, procedure-step search, and removes a local copy. Screenshots/logs are
 uploaded separately. No production or development database is modified.
 
 Local regression command:
