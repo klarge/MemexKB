@@ -14,7 +14,11 @@ on:
 
 jobs:
   build-android:
+<<<<<<< HEAD
+    name: Build standalone Android testing APK
+=======
     name: Build Android debug APK
+>>>>>>> c6b22c0189bbd1e3eb70fcf8bfd141572b7d8799
     runs-on: ubuntu-latest
 
     steps:
@@ -50,8 +54,13 @@ jobs:
       - name: Install Android platform & build tools
         run: |
           sdkmanager --install \
+<<<<<<< HEAD
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+=======
             "platforms;android-35" \
             "build-tools;35.0.0" \
+>>>>>>> c6b22c0189bbd1e3eb70fcf8bfd141572b7d8799
             "platform-tools"
 
       # ── 6. Expo prebuild → generate android/ native project ───────────────
@@ -63,10 +72,17 @@ jobs:
 
       - name: Expo prebuild (Android)
         working-directory: artifacts/memex-mobile
+<<<<<<< HEAD
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+
+      - name: Install dependencies after prebuild
+        run: pnpm install --frozen-lockfile
+=======
         run: npx expo prebuild --platform android --clean --no-install
 
       - name: Install dependencies after prebuild
         run: pnpm install --frozen-lockfile=false
+>>>>>>> c6b22c0189bbd1e3eb70fcf8bfd141572b7d8799
 
       # ── 7. Gradle cache + build ────────────────────────────────────────────
       - name: Cache Gradle
@@ -82,17 +98,73 @@ jobs:
         working-directory: artifacts/memex-mobile/android
         run: chmod +x gradlew
 
+<<<<<<< HEAD
+      # Expo's release variant embeds the JS/Hermes bundle and font/assets and
+      # disables Metro/dev support. The generated template signs release with
+      # its PUBLIC debug key: this is a standalone TEST build, not store signing.
+      - name: Build bundled standalone testing APK
+        working-directory: artifacts/memex-mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false'
+
+      - name: Verify embedded bundle and fonts
+        run: |
+          APK=artifacts/memex-mobile/android/app/build/outputs/apk/release/app-release.apk
+          unzip -l "$APK" | grep -E 'assets/index.android.bundle'
+          unzip -l "$APK" | grep -Ei '\.(ttf|otf)'
+
+      - name: Offline download regression tests
+        run: |
+          node --test lib/image-size-safe/compatibility.test.cjs
+          pnpm --filter @workspace/memex-mobile run typecheck
+          pnpm --filter @workspace/api-server exec tsx --test ../memex-mobile/test/*.test.ts
+
+=======
       - name: Build debug APK
         working-directory: artifacts/memex-mobile/android
         run: ./gradlew assembleDebug --no-daemon
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false'
 
+>>>>>>> c6b22c0189bbd1e3eb70fcf8bfd141572b7d8799
       # ── 8. Upload artifact ─────────────────────────────────────────────────
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
+<<<<<<< HEAD
+          name: memex-android-standalone-test-${{ github.run_number }}
+          path: artifacts/memex-mobile/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Native standalone and offline cold-start test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            node .github/scripts/android-offline-fixture.cjs > /tmp/memex-fixture.log 2>&1 &
+            node .github/scripts/android-offline-smoke.mjs artifacts/memex-mobile/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload Android test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memex-android-offline-evidence-${{ github.run_number }}
+          path: /tmp/memex-android-evidence
+          if-no-files-found: warn
+=======
           name: memex-android-debug-${{ github.run_number }}
           path: artifacts/memex-mobile/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error
+>>>>>>> c6b22c0189bbd1e3eb70fcf8bfd141572b7d8799
