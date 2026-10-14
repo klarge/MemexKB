@@ -9,6 +9,73 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary List enabled sign-in providers
+ */
+export const GetAuthProvidersResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "provider": zod.enum(['oidc', 'saml'])
+})
+export const GetAuthProvidersResponse = zod.array(GetAuthProvidersResponseItem)
+
+
+/**
+ * @summary Begin a native SSO transaction with an S256 challenge
+ */
+
+export const startMobileSsoBodyChallengeRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const startMobileSsoBodyStateRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+export const StartMobileSsoBody = zod.object({
+  "providerId": zod.number().int().min(1),
+  "challenge": zod.string().regex(startMobileSsoBodyChallengeRegExp),
+  "state": zod.string().regex(startMobileSsoBodyStateRegExp)
+})
+
+export const StartMobileSsoResponse = zod.object({
+  "ticket": zod.string()
+})
+
+
+/**
+ * @summary Consume a one-use code and issue a fresh session cookie
+ */
+export const exchangeMobileSsoBodyCodeRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const exchangeMobileSsoBodyVerifierRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const exchangeMobileSsoBodyStateRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+export const ExchangeMobileSsoBody = zod.object({
+  "code": zod.string().regex(exchangeMobileSsoBodyCodeRegExp),
+  "verifier": zod.string().regex(exchangeMobileSsoBodyVerifierRegExp),
+  "state": zod.string().regex(exchangeMobileSsoBodyStateRegExp)
+})
+
+export const ExchangeMobileSsoResponse = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.string()
+})
+
+
+/**
+ * @summary Invalidate an abandoned native SSO transaction
+ */
+export const cancelMobileSsoBodyTicketRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const cancelMobileSsoBodyVerifierRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+export const CancelMobileSsoBody = zod.object({
+  "ticket": zod.string().regex(cancelMobileSsoBodyTicketRegExp),
+  "verifier": zod.string().regex(cancelMobileSsoBodyVerifierRegExp)
+})
+
+export const CancelMobileSsoResponse = zod.void()
+
+
+/**
  * @summary Get the current user's personal task lists
  */
 export const GetTaskListsResponse = zod.object({

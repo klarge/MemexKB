@@ -5,6 +5,31 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface MobileSsoStart {
+  /** @minimum 1 */
+  providerId: number;
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  challenge: string;
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  state: string;
+}
+
+export interface MobileSsoExchange {
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  code: string;
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  verifier: string;
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  state: string;
+}
+
+export interface MobileSsoCancel {
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  ticket: string;
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  verifier: string;
+}
+
 export interface Task {
   id: number;
   listId: number;
@@ -828,6 +853,31 @@ export interface ApiTokenCreated {
   /** @nullable */
   expiresAt?: string | null;
 }
+
+export type GetAuthProviders200ItemProvider = typeof GetAuthProviders200ItemProvider[keyof typeof GetAuthProviders200ItemProvider];
+
+
+export const GetAuthProviders200ItemProvider = {
+  oidc: 'oidc',
+  saml: 'saml',
+} as const;
+
+export type GetAuthProviders200Item = {
+  id: number;
+  name: string;
+  provider: GetAuthProviders200ItemProvider;
+};
+
+export type StartMobileSso200 = {
+  ticket: string;
+};
+
+export type ExchangeMobileSso200 = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+};
 
 export type TestNotificationEmail200 = {
   message: string;

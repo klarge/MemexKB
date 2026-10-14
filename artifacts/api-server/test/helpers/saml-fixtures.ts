@@ -58,6 +58,7 @@ export function samlResponse(options: {
   audience: string;
   callbackUrl: string;
   email: string;
+  inResponseTo?: string;
   assertionKey?: string;
   responseKey?: string;
   omitAudience?: boolean;
@@ -70,7 +71,7 @@ export function samlResponse(options: {
   const issuer = "<saml:Issuer>https://idp.example.test</saml:Issuer>";
   let xml = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
     xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
-    ID="_response_${randomUUID()}" Version="2.0" IssueInstant="${now}" Destination="${escapeXml(options.callbackUrl)}">
+    ID="_response_${randomUUID()}" Version="2.0" IssueInstant="${now}" Destination="${escapeXml(options.callbackUrl)}" ${options.inResponseTo ? `InResponseTo="${escapeXml(options.inResponseTo)}"` : ""}>
     ${issuer}
     <samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>
     <saml:Assertion ID="_assertion_${randomUUID()}" Version="2.0" IssueInstant="${now}">
@@ -78,7 +79,7 @@ export function samlResponse(options: {
       <saml:Subject>
         <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">${escapeXml(options.email)}</saml:NameID>
         <saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
-          <saml:SubjectConfirmationData Recipient="${escapeXml(options.callbackUrl)}" NotOnOrAfter="${after}"/>
+          <saml:SubjectConfirmationData Recipient="${escapeXml(options.callbackUrl)}" NotOnOrAfter="${after}" ${options.inResponseTo ? `InResponseTo="${escapeXml(options.inResponseTo)}"` : ""}/>
         </saml:SubjectConfirmation>
       </saml:Subject>
       <saml:Conditions NotBefore="${before}" NotOnOrAfter="${after}">

@@ -15,10 +15,11 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useGetAuthProviders, type GetAuthProviders200Item } from '@workspace/api-client-react';
 
 export default function Login() {
   const colors = useColors();
-  const { login, serverUrl, setServerUrl } = useApp();
+  const { login, loginSso, serverUrl, setServerUrl } = useApp();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -27,8 +28,24 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const providers = useGetAuthProviders({
+    query: { queryKey: ['sso-providers', serverUrl], enabled: Boolean(serverUrl), staleTime: 0, retry: 1 },
+    request: { baseUrl: serverUrl ?? undefined, redirect: 'error' },
+  });
+  const handleSso = async (provider: GetAuthProviders200Item) => {
+    if (loading) return;
+    setError(null);
+    setLoading(true);
+    try {
+      if (await loginSso(provider.id)) router.replace('/(tabs)');
+      else setError('Sign-in cancelled. You can try again or choose another provider.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'SSO sign-in failed.');
+    } finally { setLoading(false); }
+  };
 
   const handleLogin = async () => {
+    if (loading) return;
     if (!email.trim() || !password) {
       setError('Email and password are required.');
       return;
@@ -77,12 +94,34 @@ export default function Login() {
 
       {/* Fields */}
       <View style={s.fields}>
+        <Text style={[s.serverLabel, { marginBottom: 12 }]}>
+          Accounts set to SSO Only must use their organisation’s provider. Password sign-in remains available for other accounts.
+        </Text>
+        {providers.isPending ? <ActivityIndicator color={colors.primary} /> : null}
+        {providers.isError ? (
+          <Pressable onPress={() => { void providers.refetch(); }} disabled={loading}>
+            <Text style={[s.errorText, { marginBottom: 12 }]}>Unable to load SSO providers. Tap to retry.</Text>
+          </Pressable>
+        ) : null}
+        {providers.data?.map(provider => (
+          <Pressable key={provider.id} style={s.btn} disabled={loading || Platform.OS === 'web'}
+            accessibilityLabel={`Continue with ${provider.name}`}
+            testID={`sso-provider-${provider.id}`} onPress={() => { void handleSso(provider); }}>
+            <Text style={s.btnText}>Continue with {provider.name}</Text>
+          </Pressable>
+        ))}
+        {Platform.OS === 'web' && providers.data?.length ? (
+          <Text style={[s.serverLabel, { marginTop: 12, marginBottom: 0 }]}>Provider sign-in opens in the system browser in the installed Android app.</Text>
+        ) : null}
+        {loading ? <ActivityIndicator style={{ marginTop: 12 }} color={colors.primary} /> : null}
+        {providers.data?.length ? <Text style={[s.serverLabel, { marginVertical: 16 }]}>Or use your password</Text> : null}
         <Text style={s.label}>Email</Text>
         <TextInput
           testID="login-email"
           accessibilityLabel="Email"
           style={s.input}
           value={email}
+          editable={!loading}
           onChangeText={(t) => { setEmail(t); setError(null); }}
           placeholder="you@example.com"
           placeholderTextColor={colors.mutedForeground}
@@ -100,6 +139,7 @@ export default function Login() {
             accessibilityLabel="Password"
             style={[s.input, { flex: 1, marginBottom: 0 }]}
             value={password}
+            editable={!loading}
             onChangeText={(t) => { setPassword(t); setError(null); }}
             placeholder="••••••••"
             placeholderTextColor={colors.mutedForeground}

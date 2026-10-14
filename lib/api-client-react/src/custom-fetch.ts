@@ -1,5 +1,9 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  /** Request-scoped server selection; avoids global base URL races in native apps. */
+  baseUrl?: string;
+  /** Native cookie extraction without changing the generated response contract. */
+  onResponse?: (response: Response) => void;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -332,8 +336,9 @@ export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
 ): Promise<T> {
-  input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const { responseType = "auto", headers: headersInit, baseUrl, onResponse, ...init } = options;
+  input = baseUrl && resolveUrl(input).startsWith("/")
+    ? `${baseUrl.replace(/\/+$/, "")}${resolveUrl(input)}` : applyBaseUrl(input);
 
   const method = resolveMethod(input, init.method);
 
@@ -382,5 +387,6 @@ export async function customFetch<T = unknown>(
     throw new ApiError(response, errorData, requestInfo);
   }
 
+  onResponse?.(response);
   return (await parseSuccessBody(response, responseType, requestInfo)) as T;
 }

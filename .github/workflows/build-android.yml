@@ -101,7 +101,7 @@ jobs:
         run: |
           node --test lib/image-size-safe/compatibility.test.cjs
           pnpm --filter @workspace/memex-mobile run typecheck
-          pnpm --filter @workspace/api-server exec tsx --test ../memex-mobile/test/offline.test.ts
+          pnpm --filter @workspace/api-server exec tsx --test ../memex-mobile/test/*.test.ts
 
       # ── 8. Upload artifact ─────────────────────────────────────────────────
       - name: Upload APK

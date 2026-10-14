@@ -26,6 +26,87 @@ tags:
   - name: tasks
     description: Personal task lists, due dates, and dashboard
 paths:
+  /auth/providers:
+    get:
+      operationId: getAuthProviders
+      tags: [auth]
+      summary: List enabled sign-in providers
+      responses:
+        "200":
+          description: Enabled public providers (no secrets)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, provider]
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    provider: { type: string, enum: [oidc, saml] }
+  /auth/mobile/start:
+    post:
+      operationId: startMobileSso
+      tags: [auth]
+      summary: Begin a native SSO transaction with an S256 challenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileSsoStart"
+      responses:
+        "200":
+          description: Ticket for the fixed browser route, expires in five minutes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket]
+                properties:
+                  ticket: { type: string }
+        "400": { description: Invalid request }
+        "404": { description: Provider unavailable }
+  /auth/mobile/exchange:
+    post:
+      operationId: exchangeMobileSso
+      tags: [auth]
+      summary: Consume a one-use code and issue a fresh session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileSsoExchange"
+      responses:
+        "200":
+          description: Identity with connect.sid in Set-Cookie, never in a URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, email, name, role]
+                properties:
+                  id: { type: integer }
+                  email: { type: string }
+                  name: { type: string }
+                  role: { type: string }
+        "400": { description: "Invalid, expired or consumed code" }
+  /auth/mobile/cancel:
+    post:
+      operationId: cancelMobileSso
+      tags: [auth]
+      summary: Invalidate an abandoned native SSO transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileSsoCancel"
+      responses:
+        "204": { description: Cancelled }
+        "400": { description: Invalid request }
   /tasks/lists:
     get:
       operationId: getTaskLists
@@ -1641,6 +1722,29 @@ components:
         type: integer
 
   schemas:
+    MobileSsoStart:
+      type: object
+      additionalProperties: false
+      required: [providerId, challenge, state]
+      properties:
+        providerId: { type: integer, minimum: 1 }
+        challenge: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        state: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+    MobileSsoExchange:
+      type: object
+      additionalProperties: false
+      required: [code, verifier, state]
+      properties:
+        code: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        verifier: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        state: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+    MobileSsoCancel:
+      type: object
+      additionalProperties: false
+      required: [ticket, verifier]
+      properties:
+        ticket: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        verifier: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
     Task:
       type: object
       required: [id, listId, title, position, completedAt, dueDate, createdAt, updatedAt]

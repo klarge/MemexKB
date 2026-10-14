@@ -6,8 +6,18 @@ import { ssoConfigsTable, usersTable, groupMembersTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { SSO_ONLY_PASSWORD_HASH } from "../lib/login-mode";
 import { frontendUrl } from "../lib/frontend-url";
+import { pendingMobile, tokenHash, validToken, mobileSamlCache, completeMobile, establishSsoSession, MOBILE_CALLBACK } from "../lib/mobile-sso";
+import type { MobileSso } from "@workspace/db";
+import type { Response } from "express";
+import { ValidateInResponseTo } from "@node-saml/node-saml";
 
 const router = Router();
+
+function mobileError(res: Response, pending: MobileSso | null) {
+  res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+  if (pending) res.redirect(`${MOBILE_CALLBACK}?error=sso_failed&state=${pending.state}`);
+  else res.status(400).send("Sign-in expired or cancelled. Return to Memex and try again.");
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,6 +177,9 @@ router.get("/auth/saml/:id/login", async (req, res) => {
     return;
   }
 
+  const mobile = req.query.mobile;
+  const pending = validToken(mobile) ? await pendingMobile(tokenHash(mobile), id) : null;
+  if (mobile !== undefined && !pending) { mobileError(res, null); return; }
   try {
     const cfg = row.config as Record<string, string>;
     const { SAML } = await import("@node-saml/node-saml");
@@ -175,11 +188,14 @@ router.get("/auth/saml/:id/login", async (req, res) => {
       issuer: cfg.issuer ?? frontendUrl(req),
       idpCert: cfg.idpCert,
       callbackUrl: `${frontendUrl(req)}/api/auth/saml/${id}/callback`,
+      ...(pending ? { validateInResponseTo: ValidateInResponseTo.always, cacheProvider: mobileSamlCache(pending), forceAuthn: true } : {}),
     });
-    const url = await saml.getAuthorizeUrlAsync("", req.headers.host ?? "", {});
+    const url = await saml.getAuthorizeUrlAsync(pending ? `memex.${mobile}` : "", req.headers.host ?? "", {});
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
     res.redirect(url);
   } catch (err) {
     console.error("SAML login error", err);
+    if (mobile !== undefined) { mobileError(res, pending); return; }
     res.redirect(`/login?error=saml_config`);
   }
 });
@@ -192,6 +208,10 @@ router.post("/auth/saml/:id/callback", async (req, res) => {
     return;
   }
 
+  const relay = req.body?.RelayState;
+  const mobile = typeof relay === "string" && relay.startsWith("memex.") ? relay.slice(6) : undefined;
+  const pending = validToken(mobile) ? await pendingMobile(tokenHash(mobile), id) : null;
+  if (mobile !== undefined && !pending) { mobileError(res, null); return; }
   try {
     const cfg = row.config as Record<string, string>;
     const { SAML } = await import("@node-saml/node-saml");
@@ -200,6 +220,7 @@ router.post("/auth/saml/:id/callback", async (req, res) => {
       issuer: cfg.issuer ?? frontendUrl(req),
       idpCert: cfg.idpCert,
       callbackUrl: `${frontendUrl(req)}/api/auth/saml/${id}/callback`,
+      ...(pending ? { validateInResponseTo: ValidateInResponseTo.always, cacheProvider: mobileSamlCache(pending) } : {}),
     });
     const { profile } = await saml.validatePostResponseAsync(req.body);
 
@@ -213,6 +234,7 @@ router.post("/auth/saml/:id/callback", async (req, res) => {
       email;
 
     if (!email) {
+      if (pending) { mobileError(res, pending); return; }
       res.redirect(`/login?error=saml_no_email`);
       return;
     }
@@ -235,13 +257,12 @@ router.post("/auth/saml/:id/callback", async (req, res) => {
       }
     }
 
-    req.session.userId = user.id;
-    req.session.userRole = user.role;
-    req.session.userEmail = user.email;
-    req.session.userName = user.name;
+    if (pending) { await completeMobile(pending, user.id, res); return; }
+    await establishSsoSession(req, user);
     res.redirect("/");
   } catch (err) {
     console.error("SAML callback error", err);
+    if (mobile !== undefined) { mobileError(res, pending); return; }
     res.redirect(`/login?error=saml_failed`);
   }
 });
@@ -256,6 +277,9 @@ router.get("/auth/oidc/:id/login", async (req, res) => {
     return;
   }
 
+  const mobile = req.query.mobile;
+  const pending = validToken(mobile) ? await pendingMobile(tokenHash(mobile), id) : null;
+  if (mobile !== undefined && !pending) { mobileError(res, null); return; }
   try {
     const cfg = row.config as Record<string, string>;
     const redirectUri = `${frontendUrl(req)}/api/auth/oidc/${id}/callback`;
@@ -273,12 +297,15 @@ router.get("/auth/oidc/:id/login", async (req, res) => {
     const nonce = generators.nonce();
     const scope = cfg.scope || "openid email profile";
 
-    req.session.oidcPending = { state, nonce, providerId: id };
+    req.session.oidcPending = { state, nonce, providerId: id, ...(pending ? { mobileTicketHash: pending.ticketHash } : {}) };
+    await new Promise<void>((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 
-    const url = client.authorizationUrl({ scope, state, nonce, redirect_uri: redirectUri });
+    const url = client.authorizationUrl({ scope, state, nonce, redirect_uri: redirectUri, ...(pending ? { prompt: "select_account" } : {}) });
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
     res.redirect(url);
   } catch (err) {
     console.error("OIDC login error", err);
+    if (mobile !== undefined) { mobileError(res, pending); return; }
     res.redirect(`/login?error=oidc_config`);
   }
 });
@@ -297,6 +324,8 @@ router.get("/auth/oidc/:id/callback", async (req, res) => {
     return;
   }
 
+  const native = pending.mobileTicketHash ? await pendingMobile(pending.mobileTicketHash, id) : null;
+  if (pending.mobileTicketHash && !native) { delete req.session.oidcPending; mobileError(res, null); return; }
   try {
     const cfg = row.config as Record<string, string>;
     const redirectUri = `${frontendUrl(req)}/api/auth/oidc/${id}/callback`;
@@ -332,6 +361,7 @@ router.get("/auth/oidc/:id/callback", async (req, res) => {
     }
 
     if (!email) {
+      if (native) { mobileError(res, native); return; }
       res.redirect(`/login?error=oidc_no_email`);
       return;
     }
@@ -339,13 +369,13 @@ router.get("/auth/oidc/:id/callback", async (req, res) => {
     const sub = claims.sub;
     const ssoId = createHash("sha256").update(`${cfg.issuerUrl}:${sub}`).digest("hex");
     const user = await provisionUser(email, name, "oidc", ssoId);
-    req.session.userId = user.id;
-    req.session.userRole = user.role;
-    req.session.userEmail = user.email;
-    req.session.userName = user.name;
+    if (native) { await completeMobile(native, user.id, res); return; }
+    await establishSsoSession(req, user);
     res.redirect("/");
   } catch (err) {
     console.error("OIDC callback error", err);
+    delete req.session.oidcPending;
+    if (native) { mobileError(res, native); return; }
     res.redirect(`/login?error=oidc_failed`);
   }
 });

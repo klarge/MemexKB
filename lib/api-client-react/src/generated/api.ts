@@ -43,12 +43,14 @@ import type {
   Dashboard,
   EditLockStatus,
   ErrorResponse,
+  ExchangeMobileSso200,
   FavoriteInput,
   FavoritesResponse,
   FullBackupPassphraseInput,
   FullBackupPreview,
   FullBackupRestoreInput,
   FullBackupRestoreResult,
+  GetAuthProviders200Item,
   Group,
   GroupDetail,
   GroupInput,
@@ -61,6 +63,9 @@ import type {
   ListArticlesParams,
   LoginInput,
   MessageResponse,
+  MobileSsoCancel,
+  MobileSsoExchange,
+  MobileSsoStart,
   NotificationPreferences,
   NotificationPreferencesUpdate,
   PasswordRecoveryInput,
@@ -76,6 +81,7 @@ import type {
   ProjectUpdate,
   SmtpSettings,
   SmtpUpdate,
+  StartMobileSso200,
   Tag,
   TagInput,
   TagUpdate,
@@ -115,6 +121,323 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetAuthProvidersUrl = () => {
+
+
+
+
+  return `/api/auth/providers`
+}
+
+/**
+ * @summary List enabled sign-in providers
+ */
+export const getAuthProviders = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetAuthProviders200Item[]> => {
+
+  return customFetch<GetAuthProviders200Item[]>(getGetAuthProvidersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuthProvidersQueryKey = () => {
+    return [
+    `/api/auth/providers`
+    ] as const;
+    }
+
+
+export const getGetAuthProvidersQueryOptions = <TData = Awaited<ReturnType<typeof getAuthProviders>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuthProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuthProvidersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthProviders>>> = ({ signal }) => getAuthProviders({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuthProviders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAuthProvidersQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthProviders>>>
+export type GetAuthProvidersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List enabled sign-in providers
+ */
+
+export function useGetAuthProviders<TData = Awaited<ReturnType<typeof getAuthProviders>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuthProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAuthProvidersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getStartMobileSsoUrl = () => {
+
+
+
+
+  return `/api/auth/mobile/start`
+}
+
+/**
+ * @summary Begin a native SSO transaction with an S256 challenge
+ */
+export const startMobileSso = async (mobileSsoStart: MobileSsoStart, options?: Parameters<typeof customFetch>[1]): Promise<StartMobileSso200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<StartMobileSso200>(getStartMobileSsoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mobileSsoStart)
+  }
+);}
+
+
+
+
+
+export const getStartMobileSsoMutationKey = () => ['startMobileSso'] as const;
+
+export const getStartMobileSsoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startMobileSso>>, TError,StartMobileSsoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startMobileSso>>, TError,StartMobileSsoMutationVariables, TContext> => {
+
+const mutationKey = getStartMobileSsoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startMobileSso>>, StartMobileSsoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  startMobileSso(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartMobileSsoMutationResult = NonNullable<Awaited<ReturnType<typeof startMobileSso>>>
+    export type StartMobileSsoMutationBody = BodyType<MobileSsoStart>
+    export type StartMobileSsoMutationError = ErrorType<void>
+    export type StartMobileSsoMutationVariables = {data: BodyType<MobileSsoStart>}
+
+    /**
+ * @summary Begin a native SSO transaction with an S256 challenge
+ */
+export const useStartMobileSso = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startMobileSso>>, TError,StartMobileSsoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startMobileSso>>,
+        TError,
+        StartMobileSsoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getStartMobileSsoMutationOptions(options));
+    }
+
+export const getExchangeMobileSsoUrl = () => {
+
+
+
+
+  return `/api/auth/mobile/exchange`
+}
+
+/**
+ * @summary Consume a one-use code and issue a fresh session cookie
+ */
+export const exchangeMobileSso = async (mobileSsoExchange: MobileSsoExchange, options?: Parameters<typeof customFetch>[1]): Promise<ExchangeMobileSso200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ExchangeMobileSso200>(getExchangeMobileSsoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mobileSsoExchange)
+  }
+);}
+
+
+
+
+
+export const getExchangeMobileSsoMutationKey = () => ['exchangeMobileSso'] as const;
+
+export const getExchangeMobileSsoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeMobileSso>>, TError,ExchangeMobileSsoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exchangeMobileSso>>, TError,ExchangeMobileSsoMutationVariables, TContext> => {
+
+const mutationKey = getExchangeMobileSsoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exchangeMobileSso>>, ExchangeMobileSsoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  exchangeMobileSso(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExchangeMobileSsoMutationResult = NonNullable<Awaited<ReturnType<typeof exchangeMobileSso>>>
+    export type ExchangeMobileSsoMutationBody = BodyType<MobileSsoExchange>
+    export type ExchangeMobileSsoMutationError = ErrorType<void>
+    export type ExchangeMobileSsoMutationVariables = {data: BodyType<MobileSsoExchange>}
+
+    /**
+ * @summary Consume a one-use code and issue a fresh session cookie
+ */
+export const useExchangeMobileSso = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeMobileSso>>, TError,ExchangeMobileSsoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exchangeMobileSso>>,
+        TError,
+        ExchangeMobileSsoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getExchangeMobileSsoMutationOptions(options));
+    }
+
+export const getCancelMobileSsoUrl = () => {
+
+
+
+
+  return `/api/auth/mobile/cancel`
+}
+
+/**
+ * @summary Invalidate an abandoned native SSO transaction
+ */
+export const cancelMobileSso = async (mobileSsoCancel: MobileSsoCancel, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getCancelMobileSsoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mobileSsoCancel)
+  }
+);}
+
+
+
+
+
+export const getCancelMobileSsoMutationKey = () => ['cancelMobileSso'] as const;
+
+export const getCancelMobileSsoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelMobileSso>>, TError,CancelMobileSsoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelMobileSso>>, TError,CancelMobileSsoMutationVariables, TContext> => {
+
+const mutationKey = getCancelMobileSsoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelMobileSso>>, CancelMobileSsoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  cancelMobileSso(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelMobileSsoMutationResult = NonNullable<Awaited<ReturnType<typeof cancelMobileSso>>>
+    export type CancelMobileSsoMutationBody = BodyType<MobileSsoCancel>
+    export type CancelMobileSsoMutationError = ErrorType<void>
+    export type CancelMobileSsoMutationVariables = {data: BodyType<MobileSsoCancel>}
+
+    /**
+ * @summary Invalidate an abandoned native SSO transaction
+ */
+export const useCancelMobileSso = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelMobileSso>>, TError,CancelMobileSsoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelMobileSso>>,
+        TError,
+        CancelMobileSsoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCancelMobileSsoMutationOptions(options));
+    }
 
 export const getGetTaskListsUrl = () => {
 

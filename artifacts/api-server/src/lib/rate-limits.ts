@@ -9,7 +9,7 @@ interface RateLimitOptions {
   authAttemptLimit?: number;
 }
 
-const credentialRoutes = new Set(["POST /auth/login", "POST /auth/setup"]);
+const credentialRoutes = new Set(["POST /auth/login", "POST /auth/setup", "POST /auth/mobile/start", "POST /auth/mobile/exchange"]);
 const sessionRoutes = new Set(["GET /auth/me", "POST /auth/logout"]);
 
 function routeKey(req: Request) {

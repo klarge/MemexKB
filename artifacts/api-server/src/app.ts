@@ -165,6 +165,8 @@ app.use("/api", apiLimiter);
 // Brute-force protection: 10 unsuccessful attempts per 15 minutes per IP.
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/setup", authLimiter);
+app.use("/api/auth/mobile/start", authLimiter);
+app.use("/api/auth/mobile/exchange", authLimiter);
 
 // Swagger UI — restrict to non-production environments.
 // In production, protect it behind the admin-only requireRole middleware or disable entirely.

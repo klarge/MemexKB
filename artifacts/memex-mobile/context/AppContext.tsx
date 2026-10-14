@@ -8,6 +8,8 @@ import { canonicalServer, textFromHtml } from '../offline/content';
 import { deleteSession, loadSession, saveSession, OFFLINE_ACCESS_MS, type AuthUser, type SavedSession } from '../offline/credentials';
 import type { CacheScope, CachedArticle, CachedTag, LibraryState, SyncProgress } from '../offline/types';
 import { fetchWithTimeout } from '../offline/network';
+import { nativeSso, revokeNativeSession } from '../offline/sso';
+import { useQueryClient } from '@tanstack/react-query';
 
 export type { AuthUser, CachedArticle, CachedTag, SyncProgress };
 interface AppContextValue {
@@ -17,6 +19,7 @@ interface AppContextValue {
   user: AuthUser | null;
   sessionCookie: string | null;
   login: (email: string, password: string) => Promise<void>;
+  loginSso: (providerId: number) => Promise<boolean>;
   logout: () => Promise<void>;
   isOnline: boolean;
   isHydrating: boolean;
@@ -44,6 +47,7 @@ function headers(cookie: string | null): Record<string, string> {
     ...(cookie && Platform.OS !== 'web' ? { Cookie: `connect.sid=${cookie}` } : {}) };
 }
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [serverUrl, setServerUrlState] = useState<string | null>(null);
   const [session, setSession] = useState<SavedSession | null>(null);
   const [isOnline, setIsOnline] = useState(true);
@@ -75,6 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     authGeneration.current++;
     sessionRef.current = null;
     setSession(null);
+    queryClient.clear();
     await library.activate(null); // Invalidates all outstanding reads before storage awaits.
     await persist(deleteSession);
     if (previous) {
@@ -85,7 +90,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         method: 'POST', credentials: 'include', headers: headers(previous.cookie),
       }, 5000).catch(() => {});
     }
-  }, [library]);
+  }, [library, queryClient]);
   logoutRef.current = logout;
 
   useEffect(() => {
@@ -172,6 +177,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try { return (await fetchWithTimeout(`${canonicalServer(value)}/api/healthz`, {}, 5000)).ok; }
     catch { return false; }
   }, []);
+  const acceptSession = useCallback(async (server: string, generation: number, user: AuthUser, cookie: string) => {
+    if (generation !== authGeneration.current || server !== serverRef.current) return false;
+    const previous = sessionRef.current;
+    sessionRef.current = null;
+    setSession(null);
+    queryClient.clear();
+    await library.activate(null);
+    if (previous) await storeRef.current.clear(scopeFor(previous));
+    if (generation !== authGeneration.current || server !== serverRef.current) return false;
+    await persist(deleteSession);
+    const saved: SavedSession = { server, cookie, user, offlineUntil: Date.now() + OFFLINE_ACCESS_MS };
+    await persist(async () => { if (generation === authGeneration.current) await saveSession(saved); });
+    if (generation !== authGeneration.current || server !== serverRef.current) return false;
+    sessionRef.current = saved;
+    await library.activate(scopeFor(saved));
+    if (generation !== authGeneration.current) return false;
+    setSession(saved);
+    return true;
+  }, [library, queryClient]);
   const login = useCallback(async (email: string, password: string) => {
     const server = serverRef.current;
     if (!server) throw new Error('Server URL not configured.');
@@ -186,17 +210,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const user = await res.json() as AuthUser;
     const cookie = Platform.OS === 'web' ? 'browser-session' : /connect\.sid=([^;]+)/.exec(res.headers.get('set-cookie') ?? '')?.[1];
     if (!cookie || !Number.isSafeInteger(user.id)) throw new Error('The server did not return a valid session.');
-    if (generation !== authGeneration.current || server !== serverRef.current) return;
-    const previous = sessionRef.current;
-    await library.activate(null);
-    if (previous) await storeRef.current.clear(scopeFor(previous));
-    const saved: SavedSession = { server, cookie, user, offlineUntil: Date.now() + OFFLINE_ACCESS_MS };
-    await persist(async () => { if (generation === authGeneration.current) await saveSession(saved); });
-    if (generation !== authGeneration.current) return;
-    sessionRef.current = saved;
-    await library.activate(scopeFor(saved));
-    if (generation === authGeneration.current) setSession(saved);
-  }, [library]);
+    await acceptSession(server, generation, user, cookie);
+  }, [acceptSession]);
+  const loginSso = useCallback(async (providerId: number) => {
+    const server = serverRef.current;
+    if (!server) throw new Error('Server URL not configured.');
+    if (Platform.OS === 'web') throw new Error('Use the installed Android app for native SSO sign-in.');
+    const generation = ++authGeneration.current;
+    const result = await nativeSso(server, providerId, () => generation === authGeneration.current && server === serverRef.current);
+    if (!result) return false;
+    try {
+      const accepted = await acceptSession(server, generation, result.user, result.cookie);
+      if (!accepted) void revokeNativeSession(server, result.cookie);
+      return accepted;
+    } catch (error) {
+      void revokeNativeSession(server, result.cookie);
+      throw error;
+    }
+  }, [acceptSession]);
   const apiFetch = useCallback(async (path: string, options: RequestInit = {}) => {
     const server = serverRef.current;
     if (!server) throw new Error('Server URL not configured.');
@@ -223,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const cachedTags = [...new Map(libraryState.articles.flatMap(a => a.tags ?? []).map(tag => [tag.id, tag])).values()];
   return <AppContext.Provider value={{
     serverUrl, setServerUrl, testConnection, user: session?.user ?? null, sessionCookie: session?.cookie ?? null,
-    login, logout, isOnline, isHydrating, cachedArticles: libraryState.articles, cachedTags,
+    login, loginSso, logout, isOnline, isHydrating, cachedArticles: libraryState.articles, cachedTags,
     lastSyncedAt: libraryState.lastSyncedAt ? new Date(libraryState.lastSyncedAt) : null,
     isSyncing: libraryState.busy, syncProgress: libraryState.progress, downloadError: libraryState.error,
     syncArticles, downloadAllArticles, downloadArticle, getArticle, apiFetch,

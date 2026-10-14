@@ -178,6 +178,7 @@ declare module "express-session" {
       state: string;
       nonce: string;
       providerId: number;
+      mobileTicketHash?: string;
     };
   }
 }
