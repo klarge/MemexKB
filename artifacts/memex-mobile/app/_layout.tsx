@@ -11,15 +11,26 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { AppProvider } from '@/context/AppContext';
+import { AppProvider, useApp } from '@/context/AppContext';
+import { ActivityIndicator, View } from 'react-native';
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const { user, serverUrl, isHydrating } = useApp();
+  const router = useRouter();
+  const segments = useSegments();
+  const root = segments[0];
+  useEffect(() => {
+    if (isHydrating) return;
+    if (!serverUrl && root !== 'setup') router.replace('/setup');
+    else if (serverUrl && !user && root !== 'login' && root !== 'setup') router.replace('/login');
+  }, [isHydrating, serverUrl, user, root, router]);
+  if (isHydrating) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
       <Stack.Screen name="index" />

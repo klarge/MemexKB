@@ -7,7 +7,9 @@
     "dev": "EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm exec expo start --localhost --port $PORT",
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "devDependencies": {
     "@babel/core": "^7.29.6",
@@ -57,7 +59,17 @@
   },
   "dependencies": {
     "@react-native-community/netinfo": "^12.0.1",
+    "base64-js": "^1.5.1",
     "date-fns": "^3.6.0",
-    "react-native-render-html": "^6.3.4"
+    "dom-serializer": "^2.0.0",
+    "domhandler": "^5.0.3",
+    "expo-crypto": "~15.0.9",
+    "expo-file-system": "~19.0.23",
+    "expo-secure-store": "~15.0.8",
+    "htmlparser2": "^10.1.0",
+    "react-native-render-html": "^6.3.4",
+    "expo": "~54.0.36",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }

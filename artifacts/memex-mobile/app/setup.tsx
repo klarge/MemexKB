@@ -80,6 +80,8 @@ export default function Setup() {
         </View>
 
         <TextInput
+          testID="server-url"
+          accessibilityLabel="Memex server URL"
           style={[s.input, error ? s.inputError : null]}
           value={url}
           onChangeText={(t) => { setUrl(t); setError(null); }}
@@ -102,6 +104,8 @@ export default function Setup() {
         <Pressable
           style={({ pressed }) => [s.btn, pressed && { opacity: 0.82 }]}
           onPress={handleConnect}
+          testID="connect-button"
+          accessibilityLabel="Connect"
           disabled={testing}
         >
           {testing ? (

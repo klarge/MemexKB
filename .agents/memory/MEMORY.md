@@ -30,3 +30,4 @@
 - [Personal task due dates](task-due-date-policy.md) — match card-date behavior; task reminder emails are a separate opt-in with shared advance timing.
 - [Request security compatibility](request-security-compatibility.md) — coordinate browser uploads, native cookie sessions and signed SAML posts before changing the CSRF protocol.
 - [Android product goals](android-product-goals.md) — Android should approach web feature parity with native Android behavior and offline KB access, delivered through the Android action.
+- [Expo image adapter](expo-image-adapter.md) — keep hardened parsing compatible with Expo filenames and Metro cross-realm bytes; verify native export, not only web/type checks.

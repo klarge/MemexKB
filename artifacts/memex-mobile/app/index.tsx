@@ -1,8 +1,10 @@
 import { Redirect } from 'expo-router';
 import { useApp } from '@/context/AppContext';
+import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
-  const { serverUrl, user } = useApp();
+  const { serverUrl, user, isHydrating } = useApp();
+  if (isHydrating) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
 
   if (!serverUrl) {
     return <Redirect href="/setup" />;
@@ -10,5 +12,5 @@ export default function Index() {
   if (!user) {
     return <Redirect href="/login" />;
   }
-  return <Redirect href="/(tabs)/" />;
+  return <Redirect href="/(tabs)" />;
 }

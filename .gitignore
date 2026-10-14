@@ -50,4 +50,7 @@ Thumbs.db
 .pythonlibs/
 
 # Workflows, need to be added manually
-.github/workflows
+.github/workflows/*
+!.github/workflows/build-android.yml
+/generated-artifacts/
+/artifacts/memex-mobile/android/

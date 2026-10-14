@@ -18,14 +18,21 @@ import { useApp, type CachedArticle } from '@/context/AppContext';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { BottomTabBar } from '@/components/BottomTabBar';
+import { saveLabel, saveState } from '@/components/offlineStatus';
+import { confirmLocalRemoval } from '@/components/confirmLocalRemoval';
 
 // ─── Article card ─────────────────────────────────────────────────────────────
 
-function ArticleCard({ article, onPress }: { article: CachedArticle; onPress: () => void }) {
+function ArticleCard({ article, onPress, onDownload, onRemove, canDownload, busy }: {
+  article: CachedArticle; onPress: () => void; onDownload: () => void; onRemove: () => void; canDownload: boolean; busy: boolean;
+}) {
   const colors = useColors();
   const s = cardStyles(colors);
+  const state = saveState(article);
   return (
-    <Pressable style={({ pressed }) => [s.card, pressed && { opacity: 0.75 }]} onPress={onPress}>
+    <View style={s.cardWrap}>
+    <Pressable style={({ pressed }) => [s.card, pressed && { opacity: 0.75 }]} onPress={onPress}
+      accessibilityRole="button" accessibilityLabel={`${article.title}. ${saveLabel(article)}`} testID={`article-${article.slug}`}>
       <View style={s.iconBox}>
         {article.isRestricted
           ? <Feather name="lock" size={16} color={colors.primary} />
@@ -53,19 +60,40 @@ function ArticleCard({ article, onPress }: { article: CachedArticle; onPress: ()
       </View>
       <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
     </Pressable>
+    <View style={s.statusRow}>
+      <Text style={[s.statusText, state === 'saved' && { color: colors.primary }]} numberOfLines={2}>{saveLabel(article)}</Text>
+      {state !== 'saved' && (
+        <Pressable style={[s.smallBtn, (!canDownload || busy) && { opacity: 0.5 }]} onPress={onDownload} disabled={!canDownload || busy}
+          accessibilityRole="button" accessibilityLabel={`${state === 'none' ? 'Download' : state === 'stale' ? 'Update' : 'Retry download of'} ${article.title}`}
+          testID={`download-${article.slug}`}>
+          <Text style={s.smallBtnText}>{state === 'none' ? 'Download' : state === 'stale' ? 'Update' : 'Retry'}</Text>
+        </Pressable>
+      )}
+      {state !== 'none' && (
+        <Pressable style={s.smallBtnGhost} onPress={onRemove} accessibilityRole="button"
+          accessibilityLabel={`Remove local download of ${article.title}`} testID={`remove-${article.slug}`}>
+          <Text style={s.smallBtnGhostText}>Remove</Text>
+        </Pressable>
+      )}
+    </View>
+    </View>
   );
 }
 
 const cardStyles = (c: ReturnType<typeof useColors>) =>
   StyleSheet.create({
+    cardWrap: { backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
+    statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 10, paddingLeft: 64 },
+    statusText: { flex: 1, fontSize: 11, color: c.mutedForeground, fontFamily: 'Inter_400Regular' },
+    smallBtn: { backgroundColor: c.primary, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
+    smallBtnText: { color: '#fff', fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+    smallBtnGhost: { backgroundColor: c.muted, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
+    smallBtnGhostText: { color: c.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
     card: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 14,
       paddingHorizontal: 16,
-      backgroundColor: c.card,
-      borderBottomWidth: 1,
-      borderBottomColor: c.border,
       gap: 12,
     },
     iconBox: {
@@ -105,9 +133,12 @@ export default function ArticleList() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    user, sessionCookie, logout, cachedArticles, cachedTags, isOnline, isSyncing, syncProgress,
-    syncArticles, lastSyncedAt,
+    user, sessionCookie, serverUrl, logout, cachedArticles, cachedTags, isOnline, isSyncing, syncProgress,
+    syncArticles, lastSyncedAt, downloadAllArticles, downloadArticle, removeDownload, clearDownloads, downloadError, isHydrating,
   } = useApp();
+  const [filter, setFilter] = useState<'all' | 'downloaded'>('all');
+  const [busySlug, setBusySlug] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
@@ -116,15 +147,17 @@ export default function ArticleList() {
   // Every authenticated identity gets an authoritative online sync, even when
   // its persisted cache is non-empty, so revoked access is pruned promptly.
   useEffect(() => {
-    const identity = user && sessionCookie ? `${user.id}:${sessionCookie}` : null;
+    if (!isOnline) { initiallySyncedIdentityRef.current = null; return; }
+    const identity = user && sessionCookie ? `${serverUrl}:${user.id}:${sessionCookie}` : null;
     if (isOnline && identity && initiallySyncedIdentityRef.current !== identity) {
       initiallySyncedIdentityRef.current = identity;
       syncArticles();
     }
-  }, [isOnline, user, sessionCookie, syncArticles]);
+  }, [isOnline, user, sessionCookie, serverUrl, syncArticles]);
 
   const filtered = useMemo(() => {
-    let list = cachedArticles;
+    let list = [...cachedArticles];
+    if (filter === 'downloaded') list = list.filter((a) => a.contentCached);
     if (selectedTagId !== null) {
       list = list.filter((a) => a.tags.some((t) => t.id === selectedTagId));
     }
@@ -133,7 +166,19 @@ export default function ArticleList() {
       list = list.filter((a) => a.searchText.includes(q) || a.title.toLowerCase().includes(q));
     }
     return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [cachedArticles, search, selectedTagId]);
+  }, [cachedArticles, search, selectedTagId, filter]);
+
+  const downloadedCount = cachedArticles.filter((a) => a.contentCached).length;
+  const partialCount = cachedArticles.filter((a) => ['partial', 'stale'].includes(saveState(a))).length;
+  const runDownload = async (slug: string) => {
+    setBusySlug(slug); setActionError(null);
+    try { await downloadArticle(slug); } catch (e) { setActionError(e instanceof Error ? e.message : 'Download failed.'); }
+    finally { setBusySlug(null); }
+  };
+  const confirmRemove = (a: CachedArticle) => confirmLocalRemoval('Remove download', `Delete the saved copy of "${a.title}" from this device?`,
+    () => removeDownload(a.slug), setActionError);
+  const confirmClear = () => confirmLocalRemoval('Clear all downloads', 'Delete every saved article and image on this device? The article list stays; you can download again while online.',
+    clearDownloads, setActionError);
 
   const handleLogout = async () => {
     await logout();
@@ -156,9 +201,14 @@ export default function ArticleList() {
       <ArticleCard
         article={item}
         onPress={() => router.push(`/(tabs)/article/${item.slug}`)}
+        onDownload={() => { void runDownload(item.slug); }}
+        onRemove={() => confirmRemove(item)}
+        canDownload={isOnline}
+        busy={busySlug === item.slug || isSyncing}
       />
     ),
-    [router],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router, isOnline, busySlug, isSyncing, downloadArticle, removeDownload],
   );
 
   const keyExtractor = useCallback((item: CachedArticle) => item.slug, []);
@@ -179,7 +229,7 @@ export default function ArticleList() {
               <Text style={s.offlineText}> Offline</Text>
             </View>
           )}
-          <Pressable onPress={handleLogout} style={s.logoutBtn} hitSlop={8}>
+          <Pressable onPress={handleLogout} style={s.logoutBtn} hitSlop={8} accessibilityRole="button" accessibilityLabel="Sign out" testID="sign-out">
             <Feather name="log-out" size={18} color={colors.mutedForeground} />
           </Pressable>
         </View>
@@ -196,10 +246,44 @@ export default function ArticleList() {
           </Text>
         )}
 
+        <Text style={s.lastSync} testID="download-summary">
+          {downloadedCount} of {cachedArticles.length} saved offline{partialCount ? ` · ${partialCount} partial or out of date` : ''}
+          {!isOnline ? ' · Offline: only saved articles open. Offline access lasts up to 7 days after sign-in and ends on sign-out or server change; revoked access is only detected when you reconnect.' : ''}
+        </Text>
+        <Text style={s.lastSync}>External sites, external images and interactive editors are unavailable in the reader.</Text>
+        {(downloadError || actionError) ? (
+          <Text style={[s.syncText, { color: colors.destructive }]} accessibilityLiveRegion="polite" testID="download-error">{downloadError ?? actionError}</Text>
+        ) : null}
+        <View style={s.actionRow}>
+          <Pressable style={[s.pill, (!isOnline || isSyncing) && { opacity: 0.5 }]} disabled={!isOnline || isSyncing} onPress={() => { void syncArticles(); }}
+            accessibilityRole="button" accessibilityLabel="Refresh saved articles" testID="refresh-saved-button">
+            <Feather name="refresh-cw" size={13} color={colors.foreground} /><Text style={s.pillText}>Refresh saved</Text>
+          </Pressable>
+          <Pressable style={[s.pill, s.pillPrimary, (!isOnline || isSyncing) && { opacity: 0.5 }]} disabled={!isOnline || isSyncing} onPress={() => { void downloadAllArticles(); }}
+            accessibilityRole="button" accessibilityLabel="Download all articles" testID="download-all-button">
+            <Feather name="download" size={13} color="#fff" /><Text style={[s.pillText, { color: '#fff' }]}>Download all</Text>
+          </Pressable>
+          <Pressable style={[s.pill, downloadedCount === 0 && { opacity: 0.5 }]} disabled={downloadedCount === 0 || isSyncing} onPress={confirmClear}
+            accessibilityRole="button" accessibilityLabel="Clear downloads" testID="clear-downloads-button">
+            <Feather name="trash-2" size={13} color={colors.foreground} /><Text style={s.pillText}>Clear</Text>
+          </Pressable>
+        </View>
+        <View style={s.actionRow}>
+          {(['all', 'downloaded'] as const).map((f) => (
+            <Pressable key={f} style={[s.pill, filter === f && s.pillPrimary]} onPress={() => setFilter(f)}
+              accessibilityRole="button" accessibilityState={{ selected: filter === f }} accessibilityLabel={f === 'all' ? 'Show all articles' : 'Show downloaded articles'}
+              testID={`filter-${f}`}>
+              <Text style={[s.pillText, filter === f && { color: '#fff' }]}>{f === 'all' ? 'All' : 'Downloaded'}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         {/* Search */}
         <View style={s.searchRow}>
           <Feather name="search" size={15} color={colors.mutedForeground} style={s.searchIcon} />
           <TextInput
+            testID="article-search"
+            accessibilityLabel="Search saved articles"
             style={s.searchInput}
             value={search}
             onChangeText={setSearch}
@@ -244,21 +328,39 @@ export default function ArticleList() {
       </View>
 
       {/* Article list / empty states */}
-      {cachedArticles.length === 0 && !isSyncing ? (
+      {isHydrating ? (
+        <View style={s.empty}><ActivityIndicator color={colors.primary} /><Text style={s.emptySub}>Loading saved articles…</Text></View>
+      ) : cachedArticles.length === 0 && !isSyncing ? (
         <View style={s.empty}>
           <Feather name="book-open" size={40} color={colors.mutedForeground} />
           <Text style={s.emptyTitle}>No articles</Text>
           <Text style={s.emptySub}>
             {isOnline
-              ? 'Pull down to sync your Memex instance.'
+              ? 'Sync your Memex instance to list articles.'
               : 'Connect to your Memex server to sync articles.'}
           </Text>
+          {isOnline && (
+            <Pressable style={s.emptyBtn} onPress={() => { void syncArticles(); }} accessibilityRole="button" testID="empty-sync-button">
+              <Text style={s.emptyBtnText}>Sync articles</Text>
+            </Pressable>
+          )}
         </View>
       ) : filtered.length === 0 && !isSyncing ? (
         <View style={s.empty}>
           <Feather name="search" size={36} color={colors.mutedForeground} />
           <Text style={s.emptyTitle}>No results</Text>
-          <Text style={s.emptySub}>Try a different search or tag.</Text>
+          <Text style={s.emptySub}>
+            {filter === 'downloaded' ? 'No downloaded articles match. Download articles to read them offline.' : 'Try a different search or tag.'}
+          </Text>
+          <Pressable style={s.emptyBtn} testID="empty-reset-button" accessibilityRole="button"
+            onPress={() => { setSearch(''); setSelectedTagId(null); setFilter('all'); }}>
+            <Text style={s.emptyBtnText}>Reset filters</Text>
+          </Pressable>
+          {filter === 'downloaded' && isOnline && (
+            <Pressable style={s.emptyBtn} testID="empty-download-all" accessibilityRole="button" onPress={() => { void downloadAllArticles(); }}>
+              <Text style={s.emptyBtnText}>Download all</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <FlatList
@@ -334,6 +436,12 @@ const styles = (c: ReturnType<typeof useColors>, insets: ReturnType<typeof useSa
       color: c.foreground,
       height: '100%',
     },
+    actionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.muted, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+    pillPrimary: { backgroundColor: c.primary },
+    pillText: { fontSize: 12, color: c.foreground, fontFamily: 'Inter_600SemiBold' },
+    emptyBtn: { marginTop: 6, backgroundColor: c.primary, borderRadius: c.radius, paddingHorizontal: 18, paddingVertical: 10 },
+    emptyBtnText: { color: '#fff', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
     tagFilterRow: { paddingRight: 4, gap: 6, flexDirection: 'row' },
     tagChip: {
       borderWidth: 1,

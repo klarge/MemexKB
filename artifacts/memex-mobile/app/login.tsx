@@ -38,7 +38,7 @@ export default function Login() {
     try {
       await login(email.trim(), password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/(tabs)/');
+      router.replace('/(tabs)');
     } catch (e: unknown) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(e instanceof Error ? e.message : 'Login failed');
@@ -79,6 +79,8 @@ export default function Login() {
       <View style={s.fields}>
         <Text style={s.label}>Email</Text>
         <TextInput
+          testID="login-email"
+          accessibilityLabel="Email"
           style={s.input}
           value={email}
           onChangeText={(t) => { setEmail(t); setError(null); }}
@@ -94,6 +96,8 @@ export default function Login() {
         <Text style={[s.label, { marginTop: 14 }]}>Password</Text>
         <View style={s.passwordRow}>
           <TextInput
+            testID="login-password"
+            accessibilityLabel="Password"
             style={[s.input, { flex: 1, marginBottom: 0 }]}
             value={password}
             onChangeText={(t) => { setPassword(t); setError(null); }}
@@ -119,6 +123,8 @@ export default function Login() {
         <Pressable
           style={({ pressed }) => [s.btn, pressed && { opacity: 0.82 }]}
           onPress={handleLogin}
+          testID="sign-in-button"
+          accessibilityLabel="Sign in"
           disabled={loading}
         >
           {loading

@@ -5,5 +5,5 @@ export interface ISizeCalculationResult {
   orientation?: number;
 }
 
-export declare function imageSize(input: Uint8Array): ISizeCalculationResult;
+export declare function imageSize(input: Uint8Array | string): ISizeCalculationResult;
 export default imageSize;
