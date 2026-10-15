@@ -26,6 +26,67 @@ tags:
   - name: tasks
     description: Personal task lists, due dates, and dashboard
 paths:
+  /admin/media:
+    get:
+      operationId: listAdminMedia
+      tags: [admin]
+      summary: List uploaded images and usage (administrators only)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [all, current, history, recent, unused], default: all }
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Image metadata and usage totals
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminMediaList" }
+        "400": { description: Invalid filters }
+        "401": { description: Sign-in required }
+        "403": { description: Administrator required }
+  /admin/media/cleanup-preview:
+    post:
+      operationId: previewAdminMediaCleanup
+      tags: [admin]
+      summary: Preview all unreferenced images older than seven days; deletes nothing
+      responses:
+        "200":
+          description: Session-bound ten-minute cleanup preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminMediaCleanupPreview" }
+        "401": { description: Sign-in required }
+        "403": { description: Administrator required }
+        "409": { description: Too many candidates to safely preview }
+  /admin/media/cleanup:
+    post:
+      operationId: cleanupAdminMedia
+      tags: [admin]
+      summary: Recheck and delete only images approved in the preview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminMediaCleanupInput" }
+      responses:
+        "200":
+          description: Deletion results after fresh safety checks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminMediaCleanupResult" }
+        "400": { description: Explicit confirmation required }
+        "401": { description: Sign-in required }
+        "403": { description: Administrator required }
+        "409": { description: Preview expired or unavailable; preview again }
   /auth/providers:
     get:
       operationId: getAuthProviders
@@ -1722,6 +1783,63 @@ components:
         type: integer
 
   schemas:
+    AdminMediaImage:
+      type: object
+      required: [id, filename, mimeType, sizeBytes, storedBytes, createdAt, uploadedByName, articleTitle, articleSlug, status, currentReferences, historyReferences]
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, description: Original image bytes }
+        storedBytes: { type: integer, description: Logical base64 bytes, not physical disk usage }
+        createdAt: { type: string, format: date-time }
+        uploadedByName: { type: ["string", "null"] }
+        articleTitle: { type: ["string", "null"] }
+        articleSlug: { type: ["string", "null"] }
+        status: { type: string, enum: [current, history, recent, unused] }
+        currentReferences: { type: integer }
+        historyReferences: { type: integer }
+    AdminMediaSummary:
+      type: object
+      required: [total, current, history, recent, unused, totalBytes, unusedBytes, gracePeriodDays]
+      properties:
+        total: { type: integer }
+        current: { type: integer }
+        history: { type: integer }
+        recent: { type: integer }
+        unused: { type: integer }
+        totalBytes: { type: integer, description: Logical stored base64 bytes }
+        unusedBytes: { type: integer, description: Logical stored base64 bytes eligible for cleanup }
+        gracePeriodDays: { type: integer }
+    AdminMediaList:
+      type: object
+      required: [images, total, summary]
+      properties:
+        images: { type: array, items: { $ref: "#/components/schemas/AdminMediaImage" } }
+        total: { type: integer, description: Matching count after filters }
+        summary: { $ref: "#/components/schemas/AdminMediaSummary" }
+    AdminMediaCleanupPreview:
+      type: object
+      required: [previewId, count, reclaimableBytes, expiresAt, gracePeriodDays]
+      properties:
+        previewId: { type: string }
+        count: { type: integer }
+        reclaimableBytes: { type: integer, description: Logical stored bytes, not guaranteed disk-space reduction }
+        expiresAt: { type: string, format: date-time }
+        gracePeriodDays: { type: integer }
+    AdminMediaCleanupInput:
+      type: object
+      required: [previewId, confirmation]
+      properties:
+        previewId: { type: string, minLength: 1 }
+        confirmation: { type: string, enum: ["DELETE UNUSED MEDIA"] }
+    AdminMediaCleanupResult:
+      type: object
+      required: [deletedCount, skippedCount, reclaimedBytes]
+      properties:
+        deletedCount: { type: integer }
+        skippedCount: { type: integer }
+        reclaimedBytes: { type: integer, description: Logical stored bytes deleted }
     MobileSsoStart:
       type: object
       additionalProperties: false

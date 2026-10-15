@@ -8,6 +8,14 @@
 
 export * from './adminImportInput';
 export * from './adminImportResponse';
+export * from './adminMediaCleanupInput';
+export * from './adminMediaCleanupInputConfirmation';
+export * from './adminMediaCleanupPreview';
+export * from './adminMediaCleanupResult';
+export * from './adminMediaImage';
+export * from './adminMediaImageStatus';
+export * from './adminMediaList';
+export * from './adminMediaSummary';
 export * from './adminRestoreCounts';
 export * from './adminRestoreInput';
 export * from './adminRestoreOwner';
@@ -71,6 +79,8 @@ export * from './groupUpdate';
 export * from './healthStatus';
 export * from './imageUploadInput';
 export * from './imageUploadResponse';
+export * from './listAdminMediaParams';
+export * from './listAdminMediaStatus';
 export * from './listArticlesKind';
 export * from './listArticlesMaintenanceParams';
 export * from './listArticlesOrder';

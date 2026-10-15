@@ -5,6 +5,85 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export type AdminMediaImageStatus = typeof AdminMediaImageStatus[keyof typeof AdminMediaImageStatus];
+
+
+export const AdminMediaImageStatus = {
+  current: 'current',
+  history: 'history',
+  recent: 'recent',
+  unused: 'unused',
+} as const;
+
+export interface AdminMediaImage {
+  id: number;
+  filename: string;
+  mimeType: string;
+  /** Original image bytes */
+  sizeBytes: number;
+  /** Logical base64 bytes */
+  storedBytes: number;
+  createdAt: string;
+  /** @nullable */
+  uploadedByName: string | null;
+  /** @nullable */
+  articleTitle: string | null;
+  /** @nullable */
+  articleSlug: string | null;
+  status: AdminMediaImageStatus;
+  currentReferences: number;
+  historyReferences: number;
+}
+
+export interface AdminMediaSummary {
+  total: number;
+  current: number;
+  history: number;
+  recent: number;
+  unused: number;
+  /** Logical stored base64 bytes */
+  totalBytes: number;
+  /** Logical stored base64 bytes eligible for cleanup */
+  unusedBytes: number;
+  gracePeriodDays: number;
+}
+
+export interface AdminMediaList {
+  images: AdminMediaImage[];
+  /** Matching count after filters */
+  total: number;
+  summary: AdminMediaSummary;
+}
+
+export interface AdminMediaCleanupPreview {
+  previewId: string;
+  count: number;
+  /** Logical stored bytes */
+  reclaimableBytes: number;
+  expiresAt: string;
+  gracePeriodDays: number;
+}
+
+export type AdminMediaCleanupInputConfirmation = typeof AdminMediaCleanupInputConfirmation[keyof typeof AdminMediaCleanupInputConfirmation];
+
+
+export const AdminMediaCleanupInputConfirmation = {
+  DELETE_UNUSED_MEDIA: 'DELETE UNUSED MEDIA',
+} as const;
+
+export interface AdminMediaCleanupInput {
+  /** @minLength 1 */
+  previewId: string;
+  confirmation: AdminMediaCleanupInputConfirmation;
+}
+
+export interface AdminMediaCleanupResult {
+  deletedCount: number;
+  skippedCount: number;
+  /** Logical stored bytes deleted */
+  reclaimedBytes: number;
+}
+
 export interface MobileSsoStart {
   /** @minimum 1 */
   providerId: number;
@@ -866,6 +945,34 @@ export interface ApiTokenCreated {
   /** @nullable */
   expiresAt?: string | null;
 }
+
+export type ListAdminMediaParams = {
+status?: ListAdminMediaStatus;
+/**
+ * @maxLength 200
+ */
+search?: string;
+/**
+ * @minimum 0
+ */
+offset?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListAdminMediaStatus = typeof ListAdminMediaStatus[keyof typeof ListAdminMediaStatus];
+
+
+export const ListAdminMediaStatus = {
+  all: 'all',
+  current: 'current',
+  history: 'history',
+  recent: 'recent',
+  unused: 'unused',
+} as const;
 
 export type GetAuthProviders200ItemProvider = typeof GetAuthProviders200ItemProvider[keyof typeof GetAuthProviders200ItemProvider];
 

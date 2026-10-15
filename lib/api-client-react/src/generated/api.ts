@@ -22,6 +22,10 @@ import type {
 import type {
   AdminImportInput,
   AdminImportResponse,
+  AdminMediaCleanupInput,
+  AdminMediaCleanupPreview,
+  AdminMediaCleanupResult,
+  AdminMediaList,
   AdminRestoreInput,
   AdminRestorePreview,
   AdminRestorePreviewInput,
@@ -59,6 +63,7 @@ import type {
   HealthStatus,
   ImageUploadInput,
   ImageUploadResponse,
+  ListAdminMediaParams,
   ListArticlesMaintenanceParams,
   ListArticlesParams,
   LoginInput,
@@ -121,6 +126,244 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListAdminMediaUrl = (params?: ListAdminMediaParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/media?${stringifiedParams}` : `/api/admin/media`
+}
+
+/**
+ * @summary List uploaded images and usage (administrators only)
+ */
+export const listAdminMedia = async (params?: ListAdminMediaParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminMediaList> => {
+
+  return customFetch<AdminMediaList>(getListAdminMediaUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminMediaQueryKey = (params?: ListAdminMediaParams,) => {
+    return [
+    `/api/admin/media`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAdminMediaQueryOptions = <TData = Awaited<ReturnType<typeof listAdminMedia>>, TError = ErrorType<void>>(params?: ListAdminMediaParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminMediaQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminMedia>>> = ({ signal }) => listAdminMedia(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminMedia>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminMediaQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminMedia>>>
+export type ListAdminMediaQueryError = ErrorType<void>
+
+
+/**
+ * @summary List uploaded images and usage (administrators only)
+ */
+
+export function useListAdminMedia<TData = Awaited<ReturnType<typeof listAdminMedia>>, TError = ErrorType<void>>(
+ params?: ListAdminMediaParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminMediaQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPreviewAdminMediaCleanupUrl = () => {
+
+
+
+
+  return `/api/admin/media/cleanup-preview`
+}
+
+/**
+ * @summary Preview all unreferenced images older than seven days; deletes nothing
+ */
+export const previewAdminMediaCleanup = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminMediaCleanupPreview> => {
+
+  return customFetch<AdminMediaCleanupPreview>(getPreviewAdminMediaCleanupUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewAdminMediaCleanupMutationKey = () => ['previewAdminMediaCleanup'] as const;
+
+export const getPreviewAdminMediaCleanupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewAdminMediaCleanup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewAdminMediaCleanup>>, TError,void, TContext> => {
+
+const mutationKey = getPreviewAdminMediaCleanupMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewAdminMediaCleanup>>, void> = () => {
+
+
+          return  previewAdminMediaCleanup(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewAdminMediaCleanupMutationResult = NonNullable<Awaited<ReturnType<typeof previewAdminMediaCleanup>>>
+
+    export type PreviewAdminMediaCleanupMutationError = ErrorType<void>
+
+
+    /**
+ * @summary Preview all unreferenced images older than seven days; deletes nothing
+ */
+export const usePreviewAdminMediaCleanup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewAdminMediaCleanup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewAdminMediaCleanup>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPreviewAdminMediaCleanupMutationOptions(options));
+    }
+
+export const getCleanupAdminMediaUrl = () => {
+
+
+
+
+  return `/api/admin/media/cleanup`
+}
+
+/**
+ * @summary Recheck and delete only images approved in the preview
+ */
+export const cleanupAdminMedia = async (adminMediaCleanupInput: AdminMediaCleanupInput, options?: Parameters<typeof customFetch>[1]): Promise<AdminMediaCleanupResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AdminMediaCleanupResult>(getCleanupAdminMediaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminMediaCleanupInput)
+  }
+);}
+
+
+
+
+
+export const getCleanupAdminMediaMutationKey = () => ['cleanupAdminMedia'] as const;
+
+export const getCleanupAdminMediaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cleanupAdminMedia>>, TError,CleanupAdminMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cleanupAdminMedia>>, TError,CleanupAdminMediaMutationVariables, TContext> => {
+
+const mutationKey = getCleanupAdminMediaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cleanupAdminMedia>>, CleanupAdminMediaMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  cleanupAdminMedia(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CleanupAdminMediaMutationResult = NonNullable<Awaited<ReturnType<typeof cleanupAdminMedia>>>
+    export type CleanupAdminMediaMutationBody = BodyType<AdminMediaCleanupInput>
+    export type CleanupAdminMediaMutationError = ErrorType<void>
+    export type CleanupAdminMediaMutationVariables = {data: BodyType<AdminMediaCleanupInput>}
+
+    /**
+ * @summary Recheck and delete only images approved in the preview
+ */
+export const useCleanupAdminMedia = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cleanupAdminMedia>>, TError,CleanupAdminMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cleanupAdminMedia>>,
+        TError,
+        CleanupAdminMediaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCleanupAdminMediaMutationOptions(options));
+    }
 
 export const getGetAuthProvidersUrl = () => {
 

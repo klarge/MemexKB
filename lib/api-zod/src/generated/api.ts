@@ -9,6 +9,86 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary List uploaded images and usage (administrators only)
+ */
+export const listAdminMediaQueryStatusDefault = `all`;
+export const listAdminMediaQuerySearchMax = 200;
+
+export const listAdminMediaQueryOffsetDefault = 0;
+export const listAdminMediaQueryOffsetMin = 0;
+
+export const listAdminMediaQueryLimitDefault = 20;
+export const listAdminMediaQueryLimitMax = 100;
+
+
+
+export const ListAdminMediaQueryParams = zod.object({
+  "status": zod.enum(['all', 'current', 'history', 'recent', 'unused']).default(listAdminMediaQueryStatusDefault),
+  "search": zod.coerce.string().max(listAdminMediaQuerySearchMax).optional(),
+  "offset": zod.coerce.number().int().min(listAdminMediaQueryOffsetMin).default(listAdminMediaQueryOffsetDefault),
+  "limit": zod.coerce.number().int().min(1).max(listAdminMediaQueryLimitMax).default(listAdminMediaQueryLimitDefault)
+})
+
+export const ListAdminMediaResponse = zod.object({
+  "images": zod.array(zod.object({
+  "id": zod.number().int(),
+  "filename": zod.string(),
+  "mimeType": zod.string(),
+  "sizeBytes": zod.number().int().describe('Original image bytes'),
+  "storedBytes": zod.number().int().describe('Logical base64 bytes'),
+  "createdAt": zod.coerce.date(),
+  "uploadedByName": zod.string().nullable(),
+  "articleTitle": zod.string().nullable(),
+  "articleSlug": zod.string().nullable(),
+  "status": zod.enum(['current', 'history', 'recent', 'unused']),
+  "currentReferences": zod.number().int(),
+  "historyReferences": zod.number().int()
+})),
+  "total": zod.number().int().describe('Matching count after filters'),
+  "summary": zod.object({
+  "total": zod.number().int(),
+  "current": zod.number().int(),
+  "history": zod.number().int(),
+  "recent": zod.number().int(),
+  "unused": zod.number().int(),
+  "totalBytes": zod.number().int().describe('Logical stored base64 bytes'),
+  "unusedBytes": zod.number().int().describe('Logical stored base64 bytes eligible for cleanup'),
+  "gracePeriodDays": zod.number().int()
+})
+})
+
+
+/**
+ * @summary Preview all unreferenced images older than seven days; deletes nothing
+ */
+export const PreviewAdminMediaCleanupResponse = zod.object({
+  "previewId": zod.string(),
+  "count": zod.number().int(),
+  "reclaimableBytes": zod.number().int().describe('Logical stored bytes'),
+  "expiresAt": zod.coerce.date(),
+  "gracePeriodDays": zod.number().int()
+})
+
+
+/**
+ * @summary Recheck and delete only images approved in the preview
+ */
+
+
+
+export const CleanupAdminMediaBody = zod.object({
+  "previewId": zod.string().min(1),
+  "confirmation": zod.enum(['DELETE UNUSED MEDIA'])
+})
+
+export const CleanupAdminMediaResponse = zod.object({
+  "deletedCount": zod.number().int(),
+  "skippedCount": zod.number().int(),
+  "reclaimedBytes": zod.number().int().describe('Logical stored bytes deleted')
+})
+
+
+/**
  * @summary List enabled sign-in providers
  */
 export const GetAuthProvidersResponseItem = zod.object({

@@ -26,6 +26,7 @@ import TemplateEdit from "@/pages/template-edit";
 import AdminSso from "@/pages/admin-sso";
 import AdminCustomization from "@/pages/admin-customization";
 import AdminTags from "@/pages/admin-tags";
+import AdminMaintenance from "@/pages/admin-maintenance";
 import AdminNotifications from "@/pages/admin-notifications";
 import LogPage from "@/pages/log";
 import TasksPage from "@/pages/tasks";
@@ -278,6 +279,12 @@ function Router() {
       <Route path="/admin/tags">
         <AuthRoute adminOnly>
           <AdminTags />
+        </AuthRoute>
+      </Route>
+
+      <Route path="/admin/maintenance">
+        <AuthRoute adminOnly>
+          <AdminMaintenance />
         </AuthRoute>
       </Route>
 

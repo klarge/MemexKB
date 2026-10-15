@@ -35,3 +35,4 @@
 - [Native reader links](native-reader-links.md) — rendered anchors normalize before callbacks; test real reader links and resolve them against the trusted server.
 - [Native SSO boundaries](native-sso-handoff.md) — app schemes are not identity proof; use PKCE and HTTPS, and correlate mobile SAML without relying on browser cookies.
 - [Article history durability](article-history-durability.md) — reduce history density without reducing autosave durability; deliberate checkpoints and old history remain fixed.
+- [Media cleanup safety](media-cleanup-safety.md) — admin-reviewed cleanup protects saved/history/diagram dependencies; reference scanning and write barriers must evolve together.
