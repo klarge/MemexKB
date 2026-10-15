@@ -35,6 +35,7 @@ import TurndownService from "turndown";
 import { preserveCitationHtml } from "../lib/citation-export";
 import { preserveDiagramHtml } from "../lib/diagram-export";
 import { isContentKind, validateSteps, contentWithSteps } from "../lib/content-kinds";
+import { saveArticleVersion } from "../lib/article-versions";
 
 const router = Router();
 const WIKILINK_MUTATION_LOCK = 824199;
@@ -973,6 +974,11 @@ router.patch("/articles/:slug/slug", requireAuth, requireRole("admin"), async (r
 
 router.patch("/articles/:slug", requireAuth, async (req, res) => {
   const slug = String(req.params.slug);
+  const saveMode = req.body.saveMode ?? "manual";
+  if (saveMode !== "manual" && saveMode !== "autosave") {
+    res.status(400).json({ error: "saveMode must be manual or autosave" });
+    return;
+  }
   const { title, content, groupIds, tagIds, isStatic, visibility: requestedVisibility } = req.body;
   if (!(await hasLogSlugColumn())) {
     const [legacyArticle] = await db
@@ -1045,7 +1051,6 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
   if (visibilityUpdate) updates.visibility = visibilityUpdate;
   if (isStatic !== undefined) updates.isStatic = isStatic;
   let article;
-  let versionCreated = false;
   if (sanitizedContent !== undefined || req.body.procedureSteps !== undefined || req.body.policySubjectId !== undefined) {
     try {
       article = await db.transaction(async (tx) => {
@@ -1073,19 +1078,7 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
             .onConflictDoNothing();
         }
 
-        const [versionCount] = await tx
-          .select({ c: count() })
-          .from(articleVersionsTable)
-          .where(eq(articleVersionsTable.articleId, updatedArticle.id));
-        await tx.insert(articleVersionsTable).values({
-          articleId: updatedArticle.id,
-          versionNumber: Number(versionCount?.c ?? 0) + 1,
-          title: updatedArticle.title,
-          content: updatedArticle.content,
-          policySubjectId: updatedArticle.policySubjectId,
-          procedureSteps: updatedArticle.procedureSteps,
-          createdById: req.session.userId ?? null,
-        });
+        await saveArticleVersion(tx, updatedArticle, req.session.userId ?? null, saveMode);
         return updatedArticle;
       });
     } catch (error) {
@@ -1095,13 +1088,17 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
       }
       throw error;
     }
-    versionCreated = article !== null;
     if (!article) {
       res.status(409).json({ error: "This article's URL changed while it was being saved. Reload and try again." });
       return;
     }
   } else {
-    [article] = await db.update(articlesTable).set(updates).where(eq(articlesTable.slug, slug)).returning();
+    article = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${WIKILINK_MUTATION_LOCK})`);
+      const [updated] = await tx.update(articlesTable).set(updates).where(eq(articlesTable.slug, slug)).returning();
+      if (updated) await saveArticleVersion(tx, updated, req.session.userId ?? null, saveMode);
+      return updated;
+    });
   }
   if (!article) {
     res.status(409).json({ error: "This article's URL changed while it was being saved. Reload and try again." });
@@ -1117,24 +1114,6 @@ router.patch("/articles/:slug", requireAuth, async (req, res) => {
 
   if (tagIds !== undefined && Array.isArray(tagIds)) {
     await setArticleTags(article.id, tagIds);
-  }
-
-  // Snapshot new version
-  if (!versionCreated) {
-    const [versionCount] = await db
-      .select({ c: count() })
-      .from(articleVersionsTable)
-      .where(eq(articleVersionsTable.articleId, article.id));
-    const nextVersionNumber = Number(versionCount?.c ?? 0) + 1;
-    await db.insert(articleVersionsTable).values({
-      articleId: article.id,
-      versionNumber: nextVersionNumber,
-      title: article.title,
-      content: article.content,
-      policySubjectId: article.policySubjectId,
-      procedureSteps: article.procedureSteps,
-      createdById: req.session.userId ?? null,
-    });
   }
 
   const groups = await getArticleGroups(article.id);
@@ -1923,19 +1902,7 @@ router.post("/articles/:slug/versions/:versionId/restore", requireAuth, async (r
         .onConflictDoNothing();
     }
 
-    const [versionCount] = await tx
-      .select({ c: count() })
-      .from(articleVersionsTable)
-      .where(eq(articleVersionsTable.articleId, currentArticle.id));
-    await tx.insert(articleVersionsTable).values({
-      articleId: currentArticle.id,
-      versionNumber: Number(versionCount?.c ?? 0) + 1,
-      title: updatedArticle.title,
-      content: updatedArticle.content,
-      policySubjectId: updatedArticle.policySubjectId,
-      procedureSteps: updatedArticle.procedureSteps,
-      createdById: req.session.userId ?? null,
-    });
+    await saveArticleVersion(tx, updatedArticle, req.session.userId ?? null, "restore");
     return { status: "updated" as const, article: updatedArticle };
   });
   if (restoreResult.status === "stale") {

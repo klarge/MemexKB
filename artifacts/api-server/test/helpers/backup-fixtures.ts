@@ -46,7 +46,7 @@ export async function seedBackupFixtures() {
   ].map((i) => ({ ...i, uploadedById: 2, createdAt: when })));
   await db.insert(records.articleVersionsTable).values([
     { id: 19, articleId: 12, versionNumber: 1, title: "Before structured steps", content: "<p>Older Knowledge version.</p>", procedureSteps: [], createdById: 2 },
-    { id: 21, articleId: 12, versionNumber: 2, title: "Original procedure", content: "<p>Original introduction.</p>", procedureSteps: sourceSteps, createdById: 2 },
+    { id: 21, articleId: 12, versionNumber: 2, title: "Original procedure", content: "<p>Original introduction.</p>", procedureSteps: sourceSteps, createdById: 2, autosaveStartedAt: when },
     { id: 20, articleId: 11, versionNumber: 1, title: "Original policy", content: "<p>Original policy.</p>", policySubjectId: 8, createdById: 2 },
   ]);
   await db.insert(records.tagsTable).values({ id: 5, name: "Fixture tag", color: "#345678" });

@@ -87,6 +87,8 @@ export const articleVersionsTable = pgTable("article_versions", {
   content: text("content").notNull(),
   policySubjectId: integer("policy_subject_id"),
   procedureSteps: jsonb("procedure_steps").$type<ProcedureStep[]>().notNull().default([]),
+  // Null marks a fixed checkpoint. Existing history is never coalesced.
+  autosaveStartedAt: timestamp("autosave_started_at", { withTimezone: true }),
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),

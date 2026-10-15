@@ -341,6 +341,12 @@ export function MainLayout({ children }: { children: ReactNode }) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-52">
+                <div className="px-2 py-2 text-xs text-muted-foreground space-y-1" data-testid="user-menu-app-info">
+                  <p>{APP_INFO.copyright}</p>
+                  <p>{APP_INFO.license}</p>
+                  <p>Version v{APP_INFO.version}</p>
+                </div>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link
                     href="/settings"
@@ -369,12 +375,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
                   <LogOut className="h-4 w-4" />
                   Log out
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <div className="px-2 py-2 text-xs text-muted-foreground space-y-1" data-testid="user-menu-app-info">
-                  <p>{APP_INFO.copyright}</p>
-                  <p>{APP_INFO.license}</p>
-                  <p>Version v{APP_INFO.version}</p>
-                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarFooter>

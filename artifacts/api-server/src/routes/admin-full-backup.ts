@@ -168,7 +168,7 @@ function validateBackup(value: unknown): asserts value is EnvironmentBackup {
 
 function restoreDates(row: Record<string, unknown>): Record<string, unknown> {
   const dateFields = new Set([
-    "createdAt", "updatedAt", "addedAt", "archivedAt", "completedAt", "dueDate", "expiresAt", "lastUsedAt",
+    "createdAt", "updatedAt", "addedAt", "archivedAt", "completedAt", "dueDate", "expiresAt", "lastUsedAt", "autosaveStartedAt",
   ]);
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [
     key,

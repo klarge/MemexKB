@@ -134,7 +134,16 @@ export default function ArticleHistory({ params, area = "knowledge" }: { params?
     queryKey: ["article-versions", slug],
     queryFn: () => fetchVersions(slug),
     enabled: !!slug && !isLoadingLog,
+    refetchInterval: 30_000,
   });
+  const latestId = versions?.[0]?.id;
+  const latestSavedAt = versions?.[0]?.createdAt;
+  useEffect(() => {
+    // The latest autosave can change without getting a new version ID.
+    if (latestId !== undefined) {
+      queryClient.invalidateQueries({ queryKey: ["article-version", slug, latestId] });
+    }
+  }, [queryClient, slug, latestId, latestSavedAt]);
 
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [compareIds, setCompareIds] = useState<[number, number] | null>(null);
@@ -202,6 +211,11 @@ export default function ArticleHistory({ params, area = "knowledge" }: { params?
             {versions && versions.length > 0 && (
               <> &mdash; article: <strong className="text-foreground">{versions[0].title}</strong></>
             )}
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Autosaves by the same editor are grouped into 5-minute checkpoints.
+            The latest autosave checkpoint may update while editing. Save fixes
+            a checkpoint; editor changes and restores keep separate versions.
           </p>
         </div>
         {selectedForCompare.length === 2 && (

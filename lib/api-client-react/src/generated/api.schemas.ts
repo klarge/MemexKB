@@ -584,7 +584,20 @@ export interface ArticleInput {
   isLogEntry?: boolean;
 }
 
+/**
+ * Autosaves coalesce the same editor's latest autosave within a fixed five-minute window. Manual saves preserve checkpoints.
+ */
+export type ArticleUpdateSaveMode = typeof ArticleUpdateSaveMode[keyof typeof ArticleUpdateSaveMode];
+
+
+export const ArticleUpdateSaveMode = {
+  manual: 'manual',
+  autosave: 'autosave',
+} as const;
+
 export interface ArticleUpdate {
+  /** Autosaves coalesce the same editor's latest autosave within a fixed five-minute window. Manual saves preserve checkpoints. */
+  saveMode?: ArticleUpdateSaveMode;
   /** @nullable */
   policySubjectId?: number | null;
   procedureSteps?: ProcedureStep[];

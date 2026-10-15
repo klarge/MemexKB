@@ -5,10 +5,13 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleUpdateSaveMode } from './articleUpdateSaveMode';
 import type { ArticleVisibility } from './articleVisibility';
 import type { ProcedureStep } from './procedureStep';
 
 export interface ArticleUpdate {
+  /** Autosaves coalesce the same editor's latest autosave within a fixed five-minute window. Manual saves preserve checkpoints. */
+  saveMode?: ArticleUpdateSaveMode;
   /** @nullable */
   policySubjectId?: number | null;
   procedureSteps?: ProcedureStep[];

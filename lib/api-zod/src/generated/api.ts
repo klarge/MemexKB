@@ -1286,12 +1286,13 @@ export const UpdateArticleParams = zod.object({
   "slug": zod.coerce.string()
 })
 
-
+export const updateArticleBodySaveModeDefault = `manual`;
 
 
 
 
 export const UpdateArticleBody = zod.object({
+  "saveMode": zod.enum(['manual', 'autosave']).default(updateArticleBodySaveModeDefault).describe('Autosaves coalesce the same editor\'s latest autosave within a fixed five-minute window. Manual saves preserve checkpoints.'),
   "policySubjectId": zod.number().int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),

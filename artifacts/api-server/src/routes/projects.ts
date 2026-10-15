@@ -25,6 +25,7 @@ import { sanitizeArticleHtml } from "../lib/sanitize";
 import { slugify, extractWikilinks } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
 import { enqueueNotification, projectAccessUserIds, enqueueNewProjectAccess } from "../lib/notification-events";
+import { saveArticleVersion } from "../lib/article-versions";
 
 const router = Router();
 
@@ -569,14 +570,7 @@ router.patch("/projects/:projectId/documents/:slug", requireAuth, async (req, re
         }
       }
 
-      const [versionCount] = await tx.select({ value: count() }).from(articleVersionsTable).where(eq(articleVersionsTable.articleId, updated.id));
-      await tx.insert(articleVersionsTable).values({
-        articleId: updated.id,
-        versionNumber: Number(versionCount?.value ?? 0) + 1,
-        title: updated.title,
-        content: updated.content,
-        createdById: req.session.userId!,
-      });
+      await saveArticleVersion(tx, updated, req.session.userId!, "manual");
       return updated;
     });
   } catch (error) {

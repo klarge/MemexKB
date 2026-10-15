@@ -2426,6 +2426,11 @@ components:
     ArticleUpdate:
       type: object
       properties:
+        saveMode:
+          type: string
+          enum: [manual, autosave]
+          default: manual
+          description: Autosaves coalesce the same editor's latest autosave within a fixed five-minute window. Manual saves preserve checkpoints.
         policySubjectId:
           type: ["integer", "null"]
         procedureSteps:

@@ -603,6 +603,7 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
+            saveMode: "autosave",
             title: currentTitle,
             content: currentContent,
             groupIds: isLog || isProjectDocument ? undefined : groupsRef.current,
@@ -622,6 +623,7 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
         queryClient.setQueryData(getGetArticleQueryKey(articleSlug), savedArticle);
         queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
         queryClient.invalidateQueries({ queryKey: ["article-versions", articleSlug] });
+        queryClient.invalidateQueries({ queryKey: ["article-version", articleSlug] });
       } catch {
         setAutosaveStatus("error");
       }
@@ -883,6 +885,7 @@ export default function ArticleEdit({ params, area = "knowledge" }: { params?: {
             queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
             queryClient.invalidateQueries({ queryKey: ["home-search"] });
             queryClient.invalidateQueries({ queryKey: ["article-versions", articleSlug] });
+            queryClient.invalidateQueries({ queryKey: ["article-version", articleSlug] });
             if (isLogRoute) refreshLogLists();
             toast({ title: "Article updated" });
             await releaseLock();
