@@ -22,3 +22,15 @@ config-generation subprocess in production mode. Keep `NODE_ENV=production`
 scoped to config/prebuild/release-build steps, not dependency installation: the
 workspace's native build tools include development dependencies and must remain
 installed for the release build.
+
+Keep the early Android config preflight self-contained in the workflow rather
+than requiring a separate test file to be present in the checkout.
+
+**Why:** A GitHub build received the updated workflow but failed because it could
+not find its companion test file. A file being present and tracked locally does
+not establish that the failing GitHub checkout includes it.
+
+**How to apply:** Preserve real plugin-loading and production config assertions
+in the inline preflight. Verify the exact workflow command against staged
+tracked app inputs without the test directory, rather than only running the
+local test suite.
