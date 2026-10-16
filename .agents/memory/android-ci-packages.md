@@ -45,3 +45,15 @@ layout can hide a missing direct declaration even during a real native export.
 **How to apply:** Keep the CI preflight checking the app's direct declaration
 and performing an Android JSX transform through its actual Babel config.
 Preserve pnpm isolation rather than changing hoisting to hide missing packages.
+
+Verify native TypeScript checks without relying on existing shared-library
+declarations or ambient Node types in the development workspace.
+
+**Why:** Local mobile checks passed while a clean CI checkout lacked referenced
+API declarations and exposed a DOM iterator typing mismatch. Node-run tests
+were also being checked with Expo's app configuration rather than a Node context.
+
+**How to apply:** Build referenced libraries before checking the app, run
+Node-only tests separately, and test against Expo's actual browser/native type
+surface. Existing development outputs and hoisted types are not evidence that
+a fresh checkout will pass.

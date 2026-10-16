@@ -5,6 +5,17 @@ import { parseSsoCallback, runSso, type SsoDependencies } from '../offline/sso-p
 const state = 's'.repeat(43);
 const code = 'c'.repeat(43);
 const callback = `memex-mobile://sso-callback?code=${code}&state=${state}`;
+test('callback validation works without URLSearchParams iterator helpers', () => {
+  const original = Object.getOwnPropertyDescriptor(URLSearchParams.prototype, 'keys')!;
+  Object.defineProperty(URLSearchParams.prototype, 'keys', { ...original, value: undefined });
+  try {
+    assert.equal(parseSsoCallback(callback, state), code);
+    assert.throws(() => parseSsoCallback(`${callback}&redirect=https://attacker.example`, state));
+    assert.throws(() => parseSsoCallback(`${callback}&%72edirect=https://attacker.example`, state));
+  } finally {
+    Object.defineProperty(URLSearchParams.prototype, 'keys', original);
+  }
+});
 test('callback accepts only the fixed destination, current state and one valid code', () => {
   assert.equal(parseSsoCallback(callback, state), code);
   for (const link of [

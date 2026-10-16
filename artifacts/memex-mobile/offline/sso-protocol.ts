@@ -3,11 +3,15 @@
 export const SSO_CALLBACK = 'memex-mobile://sso-callback';
 export function parseSsoCallback(value: string, expectedState: string): string {
   const url = new URL(value);
+  let hasUnexpectedParameter = false;
+  url.searchParams.forEach((_value, key) => {
+    if (!['state', 'code', 'error'].includes(key)) hasUnexpectedParameter = true;
+  });
   if (`${url.protocol}//${url.host}${url.pathname}` !== SSO_CALLBACK ||
       url.username || url.password || url.hash ||
       url.searchParams.getAll('state').length !== 1 ||
       url.searchParams.get('state') !== expectedState ||
-      [...url.searchParams.keys()].some(key => !['state', 'code', 'error'].includes(key))) {
+      hasUnexpectedParameter) {
     throw new Error('The sign-in callback did not match this request. Please try again.');
   }
   if (url.searchParams.has('error')) throw new Error('The provider could not complete sign-in. Please try again.');
