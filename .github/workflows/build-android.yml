@@ -36,7 +36,7 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate production Expo config
+      - name: Validate production Expo config and Babel
         working-directory: artifacts/memex-mobile
         env:
           NODE_ENV: production
@@ -48,6 +48,27 @@ jobs:
           const fs = require('node:fs');
           const os = require('node:os');
           const path = require('node:path');
+
+          // Babel resolves presets from the app, not Expo's transitive dependencies.
+          const appPackage = require('./package.json');
+          assert.ok(
+            appPackage.devDependencies?.['babel-preset-expo'] ||
+            appPackage.dependencies?.['babel-preset-expo'],
+            'Declare babel-preset-expo directly in the mobile app package.json',
+          );
+          require.resolve('babel-preset-expo', { paths: [process.cwd()] });
+          const transformed = require('@babel/core').transformSync(
+            "import { View } from 'react-native'; export const NativeBundlePreflight = () => <View />;",
+            {
+              filename: path.join(process.cwd(), 'native-bundle-preflight.tsx'),
+              configFile: path.join(process.cwd(), 'babel.config.js'),
+              babelrc: false,
+              envName: 'production',
+              caller: { name: 'metro', platform: 'android', supportsStaticESM: false },
+            },
+          );
+          assert.ok(transformed?.code, 'Production Android Babel transform failed');
+          console.log('Production Android Babel preset resolution and JSX transform validated.');
 
           const plugin = require('./plugins/withOfflineAndroid.cjs');
           const config = plugin({ name: 'Native config regression', slug: 'native-config-regression' });
