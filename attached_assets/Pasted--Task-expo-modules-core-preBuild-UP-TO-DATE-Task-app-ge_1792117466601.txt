@@ -1,0 +1,69 @@
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :app:generateAutolinkingNewArchitectureFiles
+> Task :app:generateAutolinkingPackageList
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generateReactNativeEntryPoint
+The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set. Using only .env.local and .env
+
+/home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config-plugins@54.0.5/node_modules/@expo/config-plugins/build/plugins/withStaticPlugin.js:124
+> Task :expo-constants:createExpoConfig FAILED
+        throw error;
+        ^
+
+Error: Cannot find module '@expo/config-plugins'
+Require stack:
+- /home/runner/work/MemexKB/MemexKB/artifacts/memex-mobile/plugins/withOfflineAndroid.cjs
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config-plugins@54.0.5/node_modules/@expo/config-plugins/build/utils/plugin-resolver.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config-plugins@54.0.5/node_modules/@expo/config-plugins/build/plugins/withStaticPlugin.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config-plugins@54.0.5/node_modules/@expo/config-plugins/build/index.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config@12.0.14/node_modules/@expo/config/build/plugins/withConfigPlugins.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config@12.0.14/node_modules/@expo/config/build/Config.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/@expo+config@12.0.14/node_modules/@expo/config/build/index.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/expo-constants@18.0.13_expo@54.0.36_react-native@0.81.5_@babel+core@7.29.6_@types+react@19.1.17_react@19.1.0_/node_modules/expo-constants/scripts/build/getAppConfig.js
+- /home/runner/work/MemexKB/MemexKB/node_modules/.pnpm/expo-constants@18.0.13_expo@54.0.36_react-native@0.81.5_@babel+core@7.29.6_@types+react@19.1.17_react@19.1.0_/node_modules/expo-constants/scripts/getAppConfig.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+    at Module._load (node:internal/modules/cjs/loader:1038:27)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
+    at Object.<anonymous> (/home/runner/work/MemexKB/MemexKB/artifacts/memex-mobile/plugins/withOfflineAndroid.cjs:1:51)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19) {
+  name: 'PluginError',
+  isPluginError: true,
+  code: 'INVALID_PLUGIN_IMPORT',
+  cause: undefined
+}
+
+Node.js v20.20.2
+
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript
+> Task :react-native-community_netinfo:generateCodegenSchemaFromJavaScript
+> Task :expo:generatePackagesList
+
+
+FAILURE: Build failed with an exception.
+[Incubating] Problems report is available at: file:///home/runner/work/MemexKB/MemexKB/artifacts/memex-mobile/android/build/reports/problems/problems-report.html
+
+
+* What went wrong:
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+Execution failed for task ':expo-constants:createExpoConfig'.
+
+> Process 'command 'node'' finished with non-zero exit value 1
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+> Run with --info or --debug option to get more log output.
+31 actionable tasks: 31 executed
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3m 25s
+Error: Process completed with exit code 1.

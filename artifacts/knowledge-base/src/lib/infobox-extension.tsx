@@ -1,5 +1,5 @@
 import { KIND_LABEL, normalizeKind } from "./content-paths";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Node, mergeAttributes } from "@tiptap/core";
 import {
   useWikilinkAutocomplete,
@@ -8,7 +8,7 @@ import {
   type WikilinkSuggestion,
 } from "./use-wikilink-autocomplete";
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { Trash2, Plus, Loader2, X, Image as ImageIcon } from "lucide-react";
+import { Trash2, Plus, Loader2, X, ArrowUp, ArrowDown, Image as ImageIcon } from "lucide-react";
 
 type InfoBoxRow = { label: string; value: string };
 
@@ -61,7 +61,24 @@ function renderInfoboxText(value: string): unknown[] {
   ]);
 }
 
-function WikilinkValueInput({ value, onChange, className, placeholder }: WikilinkValueInputProps) {
+/**
+ * React must receive the new value in the input's own change event. Node-view
+ * attribute updates arrive through a separate renderer; using those props alone
+ * makes React briefly restore the old value and moves the caret to the end.
+ * Still follow external changes, including editor undo/redo and restored content.
+ */
+function useInfoboxField(value: string, onChange: (value: string) => void) {
+  const [draft, setDraft] = useState(value);
+  useLayoutEffect(() => { setDraft(value); }, [value]);
+  const change = (next: string) => {
+    setDraft(next);
+    onChange(next);
+  };
+  return [draft, change] as const;
+}
+
+function WikilinkValueInput({ value: savedValue, onChange: saveValue, className, placeholder }: WikilinkValueInputProps) {
+  const [value, onChange] = useInfoboxField(savedValue, saveValue);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [pendingCursor, setPendingCursor] = useState<number | null>(null);
   const { isOpen, items, selectedIndex, onInputChange, handleKeyDown: acKeyDown, dismiss } =
@@ -134,7 +151,7 @@ function WikilinkValueInput({ value, onChange, className, placeholder }: Wikilin
     <div className="relative min-w-0 flex-1">
       <textarea
         ref={inputRef}
-        className={className}
+        className={`${className ?? ""} select-text min-h-5`}
         placeholder={placeholder}
         rows={1}
         value={value}
@@ -181,7 +198,8 @@ interface InfoboxCellInputProps {
   placeholder?: string;
 }
 
-function InfoboxCellInput({ value, onChange, className, placeholder }: InfoboxCellInputProps) {
+function InfoboxCellInput({ value: savedValue, onChange: saveValue, className, placeholder }: InfoboxCellInputProps) {
+  const [value, onChange] = useInfoboxField(savedValue, saveValue);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -191,7 +209,7 @@ function InfoboxCellInput({ value, onChange, className, placeholder }: InfoboxCe
   return (
     <textarea
       ref={inputRef}
-      className={`${className ?? ""} min-h-5`}
+      className={`${className ?? ""} select-text min-h-5`}
       placeholder={placeholder}
       rows={1}
       value={value}
@@ -208,13 +226,27 @@ function InfoboxCellInput({ value, onChange, className, placeholder }: InfoboxCe
 }
 
 function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewProps) {
-  const title = (node.attrs.title as string) ?? "";
+  const [title, setTitle] = useInfoboxField((node.attrs.title as string) ?? "", (v) => updateAttributes({ title: v }));
   const rows: InfoBoxRow[] = safeParseRows(node.attrs.rows);
   const image = (node.attrs.image as string) ?? "";
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const rowsRef = useRef<HTMLTableSectionElement>(null);
+  const pendingRowFocus = useRef<{ index: number; direction: -1 | 1 } | null>(null);
 
-  const setTitle = (v: string) => updateAttributes({ title: v });
+  useLayoutEffect(() => {
+    const move = pendingRowFocus.current;
+    if (!move) return;
+    pendingRowFocus.current = null;
+    const row = rowsRef.current?.rows.item(move.index);
+    const control = row?.querySelector<HTMLButtonElement>(`[data-row-move="${move.direction}"]`);
+    // Follow the moved row, rather than the index-keyed button's old position.
+    // At a boundary focus the row itself: Enter must not move a different row
+    // or activate the opposite direction when the requested button is disabled.
+    if (control && !control.disabled) control.focus();
+    else row?.focus();
+  }, [node.attrs.rows]);
+
   const setRows = (r: InfoBoxRow[]) => updateAttributes({ rows: JSON.stringify(r) });
   const setImage = (url: string) => updateAttributes({ image: url });
 
@@ -222,6 +254,14 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
   const removeRow = (i: number) => setRows(rows.filter((_, idx) => idx !== i));
   const updateRow = (i: number, field: "label" | "value", val: string) =>
     setRows(rows.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)));
+  const moveRow = (from: number, direction: -1 | 1) => {
+    const to = from + direction;
+    if (to < 0 || to >= rows.length) return;
+    const reordered = [...rows];
+    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+    pendingRowFocus.current = { index: to, direction };
+    setRows(reordered);
+  };
 
   const handleUpload = async (file: File) => {
     setUploading(true);
@@ -252,17 +292,19 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
   return (
     <NodeViewWrapper
       as="div"
+      contentEditable={false}
       className={`infobox-editor not-prose ${selected ? "ring-2 ring-primary rounded" : ""}`}
       style={{ float: "right", clear: "right", margin: "0 0 1rem 1.5rem", width: "260px" }}
     >
-      <div className="border border-border rounded overflow-hidden text-sm bg-card shadow-sm select-none">
+      <div className="border border-border rounded overflow-hidden text-sm bg-card shadow-sm">
         {/* Title */}
         <div className="bg-primary/10 border-b border-border px-2 py-2">
           <input
-            className="w-full bg-transparent text-center font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none text-sm"
+            className="w-full select-text bg-transparent text-center font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none text-sm"
             placeholder="Infobox title…"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           />
         </div>
@@ -326,9 +368,9 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
 
         {/* Rows */}
         <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
-          <tbody>
+          <tbody ref={rowsRef}>
             {rows.map((row, i) => (
-              <tr key={i} className="border-b border-border last:border-b-0 group/row">
+              <tr key={i} tabIndex={-1} className="border-b border-border last:border-b-0 group/row">
                 <th
                   className="px-2 py-1.5 align-top bg-muted/40 text-left border-r border-border"
                   style={{ width: "42%" }}
@@ -341,20 +383,49 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
                   />
                 </th>
                 <td className="px-2 py-1.5 align-top">
-                  <div className="flex items-start gap-1">
+                  <div>
                     <WikilinkValueInput
                       className="w-full resize-none overflow-hidden bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-xs"
                       placeholder="Value"
                       value={row.value}
                       onChange={(v) => updateRow(i, "value", v)}
                     />
-                    <button
-                      onMouseDown={(e) => { e.preventDefault(); removeRow(i); }}
-                      className="shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover/row:opacity-100 transition-opacity"
-                      title="Remove row"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    <div className="flex items-center justify-end gap-0.5 pt-1">
+                      <button
+                        type="button"
+                        data-row-move="-1"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => moveRow(i, -1)}
+                        disabled={i === 0}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                        title="Move row up"
+                        aria-label={`Move row ${i + 1} up`}
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        data-row-move="1"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => moveRow(i, 1)}
+                        disabled={i === rows.length - 1}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                        title="Move row down"
+                        aria-label={`Move row ${i + 1} down`}
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => removeRow(i)}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                        title="Remove row"
+                        aria-label={`Remove row ${i + 1}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -365,14 +436,18 @@ function InfoBoxView({ node, updateAttributes, deleteNode, selected }: NodeViewP
         {/* Footer */}
         <div className="flex items-center justify-between px-2 py-1.5 bg-muted/20 border-t border-border">
           <button
-            onMouseDown={(e) => { e.preventDefault(); addRow(); }}
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={addRow}
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
           >
             <Plus className="h-3 w-3" />
             Add row
           </button>
           <button
-            onMouseDown={(e) => { e.preventDefault(); deleteNode(); }}
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={deleteNode}
             className="text-xs text-destructive hover:text-destructive/70 flex items-center gap-1 transition-colors"
           >
             <Trash2 className="h-3 w-3" />

@@ -5,7 +5,7 @@
 - [Article URL policy](article-url-policy.md) — titles retain stable URLs; only deliberate administrator URL changes migrate internal links.
 - [Private log URLs](private-log-urls.md) — personal logs use immutable owner-scoped paths and always require server-side owner/admin checks.
 - [Web session handling](web-login-navigation.md) — reload after local login; distinguish confirmed session expiry from transient errors and retained cached identity.
-- [Infobox textarea sizing](infobox-textarea-sizing.md) — node-view textareas need a nonzero first-line height before auto-grow can measure them.
+- [Infobox native inputs](infobox-textarea-sizing.md) — preserve minimum height and native selection; verify mid-string typing in the real node-view renderer.
 - [Article visibility policy](article-visibility-policy.md) — visibility is explicit; authorization, counts, pagination, stats, caches, and derived surfaces must all use the same policy.
 - [Docker database modes](docker-database-modes.md) — external-DB Compose is standalone so local DB dependencies cannot leak into external deployments.
 - [MCP request identity](mcp-request-identity.md) — never cache a user's bearer key in shared MCP transport/session state; bind API access to each authenticated request.

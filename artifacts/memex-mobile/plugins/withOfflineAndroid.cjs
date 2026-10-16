@@ -1,4 +1,6 @@
-const { withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
+// Resolve the SDK-matched plugin API through our declared Expo dependency.
+// Direct transitive imports are not available under pnpm's isolated layout.
+const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
