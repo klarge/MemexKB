@@ -98,6 +98,15 @@ jobs:
           }
           NODE
 
+      - name: Validate shared API types and offline behavior
+        # A clean checkout has no declaration outputs for referenced TS projects.
+        # Run before Gradle; Node-only tests run separately from the Expo check.
+        run: |
+          pnpm exec tsc --build lib/api-client-react
+          node --test lib/image-size-safe/compatibility.test.cjs
+          pnpm --filter @workspace/memex-mobile run typecheck
+          pnpm --filter @workspace/api-server exec tsx --test ../memex-mobile/test/*.test.ts
+
       # ── 4. Java (required by Gradle / Android toolchain) ──────────────────
       - name: Setup Java JDK 17
         uses: actions/setup-java@v5
@@ -166,12 +175,6 @@ jobs:
           APK=artifacts/memex-mobile/android/app/build/outputs/apk/release/app-release.apk
           unzip -l "$APK" | grep -E 'assets/index.android.bundle'
           unzip -l "$APK" | grep -Ei '\.(ttf|otf)'
-
-      - name: Offline download regression tests
-        run: |
-          node --test lib/image-size-safe/compatibility.test.cjs
-          pnpm --filter @workspace/memex-mobile run typecheck
-          pnpm --filter @workspace/api-server exec tsx --test ../memex-mobile/test/*.test.ts
 
       # ── 8. Upload artifact ─────────────────────────────────────────────────
       - name: Upload APK
