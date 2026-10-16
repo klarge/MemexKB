@@ -7,7 +7,7 @@ id = "3B4_FFSkEVBkAeYMFRJ2e"
 [[services]]
 localPort = 8080
 name = "API Server"
-paths = ["/api", "/favicon.ico"]
+paths = ["/api", "/favicon.ico", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource"]
 
 [services.development]
 run = "pnpm --filter @workspace/api-server run dev"

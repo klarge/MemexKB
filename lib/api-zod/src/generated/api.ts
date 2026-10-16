@@ -9,6 +9,156 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary OAuth authorization server discovery (also served at the RFC 8414 root well-known path)
+ */
+export const GetMcpOAuthMetadataResponse = zod.object({
+  "issuer": zod.string(),
+  "authorization_endpoint": zod.string(),
+  "token_endpoint": zod.string(),
+  "registration_endpoint": zod.string(),
+  "revocation_endpoint": zod.string().optional(),
+  "scopes_supported": zod.array(zod.string()).optional(),
+  "response_types_supported": zod.array(zod.string()).optional(),
+  "grant_types_supported": zod.array(zod.string()).optional(),
+  "token_endpoint_auth_methods_supported": zod.array(zod.string()).optional(),
+  "code_challenge_methods_supported": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary MCP OAuth protected resource discovery
+ */
+export const GetMcpOAuthResourceResponse = zod.object({
+  "resource": zod.string(),
+  "authorization_servers": zod.array(zod.string()),
+  "scopes_supported": zod.array(zod.string()).optional(),
+  "bearer_methods_supported": zod.array(zod.string()).optional(),
+  "resource_name": zod.string().optional()
+})
+
+
+/**
+ * @summary Rate-limited OAuth client registration; confidential secrets are returned only once
+ */
+export const registerMcpOAuthClientBodyClientNameMax = 100;
+
+export const registerMcpOAuthClientBodyRedirectUrisMax = 10;
+
+
+
+export const RegisterMcpOAuthClientBody = zod.object({
+  "client_name": zod.string().min(1).max(registerMcpOAuthClientBodyClientNameMax).optional(),
+  "redirect_uris": zod.array(zod.string()).min(1).max(registerMcpOAuthClientBodyRedirectUrisMax),
+  "token_endpoint_auth_method": zod.enum(['none', 'client_secret_post', 'client_secret_basic']).optional(),
+  "grant_types": zod.array(zod.enum(['authorization_code', 'refresh_token'])).optional(),
+  "response_types": zod.array(zod.enum(['code'])).optional(),
+  "scope": zod.enum(['mcp:read']).optional()
+})
+
+export const registerMcpOAuthClientResponseOneClientNameMax = 100;
+
+export const registerMcpOAuthClientResponseOneRedirectUrisMax = 10;
+
+
+
+export const RegisterMcpOAuthClientResponse = zod.object({
+  "client_name": zod.string().min(1).max(registerMcpOAuthClientResponseOneClientNameMax),
+  "redirect_uris": zod.array(zod.string()).min(1).max(registerMcpOAuthClientResponseOneRedirectUrisMax),
+  "token_endpoint_auth_method": zod.enum(['none', 'client_secret_post', 'client_secret_basic']).optional(),
+  "grant_types": zod.array(zod.enum(['authorization_code', 'refresh_token'])).optional(),
+  "response_types": zod.array(zod.enum(['code'])).optional(),
+  "scope": zod.enum(['mcp:read']).optional()
+}).and(zod.object({
+  "client_id": zod.string(),
+  "client_secret": zod.string().optional(),
+  "client_id_issued_at": zod.number().int().optional(),
+  "client_secret_expires_at": zod.number().int().optional()
+}))
+
+
+/**
+ * @summary Browser sign-in and explicit consent for per-user MCP access
+ */
+export const AuthorizeMcpOAuthQueryParams = zod.object({
+  "client_id": zod.coerce.string(),
+  "redirect_uri": zod.coerce.string(),
+  "response_type": zod.enum(['code']),
+  "resource": zod.coerce.string(),
+  "code_challenge": zod.coerce.string(),
+  "code_challenge_method": zod.enum(['S256']),
+  "scope": zod.enum(['mcp:read']).optional(),
+  "state": zod.coerce.string().optional()
+})
+
+export const AuthorizeMcpOAuthResponse = zod.unknown()
+
+
+/**
+ * @summary Browser consent submission; session, trusted origin and nonce required
+ */
+export const ApproveMcpOAuthBody = zod.object({
+  "csrf": zod.string(),
+  "decision": zod.enum(['allow', 'deny'])
+})
+
+export const ApproveMcpOAuthResponse = zod.void()
+
+
+/**
+ * @summary Exchange a PKCE code or rotate refresh credentials; exact MCP resource required
+ */
+export const ExchangeMcpOAuthTokenBody = zod.object({
+  "grant_type": zod.enum(['authorization_code', 'refresh_token']),
+  "resource": zod.string(),
+  "client_id": zod.string().optional(),
+  "client_secret": zod.string().optional(),
+  "code": zod.string().optional(),
+  "code_verifier": zod.string().optional(),
+  "redirect_uri": zod.string().optional(),
+  "refresh_token": zod.string().optional(),
+  "scope": zod.string().optional()
+})
+
+export const ExchangeMcpOAuthTokenResponse = zod.object({
+  "access_token": zod.string(),
+  "refresh_token": zod.string(),
+  "token_type": zod.enum(['Bearer']),
+  "expires_in": zod.number().int(),
+  "scope": zod.enum(['mcp:read'])
+})
+
+
+/**
+ * @summary RFC 7009 client-authenticated revocation of an OAuth connection
+ */
+export const RevokeMcpOAuthTokenBody = zod.object({
+  "token": zod.string(),
+  "token_type_hint": zod.string().optional(),
+  "client_id": zod.string().optional(),
+  "client_secret": zod.string().optional()
+})
+
+export const RevokeMcpOAuthTokenResponse = zod.unknown()
+
+
+/**
+ * @summary Browser page to review the signed-in user's connected apps
+ */
+export const ListMcpOAuthConnectionsResponse = zod.unknown()
+
+
+/**
+ * @summary Disconnect a user-owned app; browser session and CSRF protection required
+ */
+export const DisconnectMcpOAuthBody = zod.object({
+  "id": zod.string(),
+  "csrf": zod.string()
+})
+
+export const DisconnectMcpOAuthResponse = zod.void()
+
+
+/**
  * @summary List uploaded images and usage (administrators only)
  */
 export const listAdminMediaQueryStatusDefault = `all`;

@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { LOGO_URL, useSiteSettings } from "@/lib/site-settings";
+import { rememberOAuthReturn } from "@/lib/oauth-return";
 
 interface SsoProvider {
   id: number;
@@ -43,6 +44,7 @@ export default function Login() {
 
   // Show SSO error from redirect params
   useEffect(() => {
+    rememberOAuthReturn();
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
     if (err && SSO_ERRORS[err]) {

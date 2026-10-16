@@ -33,7 +33,8 @@ Both `docker-compose.yml` and `docker-compose.external-db.yml` start `mcp` along
 
 ```caddyfile
 wiki.example.com {
-  reverse_proxy /mcp 127.0.0.1:3001
+  @mcp path /mcp /mcp/*
+  reverse_proxy @mcp 127.0.0.1:3001
   reverse_proxy 127.0.0.1:3000
 }
 ```
@@ -54,7 +55,90 @@ Then point your Streamable HTTP MCP client to `https://wiki.example.com/mcp`. If
    }
    ```
 
-Never put an API key in the URL, Docker Compose, or a shared `.env` file. If your MCP client only supports OAuth (and cannot send a custom bearer header), it cannot authenticate with this API-key endpoint yet. Clients that only support local stdio also need a compatible HTTP client/bridge; the former stdio launcher has been removed.
+Never put an API key in the URL, Docker Compose, or a shared `.env` file. OAuth-capable clients can instead use the per-user flow below. Clients that only support local stdio still need a compatible HTTP client/bridge; the former stdio launcher has been removed.
+
+## Per-user OAuth
+
+OAuth authorization-code flow with **S256 PKCE** is supported. Each employee
+connects their own Memex account and explicitly approves read-only access.
+Corporate SSO can be used for the sign-in step. A shared service-account
+connection still has the service account's permissions; use **individual
+connections**, not organization-wide shared credentials.
+
+### Deployment
+
+1. Set `APP_BASE_URL=https://wiki.example.com` to the installation's actual public
+   HTTPS origin. Both Compose configurations pass this to the app and MCP
+   containers; the AWS template supplies the configured domain automatically.
+   Keep it identical in both services. Do not use an internal container hostname.
+2. Serve `/mcp` **and `/mcp/*`** through the MCP reverse proxy as shown above.
+   Serve `/api/*` and `/.well-known/*` through the web/API app. Keep HTTPS enabled
+   and direct MCP HTTP access restricted. OAuth only permits plain HTTP on loopback.
+3. Apply the normal database migration/startup process and rebuild/restart both
+   services. New OAuth tables are included in the migration journal. Existing API
+   keys continue to work.
+
+### Connect the AI
+
+Use `https://wiki.example.com/mcp` as the remote MCP URL and select OAuth or
+per-user authentication in the AI client. Compatible clients discover these
+endpoints automatically:
+
+| Setting | URL / value |
+|---|---|
+| Issuer | `https://wiki.example.com/api/oauth` |
+| Authorization | `https://wiki.example.com/api/oauth/authorize` |
+| Token | `https://wiki.example.com/api/oauth/token` |
+| Client registration | `https://wiki.example.com/api/oauth/register` |
+| Revocation | `https://wiki.example.com/api/oauth/revoke` |
+| Scope | `mcp:read` |
+| Resource / audience | `https://wiki.example.com/mcp` |
+| PKCE method | `S256` (required, including confidential clients) |
+
+Metadata is available at
+`/.well-known/oauth-authorization-server/api/oauth`,
+`/.well-known/oauth-protected-resource/mcp`, and the MCP challenge's explicit
+`/mcp/.well-known/oauth-protected-resource` URL.
+
+The authorization and token requests must include the exact `resource` URL.
+Only authorization-code and refresh-token grants are supported; client
+credentials and application-wide impersonation are intentionally not supported.
+
+If a client needs a preconfigured client ID, register it once (public registration
+is rate limited to 10 requests per hour per IP):
+
+```bash
+curl --fail-with-body https://wiki.example.com/api/oauth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"client_name":"Corporate AI","redirect_uris":["https://ai.example.com/oauth/callback"],"token_endpoint_auth_method":"none"}'
+```
+
+Use the AI platform's **exact callback URL**, not the example. For clients that
+require a secret, choose `client_secret_post` or `client_secret_basic` instead of
+`none`; the secret is returned only once. Store it in the connector's secure
+configuration, never in a prompt or tool arguments. Clients without dynamic
+registration must accept the resulting client ID (and secret when applicable).
+Registration is not administrator vetting: consent clearly labels client names
+as developer-supplied. Only approve apps you trust.
+
+### Access and lifecycle
+
+- Every tool call resolves the employee's live identity, role and Memex content
+  permissions. Group membership and role changes take effect on subsequent calls.
+- Tokens are limited to MCP's read endpoints, not arbitrary API/admin endpoints.
+  All existing article, project and personal-data authorization remains in force.
+- Access tokens expire after **15 minutes**. Refresh tokens rotate on every use.
+  Reusing a consumed refresh token revokes the whole connection; clients must
+  serialize refresh operations rather than racing them.
+- Connections expire after **30 days**, requiring the employee to reconnect.
+- **Settings → Connected AI apps → Manage connected apps** lists each user's
+  active grants. Disconnect immediately disables access and refresh tokens.
+- Authorization codes expire after two minutes and can be exchanged only once.
+  Codes, access/refresh tokens and confidential-client secrets are stored hashed.
+- Deleting the Memex user removes their grants and tokens. OAuth credentials are
+  not included in environment backups; restored users must reconnect.
+- Keep the AI platform's conversation and retrieval caches isolated by employee:
+  Memex cannot revoke content already copied into an external system.
 
 Browser clients send an `Origin` header. By default the server rejects requests carrying an Origin; to allow one, set `MCP_ALLOWED_ORIGINS=https://your-client-origin.example` in the Compose `.env` file (comma-separated exact origins). Desktop clients usually do not send Origin. CORS preflight is supported for allowed origins.
 

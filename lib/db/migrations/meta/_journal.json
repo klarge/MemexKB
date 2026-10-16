@@ -211,6 +211,13 @@
       "when": 1792022400000,
       "tag": "0029_article_autosave_checkpoints",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792118400000,
+      "tag": "0030_mcp_oauth",
+      "breakpoints": true
     }
   ]
 }

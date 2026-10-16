@@ -21,6 +21,10 @@ export function csrfProtection(config: { baseUrl?: string; allowedOrigins?: stri
   const configuredOrigins = new Set([config.baseUrl, ...(config.allowedOrigins ?? [])].map(originOf).filter(Boolean));
   return (req, res, next) => {
     if (safeMethods.has(req.method) ||
+        // OAuth token endpoints authenticate explicit client/grant credentials.
+        // Consent/disconnect require a signed-in session plus their own 256-bit
+        // CSRF form nonce; browser Origin/Referer can be suppressed or rewritten.
+        (req.method === "POST" && /^\/oauth\/(?:token|register|revoke|approve|disconnect)\/?$/.test(req.path)) ||
         (req.method === "POST" && /^\/auth\/saml\/[0-9]+\/callback\/?$/i.test(req.path))) {
       next();
       return;

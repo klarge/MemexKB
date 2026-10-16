@@ -266,7 +266,7 @@ async function buildBackup(): Promise<EnvironmentBackup> {
         version: VERSION,
         exportedAt: new Date().toISOString(),
         sections,
-        excluded: ["password hashes", "active sessions", "API tokens", "environment and database credentials", "SSO secrets", "edit locks"],
+        excluded: ["password hashes", "active sessions", "API tokens", "OAuth clients and credentials", "environment and database credentials", "SSO secrets", "edit locks"],
       },
       data,
     };

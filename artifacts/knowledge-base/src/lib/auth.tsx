@@ -1,4 +1,5 @@
-import { createContext, useContext, ReactNode } from "react";
+import { createContext, useContext, useEffect, ReactNode } from "react";
+import { takeOAuthReturn } from "./oauth-return";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe, getGetMeQueryKey, AuthUser } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
@@ -25,6 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signedOut = error?.status === 401;
   const resolvedUser = signedOut ? null : user ?? null;
+
+  useEffect(() => {
+    if (resolvedUser) {
+      const destination = takeOAuthReturn();
+      if (destination) window.location.replace(destination);
+    }
+  }, [resolvedUser?.id]);
 
   // A network/server/429 error is not evidence that the session has expired.
   if (!isLoading && (!error || signedOut)) {

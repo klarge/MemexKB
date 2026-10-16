@@ -24,6 +24,7 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     environment:
+      APP_BASE_URL: ${APP_BASE_URL:-}
       NODE_ENV: production
       PORT: "3000"
       # Use a URL-safe POSTGRES_PASSWORD (or percent-encode special characters).
@@ -64,6 +65,7 @@ services:
       - "${MCP_PORT:-3001}:3001"
     environment:
       MEMEX_URL: http://app:3000
+      APP_BASE_URL: ${APP_BASE_URL:-}
       MCP_HOST: 0.0.0.0
       MCP_PORT: "3001"
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}

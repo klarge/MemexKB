@@ -11,6 +11,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { protectedResourceMetadata, oauthChallenge } from "./oauth-metadata.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import {
@@ -362,6 +363,20 @@ const httpServer = createServer(async (req, res) => {
     res.end(JSON.stringify({ status: "ok" }));
     return;
   }
+  if (["/mcp/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"].includes(path)) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.writeHead(204); res.end(); return;
+    }
+    if (req.method !== "GET") { sendError(res, 405, "Use GET for OAuth metadata"); return; }
+    try {
+      const metadata = protectedResourceMetadata(req);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(metadata));
+    } catch { sendError(res, 503, "Configure an HTTPS APP_BASE_URL for MCP OAuth"); }
+    return;
+  }
   if (path !== "/mcp") {
     sendError(res, 404, "Not found");
     return;
@@ -375,6 +390,7 @@ const httpServer = createServer(async (req, res) => {
   if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id");
+    res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Vary", "Origin");
   }
@@ -391,8 +407,8 @@ const httpServer = createServer(async (req, res) => {
 
   const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? "");
   if (!match) {
-    res.setHeader("WWW-Authenticate", 'Bearer realm="Memex MCP"');
-    sendError(res, 401, "Bearer API key required");
+    oauthChallenge(req, res);
+    sendError(res, 401, "Bearer access token or API key required");
     return;
   }
   const token = match[1];
@@ -403,13 +419,14 @@ const httpServer = createServer(async (req, res) => {
       signal: AbortSignal.timeout(5000),
     });
     if (!verified.ok) {
+      if (verified.status === 401 || verified.status === 403) oauthChallenge(req, res);
       if (verified.status === 429) {
         const retryAfter = verified.headers.get("retry-after");
         if (retryAfter) res.setHeader("Retry-After", retryAfter);
         sendError(res, 429, "Memex API rate limit exceeded");
       } else {
         sendError(res, verified.status === 401 || verified.status === 403 ? 401 : 503,
-          verified.status === 401 || verified.status === 403 ? "Invalid API key" : "Memex API unavailable");
+          verified.status === 401 || verified.status === 403 ? "Invalid access token or API key" : "Memex API unavailable");
       }
       return;
     }

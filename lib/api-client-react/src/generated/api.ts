@@ -43,6 +43,7 @@ import type {
   ArticleSummary,
   ArticleUpdate,
   AuthUser,
+  AuthorizeMcpOAuthParams,
   ChangePasswordInput,
   Dashboard,
   EditLockStatus,
@@ -67,6 +68,15 @@ import type {
   ListArticlesMaintenanceParams,
   ListArticlesParams,
   LoginInput,
+  McpOAuthClient,
+  McpOAuthClientInput,
+  McpOAuthConsent,
+  McpOAuthDisconnect,
+  McpOAuthMetadata,
+  McpOAuthResource,
+  McpOAuthRevocation,
+  McpOAuthToken,
+  McpOAuthTokenInput,
   MessageResponse,
   MobileSsoCancel,
   MobileSsoExchange,
@@ -126,6 +136,762 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetMcpOAuthMetadataUrl = () => {
+
+
+
+
+  return `/api/oauth/.well-known/oauth-authorization-server`
+}
+
+/**
+ * @summary OAuth authorization server discovery (also served at the RFC 8414 root well-known path)
+ */
+export const getMcpOAuthMetadata = async ( options?: Parameters<typeof customFetch>[1]): Promise<McpOAuthMetadata> => {
+
+  return customFetch<McpOAuthMetadata>(getGetMcpOAuthMetadataUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMcpOAuthMetadataQueryKey = () => {
+    return [
+    `/api/oauth/.well-known/oauth-authorization-server`
+    ] as const;
+    }
+
+
+export const getGetMcpOAuthMetadataQueryOptions = <TData = Awaited<ReturnType<typeof getMcpOAuthMetadata>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMcpOAuthMetadata>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMcpOAuthMetadataQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMcpOAuthMetadata>>> = ({ signal }) => getMcpOAuthMetadata({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMcpOAuthMetadata>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMcpOAuthMetadataQueryResult = NonNullable<Awaited<ReturnType<typeof getMcpOAuthMetadata>>>
+export type GetMcpOAuthMetadataQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary OAuth authorization server discovery (also served at the RFC 8414 root well-known path)
+ */
+
+export function useGetMcpOAuthMetadata<TData = Awaited<ReturnType<typeof getMcpOAuthMetadata>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMcpOAuthMetadata>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMcpOAuthMetadataQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMcpOAuthResourceUrl = () => {
+
+
+
+
+  return `/api/oauth/protected-resource`
+}
+
+/**
+ * @summary MCP OAuth protected resource discovery
+ */
+export const getMcpOAuthResource = async ( options?: Parameters<typeof customFetch>[1]): Promise<McpOAuthResource> => {
+
+  return customFetch<McpOAuthResource>(getGetMcpOAuthResourceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMcpOAuthResourceQueryKey = () => {
+    return [
+    `/api/oauth/protected-resource`
+    ] as const;
+    }
+
+
+export const getGetMcpOAuthResourceQueryOptions = <TData = Awaited<ReturnType<typeof getMcpOAuthResource>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMcpOAuthResource>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMcpOAuthResourceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMcpOAuthResource>>> = ({ signal }) => getMcpOAuthResource({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMcpOAuthResource>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMcpOAuthResourceQueryResult = NonNullable<Awaited<ReturnType<typeof getMcpOAuthResource>>>
+export type GetMcpOAuthResourceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary MCP OAuth protected resource discovery
+ */
+
+export function useGetMcpOAuthResource<TData = Awaited<ReturnType<typeof getMcpOAuthResource>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMcpOAuthResource>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMcpOAuthResourceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRegisterMcpOAuthClientUrl = () => {
+
+
+
+
+  return `/api/oauth/register`
+}
+
+/**
+ * @summary Rate-limited OAuth client registration; confidential secrets are returned only once
+ */
+export const registerMcpOAuthClient = async (mcpOAuthClientInput: McpOAuthClientInput, options?: Parameters<typeof customFetch>[1]): Promise<McpOAuthClient> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<McpOAuthClient>(getRegisterMcpOAuthClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mcpOAuthClientInput)
+  }
+);}
+
+
+
+
+
+export const getRegisterMcpOAuthClientMutationKey = () => ['registerMcpOAuthClient'] as const;
+
+export const getRegisterMcpOAuthClientMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMcpOAuthClient>>, TError,RegisterMcpOAuthClientMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerMcpOAuthClient>>, TError,RegisterMcpOAuthClientMutationVariables, TContext> => {
+
+const mutationKey = getRegisterMcpOAuthClientMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerMcpOAuthClient>>, RegisterMcpOAuthClientMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerMcpOAuthClient(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterMcpOAuthClientMutationResult = NonNullable<Awaited<ReturnType<typeof registerMcpOAuthClient>>>
+    export type RegisterMcpOAuthClientMutationBody = BodyType<McpOAuthClientInput>
+    export type RegisterMcpOAuthClientMutationError = ErrorType<unknown>
+    export type RegisterMcpOAuthClientMutationVariables = {data: BodyType<McpOAuthClientInput>}
+
+    /**
+ * @summary Rate-limited OAuth client registration; confidential secrets are returned only once
+ */
+export const useRegisterMcpOAuthClient = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMcpOAuthClient>>, TError,RegisterMcpOAuthClientMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerMcpOAuthClient>>,
+        TError,
+        RegisterMcpOAuthClientMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterMcpOAuthClientMutationOptions(options));
+    }
+
+export const getAuthorizeMcpOAuthUrl = (params: AuthorizeMcpOAuthParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/oauth/authorize?${stringifiedParams}` : `/api/oauth/authorize`
+}
+
+/**
+ * @summary Browser sign-in and explicit consent for per-user MCP access
+ */
+export const authorizeMcpOAuth = async (params: AuthorizeMcpOAuthParams, options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getAuthorizeMcpOAuthUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAuthorizeMcpOAuthQueryKey = (params?: AuthorizeMcpOAuthParams,) => {
+    return [
+    `/api/oauth/authorize`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getAuthorizeMcpOAuthQueryOptions = <TData = Awaited<ReturnType<typeof authorizeMcpOAuth>>, TError = ErrorType<void>>(params: AuthorizeMcpOAuthParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof authorizeMcpOAuth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAuthorizeMcpOAuthQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof authorizeMcpOAuth>>> = ({ signal }) => authorizeMcpOAuth(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof authorizeMcpOAuth>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AuthorizeMcpOAuthQueryResult = NonNullable<Awaited<ReturnType<typeof authorizeMcpOAuth>>>
+export type AuthorizeMcpOAuthQueryError = ErrorType<void>
+
+
+/**
+ * @summary Browser sign-in and explicit consent for per-user MCP access
+ */
+
+export function useAuthorizeMcpOAuth<TData = Awaited<ReturnType<typeof authorizeMcpOAuth>>, TError = ErrorType<void>>(
+ params: AuthorizeMcpOAuthParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof authorizeMcpOAuth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAuthorizeMcpOAuthQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApproveMcpOAuthUrl = () => {
+
+
+
+
+  return `/api/oauth/approve`
+}
+
+/**
+ * @summary Browser consent submission; session, trusted origin and nonce required
+ */
+export const approveMcpOAuth = async (mcpOAuthConsent: McpOAuthConsent, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
+    const formUrlEncoded = new URLSearchParams();
+formUrlEncoded.append(`csrf`, mcpOAuthConsent.csrf);
+formUrlEncoded.append(`decision`, mcpOAuthConsent.decision);
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<unknown>(getApproveMcpOAuthUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...getHeaders(options?.headers) },
+    body: formUrlEncoded
+  }
+);}
+
+
+
+
+
+export const getApproveMcpOAuthMutationKey = () => ['approveMcpOAuth'] as const;
+
+export const getApproveMcpOAuthMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMcpOAuth>>, TError,ApproveMcpOAuthMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveMcpOAuth>>, TError,ApproveMcpOAuthMutationVariables, TContext> => {
+
+const mutationKey = getApproveMcpOAuthMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveMcpOAuth>>, ApproveMcpOAuthMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  approveMcpOAuth(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveMcpOAuthMutationResult = NonNullable<Awaited<ReturnType<typeof approveMcpOAuth>>>
+    export type ApproveMcpOAuthMutationBody = BodyType<McpOAuthConsent>
+    export type ApproveMcpOAuthMutationError = ErrorType<void>
+    export type ApproveMcpOAuthMutationVariables = {data: BodyType<McpOAuthConsent>}
+
+    /**
+ * @summary Browser consent submission; session, trusted origin and nonce required
+ */
+export const useApproveMcpOAuth = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMcpOAuth>>, TError,ApproveMcpOAuthMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveMcpOAuth>>,
+        TError,
+        ApproveMcpOAuthMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApproveMcpOAuthMutationOptions(options));
+    }
+
+export const getExchangeMcpOAuthTokenUrl = () => {
+
+
+
+
+  return `/api/oauth/token`
+}
+
+/**
+ * @summary Exchange a PKCE code or rotate refresh credentials; exact MCP resource required
+ */
+export const exchangeMcpOAuthToken = async (mcpOAuthTokenInput: McpOAuthTokenInput, options?: Parameters<typeof customFetch>[1]): Promise<McpOAuthToken> => {
+    const formUrlEncoded = new URLSearchParams();
+formUrlEncoded.append(`grant_type`, mcpOAuthTokenInput.grant_type);
+formUrlEncoded.append(`resource`, mcpOAuthTokenInput.resource);
+if(mcpOAuthTokenInput.client_id !== undefined) {
+ formUrlEncoded.append(`client_id`, mcpOAuthTokenInput.client_id);
+ }
+if(mcpOAuthTokenInput.client_secret !== undefined) {
+ formUrlEncoded.append(`client_secret`, mcpOAuthTokenInput.client_secret);
+ }
+if(mcpOAuthTokenInput.code !== undefined) {
+ formUrlEncoded.append(`code`, mcpOAuthTokenInput.code);
+ }
+if(mcpOAuthTokenInput.code_verifier !== undefined) {
+ formUrlEncoded.append(`code_verifier`, mcpOAuthTokenInput.code_verifier);
+ }
+if(mcpOAuthTokenInput.redirect_uri !== undefined) {
+ formUrlEncoded.append(`redirect_uri`, mcpOAuthTokenInput.redirect_uri);
+ }
+if(mcpOAuthTokenInput.refresh_token !== undefined) {
+ formUrlEncoded.append(`refresh_token`, mcpOAuthTokenInput.refresh_token);
+ }
+if(mcpOAuthTokenInput.scope !== undefined) {
+ formUrlEncoded.append(`scope`, mcpOAuthTokenInput.scope);
+ }
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<McpOAuthToken>(getExchangeMcpOAuthTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...getHeaders(options?.headers) },
+    body: formUrlEncoded
+  }
+);}
+
+
+
+
+
+export const getExchangeMcpOAuthTokenMutationKey = () => ['exchangeMcpOAuthToken'] as const;
+
+export const getExchangeMcpOAuthTokenMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeMcpOAuthToken>>, TError,ExchangeMcpOAuthTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exchangeMcpOAuthToken>>, TError,ExchangeMcpOAuthTokenMutationVariables, TContext> => {
+
+const mutationKey = getExchangeMcpOAuthTokenMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exchangeMcpOAuthToken>>, ExchangeMcpOAuthTokenMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  exchangeMcpOAuthToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExchangeMcpOAuthTokenMutationResult = NonNullable<Awaited<ReturnType<typeof exchangeMcpOAuthToken>>>
+    export type ExchangeMcpOAuthTokenMutationBody = BodyType<McpOAuthTokenInput>
+    export type ExchangeMcpOAuthTokenMutationError = ErrorType<unknown>
+    export type ExchangeMcpOAuthTokenMutationVariables = {data: BodyType<McpOAuthTokenInput>}
+
+    /**
+ * @summary Exchange a PKCE code or rotate refresh credentials; exact MCP resource required
+ */
+export const useExchangeMcpOAuthToken = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeMcpOAuthToken>>, TError,ExchangeMcpOAuthTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exchangeMcpOAuthToken>>,
+        TError,
+        ExchangeMcpOAuthTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getExchangeMcpOAuthTokenMutationOptions(options));
+    }
+
+export const getRevokeMcpOAuthTokenUrl = () => {
+
+
+
+
+  return `/api/oauth/revoke`
+}
+
+/**
+ * @summary RFC 7009 client-authenticated revocation of an OAuth connection
+ */
+export const revokeMcpOAuthToken = async (mcpOAuthRevocation: McpOAuthRevocation, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+    const formUrlEncoded = new URLSearchParams();
+formUrlEncoded.append(`token`, mcpOAuthRevocation.token);
+if(mcpOAuthRevocation.token_type_hint !== undefined) {
+ formUrlEncoded.append(`token_type_hint`, mcpOAuthRevocation.token_type_hint);
+ }
+if(mcpOAuthRevocation.client_id !== undefined) {
+ formUrlEncoded.append(`client_id`, mcpOAuthRevocation.client_id);
+ }
+if(mcpOAuthRevocation.client_secret !== undefined) {
+ formUrlEncoded.append(`client_secret`, mcpOAuthRevocation.client_secret);
+ }
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getRevokeMcpOAuthTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...getHeaders(options?.headers) },
+    body: formUrlEncoded
+  }
+);}
+
+
+
+
+
+export const getRevokeMcpOAuthTokenMutationKey = () => ['revokeMcpOAuthToken'] as const;
+
+export const getRevokeMcpOAuthTokenMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeMcpOAuthToken>>, TError,RevokeMcpOAuthTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeMcpOAuthToken>>, TError,RevokeMcpOAuthTokenMutationVariables, TContext> => {
+
+const mutationKey = getRevokeMcpOAuthTokenMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeMcpOAuthToken>>, RevokeMcpOAuthTokenMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  revokeMcpOAuthToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeMcpOAuthTokenMutationResult = NonNullable<Awaited<ReturnType<typeof revokeMcpOAuthToken>>>
+    export type RevokeMcpOAuthTokenMutationBody = BodyType<McpOAuthRevocation>
+    export type RevokeMcpOAuthTokenMutationError = ErrorType<unknown>
+    export type RevokeMcpOAuthTokenMutationVariables = {data: BodyType<McpOAuthRevocation>}
+
+    /**
+ * @summary RFC 7009 client-authenticated revocation of an OAuth connection
+ */
+export const useRevokeMcpOAuthToken = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeMcpOAuthToken>>, TError,RevokeMcpOAuthTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeMcpOAuthToken>>,
+        TError,
+        RevokeMcpOAuthTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevokeMcpOAuthTokenMutationOptions(options));
+    }
+
+export const getListMcpOAuthConnectionsUrl = () => {
+
+
+
+
+  return `/api/oauth/connections`
+}
+
+/**
+ * @summary Browser page to review the signed-in user's connected apps
+ */
+export const listMcpOAuthConnections = async ( options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getListMcpOAuthConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMcpOAuthConnectionsQueryKey = () => {
+    return [
+    `/api/oauth/connections`
+    ] as const;
+    }
+
+
+export const getListMcpOAuthConnectionsQueryOptions = <TData = Awaited<ReturnType<typeof listMcpOAuthConnections>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMcpOAuthConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMcpOAuthConnectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMcpOAuthConnections>>> = ({ signal }) => listMcpOAuthConnections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMcpOAuthConnections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMcpOAuthConnectionsQueryResult = NonNullable<Awaited<ReturnType<typeof listMcpOAuthConnections>>>
+export type ListMcpOAuthConnectionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Browser page to review the signed-in user's connected apps
+ */
+
+export function useListMcpOAuthConnections<TData = Awaited<ReturnType<typeof listMcpOAuthConnections>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMcpOAuthConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMcpOAuthConnectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDisconnectMcpOAuthUrl = () => {
+
+
+
+
+  return `/api/oauth/disconnect`
+}
+
+/**
+ * @summary Disconnect a user-owned app; browser session and CSRF protection required
+ */
+export const disconnectMcpOAuth = async (mcpOAuthDisconnect: McpOAuthDisconnect, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
+    const formUrlEncoded = new URLSearchParams();
+formUrlEncoded.append(`id`, mcpOAuthDisconnect.id);
+formUrlEncoded.append(`csrf`, mcpOAuthDisconnect.csrf);
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<unknown>(getDisconnectMcpOAuthUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...getHeaders(options?.headers) },
+    body: formUrlEncoded
+  }
+);}
+
+
+
+
+
+export const getDisconnectMcpOAuthMutationKey = () => ['disconnectMcpOAuth'] as const;
+
+export const getDisconnectMcpOAuthMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectMcpOAuth>>, TError,DisconnectMcpOAuthMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disconnectMcpOAuth>>, TError,DisconnectMcpOAuthMutationVariables, TContext> => {
+
+const mutationKey = getDisconnectMcpOAuthMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disconnectMcpOAuth>>, DisconnectMcpOAuthMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  disconnectMcpOAuth(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisconnectMcpOAuthMutationResult = NonNullable<Awaited<ReturnType<typeof disconnectMcpOAuth>>>
+    export type DisconnectMcpOAuthMutationBody = BodyType<McpOAuthDisconnect>
+    export type DisconnectMcpOAuthMutationError = ErrorType<void>
+    export type DisconnectMcpOAuthMutationVariables = {data: BodyType<McpOAuthDisconnect>}
+
+    /**
+ * @summary Disconnect a user-owned app; browser session and CSRF protection required
+ */
+export const useDisconnectMcpOAuth = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectMcpOAuth>>, TError,DisconnectMcpOAuthMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disconnectMcpOAuth>>,
+        TError,
+        DisconnectMcpOAuthMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDisconnectMcpOAuthMutationOptions(options));
+    }
 
 export const getListAdminMediaUrl = (params?: ListAdminMediaParams,) => {
   const normalizedParams = new URLSearchParams();

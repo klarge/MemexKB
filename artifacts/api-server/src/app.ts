@@ -17,6 +17,7 @@ import { createApiRateLimiters, ingressRateLimitOptions } from "./lib/rate-limit
 import { csrfProtection } from "./lib/csrf";
 import { pool } from "@workspace/db";
 import type { Pool as PgPool } from "pg";
+import oauthRouter, { oauthDiscovery, oauthProtectedResource } from "./routes/oauth";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PgSession = connectPgSimple(session);
@@ -152,6 +153,14 @@ app.use(
     })(),
   }),
 );
+
+// Protocol endpoints authenticate their own clients and never use cookie identity
+// to issue tokens. Mount before API bearer parsing (Basic auth is valid here).
+app.use("/api/oauth", oauthRouter);
+app.get("/.well-known/oauth-authorization-server/api/oauth", oauthDiscovery);
+app.get("/.well-known/oauth-authorization-server", oauthDiscovery);
+app.get("/.well-known/oauth-protected-resource/mcp", oauthProtectedResource);
+app.get("/.well-known/oauth-protected-resource", oauthProtectedResource);
 
 // Resolve bearer API keys before route-level auth and enforce read-only keys
 // consistently across every mutating endpoint.

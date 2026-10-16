@@ -4,6 +4,7 @@ import { type Request, type Response, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { apiTokensTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { oauthAllowsRequest, oauthUrls, resolveOAuthAccess } from "./oauth";
 
 // ---------------------------------------------------------------------------
 // SSO foundation — no-op stubs. Replace the body of each hook with a real
@@ -48,6 +49,18 @@ function readBearerToken(req: Request): string | null {
 export async function resolveTokenAuth(req: Request): Promise<boolean> {
   const rawToken = readBearerToken(req);
   if (!rawToken) return false;
+
+  if (rawToken.startsWith("memex_oat_")) {
+    if (!oauthAllowsRequest(req.method, req.path)) return false;
+    const identity = await resolveOAuthAccess(rawToken);
+    if (!identity || (process.env.APP_BASE_URL && identity.resource !== oauthUrls(req).resource)) return false;
+    req.session.userId = identity.userId;
+    req.session.userRole = identity.userRole;
+    req.session.userName = identity.userName;
+    req.session.userEmail = identity.userEmail;
+    req.apiTokenAccessMode = "read_only";
+    return true;
+  }
 
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 

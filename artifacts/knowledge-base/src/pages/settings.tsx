@@ -379,6 +379,15 @@ export default function Settings() {
       </Card> : <ChangePasswordCard />}
       <NotificationPreferencesCard />
       <ApiKeysCard />
+      <Card>
+        <CardHeader>
+          <CardTitle>Connected AI apps</CardTitle>
+          <CardDescription>Review and disconnect apps using OAuth to access Memex with your permissions.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline"><a href="/api/oauth/connections">Manage connected apps</a></Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

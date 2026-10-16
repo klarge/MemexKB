@@ -5,6 +5,154 @@
  * Knowledge Base API — used by the web app and AI agents
  * OpenAPI spec version: 0.1.0
  */
+export interface McpOAuthMetadata {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  registration_endpoint: string;
+  revocation_endpoint?: string;
+  scopes_supported?: string[];
+  response_types_supported?: string[];
+  grant_types_supported?: string[];
+  token_endpoint_auth_methods_supported?: string[];
+  code_challenge_methods_supported?: string[];
+}
+
+export interface McpOAuthResource {
+  resource: string;
+  authorization_servers: string[];
+  scopes_supported?: string[];
+  bearer_methods_supported?: string[];
+  resource_name?: string;
+}
+
+export type McpOAuthClientInputTokenEndpointAuthMethod = typeof McpOAuthClientInputTokenEndpointAuthMethod[keyof typeof McpOAuthClientInputTokenEndpointAuthMethod];
+
+
+export const McpOAuthClientInputTokenEndpointAuthMethod = {
+  none: 'none',
+  client_secret_post: 'client_secret_post',
+  client_secret_basic: 'client_secret_basic',
+} as const;
+
+export type McpOAuthClientInputGrantTypesItem = typeof McpOAuthClientInputGrantTypesItem[keyof typeof McpOAuthClientInputGrantTypesItem];
+
+
+export const McpOAuthClientInputGrantTypesItem = {
+  authorization_code: 'authorization_code',
+  refresh_token: 'refresh_token',
+} as const;
+
+export type McpOAuthClientInputResponseTypesItem = typeof McpOAuthClientInputResponseTypesItem[keyof typeof McpOAuthClientInputResponseTypesItem];
+
+
+export const McpOAuthClientInputResponseTypesItem = {
+  code: 'code',
+} as const;
+
+export type McpOAuthClientInputScope = typeof McpOAuthClientInputScope[keyof typeof McpOAuthClientInputScope];
+
+
+export const McpOAuthClientInputScope = {
+  'mcp:read': 'mcp:read',
+} as const;
+
+export interface McpOAuthClientInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  client_name?: string;
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  redirect_uris: string[];
+  token_endpoint_auth_method?: McpOAuthClientInputTokenEndpointAuthMethod;
+  grant_types?: McpOAuthClientInputGrantTypesItem[];
+  response_types?: McpOAuthClientInputResponseTypesItem[];
+  scope?: McpOAuthClientInputScope;
+}
+
+export type McpOAuthClient = McpOAuthClientInput & {
+  client_id: string;
+  client_secret?: string;
+  client_id_issued_at?: number;
+  client_secret_expires_at?: number;
+} & Required<Pick<McpOAuthClientInput & {
+  client_id: string;
+  client_secret?: string;
+  client_id_issued_at?: number;
+  client_secret_expires_at?: number;
+}, 'client_name'>>;
+
+export type McpOAuthConsentDecision = typeof McpOAuthConsentDecision[keyof typeof McpOAuthConsentDecision];
+
+
+export const McpOAuthConsentDecision = {
+  allow: 'allow',
+  deny: 'deny',
+} as const;
+
+export interface McpOAuthConsent {
+  csrf: string;
+  decision: McpOAuthConsentDecision;
+}
+
+export type McpOAuthTokenInputGrantType = typeof McpOAuthTokenInputGrantType[keyof typeof McpOAuthTokenInputGrantType];
+
+
+export const McpOAuthTokenInputGrantType = {
+  authorization_code: 'authorization_code',
+  refresh_token: 'refresh_token',
+} as const;
+
+export interface McpOAuthTokenInput {
+  grant_type: McpOAuthTokenInputGrantType;
+  resource: string;
+  client_id?: string;
+  client_secret?: string;
+  code?: string;
+  code_verifier?: string;
+  redirect_uri?: string;
+  refresh_token?: string;
+  scope?: string;
+}
+
+export type McpOAuthTokenTokenType = typeof McpOAuthTokenTokenType[keyof typeof McpOAuthTokenTokenType];
+
+
+export const McpOAuthTokenTokenType = {
+  Bearer: 'Bearer',
+} as const;
+
+export type McpOAuthTokenScope = typeof McpOAuthTokenScope[keyof typeof McpOAuthTokenScope];
+
+
+export const McpOAuthTokenScope = {
+  'mcp:read': 'mcp:read',
+} as const;
+
+export interface McpOAuthToken {
+  access_token: string;
+  refresh_token: string;
+  token_type: McpOAuthTokenTokenType;
+  expires_in: number;
+  scope: McpOAuthTokenScope;
+}
+
+export interface McpOAuthRevocation {
+  token: string;
+  token_type_hint?: string;
+  client_id?: string;
+  client_secret?: string;
+}
+
+export interface McpOAuthDisconnect {
+  id: string;
+  csrf: string;
+}
+
 export type AdminMediaImageStatus = typeof AdminMediaImageStatus[keyof typeof AdminMediaImageStatus];
 
 
@@ -945,6 +1093,38 @@ export interface ApiTokenCreated {
   /** @nullable */
   expiresAt?: string | null;
 }
+
+export type AuthorizeMcpOAuthParams = {
+client_id: string;
+redirect_uri: string;
+response_type: AuthorizeMcpOAuthResponseType;
+resource: string;
+code_challenge: string;
+code_challenge_method: AuthorizeMcpOAuthCodeChallengeMethod;
+scope?: AuthorizeMcpOAuthScope;
+state?: string;
+};
+
+export type AuthorizeMcpOAuthResponseType = typeof AuthorizeMcpOAuthResponseType[keyof typeof AuthorizeMcpOAuthResponseType];
+
+
+export const AuthorizeMcpOAuthResponseType = {
+  code: 'code',
+} as const;
+
+export type AuthorizeMcpOAuthCodeChallengeMethod = typeof AuthorizeMcpOAuthCodeChallengeMethod[keyof typeof AuthorizeMcpOAuthCodeChallengeMethod];
+
+
+export const AuthorizeMcpOAuthCodeChallengeMethod = {
+  S256: 'S256',
+} as const;
+
+export type AuthorizeMcpOAuthScope = typeof AuthorizeMcpOAuthScope[keyof typeof AuthorizeMcpOAuthScope];
+
+
+export const AuthorizeMcpOAuthScope = {
+  'mcp:read': 'mcp:read',
+} as const;
 
 export type ListAdminMediaParams = {
 status?: ListAdminMediaStatus;

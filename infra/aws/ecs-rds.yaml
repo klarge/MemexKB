@@ -230,6 +230,8 @@ Resources:
               Value: '3000'
             - Name: STATIC_DIR
               Value: /app/public
+            - Name: APP_BASE_URL
+              Value: !Sub 'https://${DomainName}'
             - Name: MIGRATIONS_DIR
               Value: /app/migrations
             - Name: COOKIE_SECURE
@@ -280,6 +282,8 @@ Resources:
           Environment:
             - Name: MEMEX_URL
               Value: http://127.0.0.1:3000
+            - Name: APP_BASE_URL
+              Value: !Sub 'https://${DomainName}'
             - Name: MCP_HOST
               Value: 0.0.0.0
             - Name: MCP_PORT

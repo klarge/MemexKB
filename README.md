@@ -122,7 +122,8 @@ Both Compose files start an `mcp` service on HTTP port **3001 published on all D
 
    ```caddyfile
    wiki.example.com {
-     reverse_proxy /mcp 127.0.0.1:3001
+     @mcp path /mcp /mcp/*
+     reverse_proxy @mcp 127.0.0.1:3001
      reverse_proxy 127.0.0.1:3000
    }
    ```
@@ -136,7 +137,7 @@ Both Compose files start an `mcp` service on HTTP port **3001 published on all D
    }
    ```
 
-   The client-specific JSON shape varies. Clients that require OAuth rather than a configurable bearer header are **not supported by this API-key setup**. Browser-based clients must also have their exact origin listed in `MCP_ALLOWED_ORIGINS` in `.env`; desktop clients usually send no `Origin` header. Only allow public clients through the HTTPS proxy; restrict direct access to port 3001 with a firewall. See `artifacts/mcp-server/README.md` for local checks and client guidance.
+   The client-specific JSON shape varies. OAuth-capable clients can instead use per-user sign-in; see [MCP OAuth setup](artifacts/mcp-server/README.md#per-user-oauth). Set the same public HTTPS `APP_BASE_URL` for both services. Browser clients must have their exact origin in `MCP_ALLOWED_ORIGINS` in `.env`; desktop clients usually send no `Origin` header. Restrict direct port 3001 access with a firewall.
 
 ### Environment variables
 
