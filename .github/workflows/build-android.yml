@@ -40,7 +40,42 @@ jobs:
         working-directory: artifacts/memex-mobile
         env:
           NODE_ENV: production
-        run: node --test test/android-config.test.cjs
+        # Keep this check self-contained so it cannot fail on a missing test file.
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const { spawnSync } = require('node:child_process');
+          const fs = require('node:fs');
+          const os = require('node:os');
+          const path = require('node:path');
+
+          const plugin = require('./plugins/withOfflineAndroid.cjs');
+          const config = plugin({ name: 'Native config regression', slug: 'native-config-regression' });
+          assert.equal(typeof config.mods.android.manifest, 'function');
+          assert.equal(typeof config.mods.android.dangerous, 'function');
+
+          const output = fs.mkdtempSync(path.join(os.tmpdir(), 'memex-native-config-'));
+          try {
+            const constantsRoot = path.dirname(require.resolve('expo-constants/package.json'));
+            const result = spawnSync(process.execPath, [
+              path.join(constantsRoot, 'scripts/getAppConfig.js'), process.cwd(), output,
+            ], {
+              cwd: process.cwd(),
+              env: { ...process.env, NODE_ENV: 'production' },
+              encoding: 'utf8',
+              timeout: 60_000,
+            });
+            assert.ifError(result.error);
+            assert.equal(result.status, 0, result.stderr || 'Native config generation failed');
+            const actual = JSON.parse(fs.readFileSync(path.join(output, 'app.config'), 'utf8'));
+            const expected = require('./app.json').expo;
+            assert.equal(actual.name, expected.name);
+            assert.equal(actual.android.package, expected.android.package);
+            console.log('Production Expo config and offline Android plugin validated.');
+          } finally {
+            fs.rmSync(output, { recursive: true, force: true });
+          }
+          NODE
 
       # ── 4. Java (required by Gradle / Android toolchain) ──────────────────
       - name: Setup Java JDK 17
