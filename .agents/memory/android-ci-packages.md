@@ -34,3 +34,14 @@ not establish that the failing GitHub checkout includes it.
 in the inline preflight. Verify the exact workflow command against staged
 tracked app inputs without the test directory, rather than only running the
 local test suite.
+
+Declare Babel presets and plugins used by the mobile app as direct build
+dependencies; do not rely on Expo's transitive dependencies or local hoisting.
+
+**Why:** A production Android bundle succeeded locally while a clean GitHub
+checkout failed to resolve the Expo Babel preset. An existing local dependency
+layout can hide a missing direct declaration even during a real native export.
+
+**How to apply:** Keep the CI preflight checking the app's direct declaration
+and performing an Android JSX transform through its actual Babel config.
+Preserve pnpm isolation rather than changing hoisting to hide missing packages.
