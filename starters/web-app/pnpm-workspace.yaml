@@ -1,0 +1,70 @@
+# ============================================================================
+# SECURITY: Minimum release age for npm packages (supply-chain attack defense)
+# ============================================================================
+#
+# This setting requires that any npm package version must have been published
+# for at least 1 day (1440 minutes) before pnpm will allow installing it.
+# This is a critical defense against supply-chain attacks. In most cases,
+# malicious npm releases are discovered and pulled within hours, so a 1-day
+# delay provides a strong safety buffer.
+#
+# DO NOT DISABLE THIS SETTING. Removing or setting it to 0 is considered
+# extremely dangerous and leaves the entire workspace vulnerable to supply-
+# chain attacks, which have been the #1 vector for npm ecosystem compromises.
+#
+# If you absolutely need to install a package before the 1-day window has
+# passed (e.g. an urgent security bugfix), you can add it to the
+# `minimumReleaseAgeExclude` allowlist below. Only consider doing this for
+# packages released by trusted organizations with an impeccable security
+# posture (e.g. Replit packsges, react from Meta, typescript from Microsoft). Even then,
+# remove the exclusion once the 1-day window has passed.
+#
+# Example:
+#   minimumReleaseAgeExclude:
+#     - react
+#     - typescript
+#
+# ============================================================================
+minimumReleaseAge: 1440
+
+minimumReleaseAgeExclude:
+  # Exclude @replit scoped packages from the minimum release age check.
+  # These are published by Replit and trusted — the supply-chain attack vector
+  # this setting guards against does not apply to our own packages.
+  - '@replit/*'
+  - stripe-replit-sync
+
+packages: []
+autoInstallPeers: false
+onlyBuiltDependencies:
+  - esbuild
+
+
+overrides:
+  shell-quote: "1.11.0"
+  proxy-addr: "2.0.8"
+  compression: "1.8.2"
+  undici: "6.28.1"
+  http-cache-semantics: "4.3.0"
+  source-map-js: "1.2.2"
+  fast-copy: "4.1.0"
+  "@tailwindcss/typography>postcss-selector-parser": "7.1.6"
+  markdown-it: "14.3.1"
+  "markdown-it>linkify-it": "5.0.2"
+  "minimatch@3.1.5>brace-expansion": "1.1.21"
+  "minimatch@9.0.9>brace-expansion": "2.1.7"
+  "minimatch@10.2.5>brace-expansion": "5.0.12"
+  "@istanbuljs/load-nyc-config>js-yaml": "3.15.2"
+  "orval>js-yaml": "4.3.2"
+  "@babel/core": "7.29.6"
+  "express-rate-limit>ip-address": "10.7.1"
+  "express>body-parser": "2.3.0"
+  "ajv>fast-uri": "3.1.8"
+  postcss: "8.5.23"
+  "nanoid@3.3.12": "3.3.18"
+  browserslist: "4.28.7"
+  qs: "6.16.0"
+  "@node-saml/node-saml>@xmldom/xmldom": "0.8.15"
+  "query-string>decode-uri-component": "0.5.0"
+  "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
+  esbuild: "0.28.1"
