@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "rRrs05T5IgTaixaTakSiT"
+uri = "file://generated-artifacts/review/memex-code-review-guide.html"
+type = "html"
+title = "Memex: Architecture & Production Code-Review Guide"
+description = "A readable, printable guide for reviewers familiar with HTML and Python: architecture, TypeScript basics, functionality, dependencies, security controls, review priorities and a pre-production checklist."
+logical_id = "f9055d1a-143e-4cb2-95ea-d11041edb7cc"
+content_hash = "sha256:0c5e3d9c4963adf95513c4a8155c9e97e6d388b5b1036dd5de97bce81eac34b9"
+size = 38165
+mtime_ms = 1793154181327
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:dcd2e7f5-b997-4d67-857d-9e259b1e93dd/f9055d1a-143e-4cb2-95ea-d11041edb7cc/95046f15-f01c-4caa-8752-4148aa424276"
+storage_version_token = "1793154186950831"
+content_type = "text/html"
