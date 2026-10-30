@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { withIsolatedBackupSchema } from "./helpers/isolated-backup-schema";
 
-test("Article PDF uses HTML rendering and preserves export authorization", {
+test("Article PDF and standalone HTML preserve formatting, sanitization and export authorization", {
   skip: !process.env.DATABASE_URL && "PostgreSQL is required", timeout: 90000,
 }, async () => {
   await withIsolatedBackupSchema(async (schema, databaseUrl) => {
@@ -15,6 +15,7 @@ test("Article PDF uses HTML rendering and preserves export authorization", {
       fileURLToPath(new URL("./helpers/article-pdf-runner.ts", import.meta.url)),
     ], { env, timeout: 75000, maxBuffer: 1024 * 1024 });
     assert.match(stdout, /article PDF checks passed/);
+    assert.match(stdout, /article HTML checks passed/);
     process.stdout.write(stdout);
   });
 });

@@ -1736,6 +1736,16 @@ export const ExportArticleMarkdownResponse = zod.unknown()
 
 
 /**
+ * @summary Export article as a standalone HTML document with embedded styles and authorized images
+ */
+export const ExportArticleHtmlParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const ExportArticleHtmlResponse = zod.unknown()
+
+
+/**
  * @summary Export article as PDF
  */
 export const ExportArticlePdfParams = zod.object({

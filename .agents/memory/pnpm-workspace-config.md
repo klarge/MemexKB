@@ -14,3 +14,9 @@ An independent source export should be installed and verified outside the donor 
 **Why:** Package-manager version bootstrapping while working on a nested export unexpectedly reserialized the enclosing workspace's manifest and lockfile. A nested package boundary alone did not protect the donor.
 
 **How to apply:** Keep export dependencies isolated, inspect the donor manifest/lockfile diff after package operations, and require them to match their original contents before delivery.
+
+Avoid package-manager auto-bootstrap loops when the installed pnpm differs from the manifest's pinned version.
+
+**Why:** Automatic installation of the pinned pnpm recursively launched more installer processes, hung otherwise ordinary scripts, and exhausted process resources. An environment-only override did not stop nested pnpm calls.
+
+**How to apply:** Preserve the workspace's explicit auto-management setting and release-age protections. Diagnose bootstrap recursion before retrying a hanging pnpm command; do not change dependency versions merely to bypass it.

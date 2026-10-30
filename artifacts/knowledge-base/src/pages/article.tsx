@@ -452,11 +452,13 @@ export default function ArticleView({ params, area = "knowledge" }: { params?: {
       URL.revokeObjectURL(objectUrl);
     } catch (err) {
       console.error("Export failed", err);
+      toast({ title: "Export failed", description: "Please try again or contact an administrator.", variant: "destructive" });
     }
   };
 
   const exportPdf = () => triggerDownload(`/api/articles/${apiSlug}/export/pdf`, `${displayedArticle?.title ?? apiSlug}.pdf`);
   const exportMd  = () => triggerDownload(`/api/articles/${apiSlug}/export/md`,  `${displayedArticle?.title ?? apiSlug}.md`);
+  const exportHtml = () => triggerDownload(`/api/articles/${apiSlug}/export/html`, `${displayedArticle?.title ?? apiSlug}.html`);
 
   if (displayedIsLoading) {
     return (
@@ -733,6 +735,9 @@ export default function ArticleView({ params, area = "knowledge" }: { params?: {
               </Button>
               <Button variant="secondary" className="w-full justify-start" onClick={exportMd}>
                 <FileText className="mr-2 h-4 w-4" /> Download Markdown
+              </Button>
+              <Button variant="secondary" className="w-full justify-start" onClick={exportHtml} data-testid="button-export-html">
+                <FileText className="mr-2 h-4 w-4" /> Download HTML
               </Button>
             </CardContent>
           </Card>

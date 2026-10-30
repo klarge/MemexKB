@@ -5029,6 +5029,83 @@ export function useExportArticleMarkdown<TData = Awaited<ReturnType<typeof expor
 
 
 
+export const getExportArticleHtmlUrl = (slug: string,) => {
+
+
+
+
+  return `/api/articles/${slug}/export/html`
+}
+
+/**
+ * @summary Export article as a standalone HTML document with embedded styles and authorized images
+ */
+export const exportArticleHtml = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getExportArticleHtmlUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportArticleHtmlQueryKey = (slug: string,) => {
+    return [
+    `/api/articles/${slug}/export/html`
+    ] as const;
+    }
+
+
+export const getExportArticleHtmlQueryOptions = <TData = Awaited<ReturnType<typeof exportArticleHtml>>, TError = ErrorType<void>>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportArticleHtml>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportArticleHtmlQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportArticleHtml>>> = ({ signal }) => exportArticleHtml(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportArticleHtml>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportArticleHtmlQueryResult = NonNullable<Awaited<ReturnType<typeof exportArticleHtml>>>
+export type ExportArticleHtmlQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export article as a standalone HTML document with embedded styles and authorized images
+ */
+
+export function useExportArticleHtml<TData = Awaited<ReturnType<typeof exportArticleHtml>>, TError = ErrorType<void>>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportArticleHtml>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportArticleHtmlQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getExportArticlePdfUrl = (slug: string,) => {
 
 

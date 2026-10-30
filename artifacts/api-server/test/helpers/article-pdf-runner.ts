@@ -50,7 +50,7 @@ return example;</code></pre>
   <p style="text-align:center">Intentional center alignment stays centered.</p>
   <p>A source citation<sup data-type="citation"><a id="cite-ref-c-example" href="#cite-source-1">[1]</a></sup>.</p>
   <section data-type="citation-sources"><h2>Sources</h2><ol><li id="cite-source-1"><a href="https://example.test/reference">Reference title</a></li></ol></section>
-  ${paragraphs}`,
+   <script>alert("must-not-export")</script><p onclick="alert(1)">Safe text</p>${paragraphs}`,
 }).where(eq(articlesTable.id, article.id));
 const app = express();
 app.use((req, _res, next) => {
@@ -65,6 +65,7 @@ await new Promise<void>(resolve => server.once("listening", resolve));
 const address = server.address();
 assert.ok(address && typeof address !== "string");
 const url = `http://127.0.0.1:${address.port}/api/articles/${article.slug}/export/pdf`;
+process.env.APP_BASE_URL = `http://127.0.0.1:${address.port}`;
 try {
   assert.equal((await fetch(url)).status, 401);
   assert.equal((await fetch(url, { headers: { "x-test-actor": String(stranger.id) } })).status, 404);
@@ -79,6 +80,32 @@ try {
   const directory = await mkdtemp(path.join(tmpdir(), "article-pdf-"));
   const output = path.join(directory, "regression.pdf");
   await writeFile(output, pdf);
+  const htmlUrl = url.replace(/\/pdf$/, "/html");
+  assert.equal((await fetch(htmlUrl)).status, 401);
+  assert.equal((await fetch(htmlUrl, { headers: { "x-test-actor": String(stranger.id) } })).status, 404);
+  const htmlResponse = await fetch(htmlUrl, { headers: { "x-test-actor": String(owner.id) } });
+  assert.equal(htmlResponse.status, 200);
+  assert.match(htmlResponse.headers.get("content-type")!, /^text\/html; charset=utf-8/);
+  assert.equal(htmlResponse.headers.get("cache-control"), "private, no-store");
+  assert.match(htmlResponse.headers.get("content-disposition")!, /attachment.*\.html/);
+  const html = await htmlResponse.text();
+  assert.match(html, /<!DOCTYPE html>/i);
+  assert.match(html, /<title>HTML article export/);
+  assert.match(html, /data:image\/png;base64,/);
+  assert.match(html, /data-diagram="drawio"/);
+  assert.match(html, /Attached diagram and caption/);
+  assert.match(html, /Preserve the procedure/);
+  assert.match(html, /HTML styling preserved/);
+  assert.match(html, /href="#body-cite-source-1"/);
+  assert.match(html, /href="http:\/\/127\.0\.0\.1:\d+\/knowledge\/related-article"/);
+  assert.match(html, /Content-Security-Policy/);
+  assert.match(html, /font-src data:/);
+  assert.doesNotMatch(html, /<script|onclick=|src="\/api\/|src="https?:/i);
+  assert.match(html, /\[Image not embedded: foreign private image\]/);
+  assert.match(html, /\[Image not embedded: external image\]/);
+  assert.equal(externalRequests, 0);
+  await writeFile(path.join(directory, "regression.html"), html);
+  console.log("article HTML checks passed");
   console.log(`article PDF checks passed; visual fixture: ${output}`);
 } finally {
   server.close();

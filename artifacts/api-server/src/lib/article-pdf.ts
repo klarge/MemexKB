@@ -27,10 +27,22 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 }
 
-export async function renderArticlePdf(article: {
+type ExportArticle = {
   id: number; title: string; content: string; procedureSteps?: ProcedureStep[];
-}) {
-  if (activeExports >= 2) throw new PdfExportBusyError("PDF exporter is busy. Please try again shortly.");
+};
+
+export function renderArticlePdf(article: ExportArticle) {
+  return renderArticleDocument(article, "pdf");
+}
+
+export function renderArticleHtml(article: ExportArticle, baseUrl: string) {
+  return renderArticleDocument(article, "html", baseUrl);
+}
+
+function renderArticleDocument(article: ExportArticle, format: "pdf", baseUrl?: string): Promise<Buffer>;
+function renderArticleDocument(article: ExportArticle, format: "html", baseUrl: string): Promise<string>;
+async function renderArticleDocument(article: ExportArticle, format: "pdf" | "html", baseUrl?: string) {
+  if (activeExports >= 2) throw new PdfExportBusyError("Article exporter is busy. Please try again shortly.");
   activeExports++;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   let deadline: NodeJS.Timeout | undefined;
@@ -60,12 +72,13 @@ export async function renderArticlePdf(article: {
     // Use the desktop reader styles, not the phone's infobox stacking rules.
     await page.setViewportSize({ width: 1100, height: 900 });
     await page.emulateMedia({ media: "screen", colorScheme: "light" });
-    await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(article.title)}</title><style>${css.replace(/<\/style/gi, "<\\/style")}</style></head><body><main>
+    const portableHeaders = format === "html" ? `<meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"><style>main{max-width:1100px;margin:0 auto;padding:32px;box-sizing:border-box}@media(max-width:600px){main{padding:16px}}@media print{main{padding:0}}</style>` : "";
+    await page.setContent(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(article.title)}</title><style>${css.replace(/<\/style/gi, "<\\/style")}</style>${portableHeaders}</head><body><main>
       <h1 class="pdf-title">${escapeHtml(article.title)}</h1>
       <div class="prose prose-stone max-w-none prose-headings:font-semibold prose-a:text-primary prose-img:rounded-lg prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-th:border prose-th:border-border prose-th:bg-muted" data-testid="article-content">${body}</div>
       ${steps ? `<h2 style="clear:both;margin-top:40px;margin-bottom:16px;font-size:20px;font-weight:600">Steps</h2>${steps}` : ""}
       </main></body></html>`, { waitUntil: "domcontentloaded", timeout: 15000 });
-    await page.evaluate((imageMap) => {
+    await page.evaluate(({ imageMap, baseUrl }) => {
       Array.from(document.querySelectorAll<HTMLElement>('[data-testid="article-content"]')).forEach((region, index) => {
         const scope = index === 0 ? "body" : `step-${index}`;
         for (const element of Array.from(region.querySelectorAll<HTMLElement>('[id^="cite-ref-"], [id^="cite-source-"]'))) {
@@ -125,11 +138,23 @@ export async function renderArticlePdf(article: {
         fragment.append(document.createTextNode(text.slice(position)));
         node.replaceWith(fragment);
       }
-    }, imageMap);
+      // Keep citation anchors local, but make application links useful when
+      // this standalone document is opened from disk.
+      if (baseUrl) for (const link of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+        const href = link.getAttribute("href") ?? "";
+        if (href.startsWith("#")) continue;
+        try {
+          const target = new URL(href, `${baseUrl}/`);
+          if (["http:", "https:", "mailto:"].includes(target.protocol)) link.href = target.href;
+          link.rel = "noopener noreferrer";
+        } catch { link.removeAttribute("href"); }
+      }
+    }, { imageMap, baseUrl });
     await page.evaluate(async () => {
       await document.fonts.ready;
       await Promise.all(Array.from(document.images).map(image => image.decode().catch(() => undefined)));
     });
+    if (format === "html") return await page.content();
     return await page.pdf({ format: "A4", printBackground: true, tagged: true,
       margin: { top: "18mm", bottom: "18mm", left: "18mm", right: "18mm" } });
   } finally {

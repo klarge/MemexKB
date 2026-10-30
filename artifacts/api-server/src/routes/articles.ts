@@ -30,7 +30,9 @@ import { sanitizeArticleHtml } from "../lib/sanitize";
 import { convert } from "html-to-text";
 import { slugify, extractWikilinks, rewriteWikilinksForSlug } from "../lib/slugify";
 import { ArticleImageAttachmentError, attachReferencedArticleImages } from "../lib/article-images";
-import { renderArticlePdf, PdfExportBusyError } from "../lib/article-pdf";
+import { renderArticlePdf, renderArticleHtml, PdfExportBusyError } from "../lib/article-pdf";
+import { frontendUrl } from "../lib/frontend-url";
+import { ExportArticleHtmlParams } from "@workspace/api-zod";
 import TurndownService from "turndown";
 import { preserveCitationHtml } from "../lib/citation-export";
 import { preserveDiagramHtml } from "../lib/diagram-export";
@@ -1706,8 +1708,11 @@ router.get("/articles/:slug/export/md", requireAuth, async (req, res) => {
   res.send(markdown);
 });
 
-router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
-  const slug = String(req.params.slug);
+router.get(["/articles/:slug/export/pdf", "/articles/:slug/export/html"], requireAuth, async (req, res) => {
+  const format = /\/html\/?$/.test(req.path) ? "html" : "pdf";
+  const params = ExportArticleHtmlParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "Invalid article slug" }); return; }
+  const slug = params.data.slug;
   const userId = req.session.userId;
   const userRole = req.session.userRole;
   const [article] = await db
@@ -1735,19 +1740,20 @@ router.get("/articles/:slug/export/pdf", requireAuth, async (req, res) => {
   }
 
   try {
-    const pdf = await renderArticlePdf(article);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${slug}.pdf"`);
+    const document = format === "html" ? await renderArticleHtml(article, frontendUrl(req)) : await renderArticlePdf(article);
+    res.setHeader("Content-Type", format === "html" ? "text/html; charset=utf-8" : "application/pdf");
+    const filename = `${slug}.${format}`;
+    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16)}`)}`);
     res.setHeader("Cache-Control", "private, no-store");
-    res.send(pdf);
+    res.send(document);
   } catch (error) {
     if (error instanceof PdfExportBusyError) {
       res.setHeader("Retry-After", "5");
       res.status(503).json({ error: error.message });
       return;
     }
-    req.log.error({ err: error }, "Article PDF export failed");
-    res.status(500).json({ error: "Unable to render this PDF. Please try again or contact an administrator." });
+    req.log.error({ err: error, format }, "Article export failed");
+    res.status(500).json({ error: `Unable to render this ${format.toUpperCase()}. Please try again or contact an administrator.` });
   }
 });
 
