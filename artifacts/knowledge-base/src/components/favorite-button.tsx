@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
 export function FavoriteButton({ entityType, entityId, title }: {
-  entityType: "article" | "project"; entityId: number; title: string;
+  entityType: "article" | "project" | "board"; entityId: number; title: string;
 }) {
   const { user } = useAuth();
   const favorites = useFavorites();

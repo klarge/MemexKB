@@ -412,6 +412,7 @@ export type FavoriteInputEntityType = typeof FavoriteInputEntityType[keyof typeo
 export const FavoriteInputEntityType = {
   article: 'article',
   project: 'project',
+  board: 'board',
 } as const;
 
 export interface FavoriteInput {
@@ -430,6 +431,7 @@ export type FavoriteItemEntityType = typeof FavoriteItemEntityType[keyof typeof 
 export const FavoriteItemEntityType = {
   article: 'article',
   project: 'project',
+  board: 'board',
 } as const;
 
 export type FavoriteItemKind = typeof FavoriteItemKind[keyof typeof FavoriteItemKind];
@@ -440,6 +442,7 @@ export const FavoriteItemKind = {
   policy: 'policy',
   procedure: 'procedure',
   project: 'project',
+  board: 'board',
 } as const;
 
 export interface FavoriteItem {
@@ -449,6 +452,9 @@ export interface FavoriteItem {
   /** @nullable */
   slug: string | null;
   kind: FavoriteItemKind;
+  /** @nullable */
+  projectId: number | null;
+  projectName?: string;
   archived: boolean;
   savedAt: string;
 }

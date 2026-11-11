@@ -14,4 +14,5 @@ export const FavoriteItemKind = {
   policy: 'policy',
   procedure: 'procedure',
   project: 'project',
+  board: 'board',
 } as const;

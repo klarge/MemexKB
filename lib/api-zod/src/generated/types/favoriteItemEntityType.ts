@@ -12,4 +12,5 @@ export type FavoriteItemEntityType = typeof FavoriteItemEntityType[keyof typeof 
 export const FavoriteItemEntityType = {
   article: 'article',
   project: 'project',
+  board: 'board',
 } as const;

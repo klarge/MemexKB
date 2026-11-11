@@ -15,6 +15,9 @@ export interface FavoriteItem {
   /** @nullable */
   slug: string | null;
   kind: FavoriteItemKind;
+  /** @nullable */
+  projectId: number | null;
+  projectName?: string;
   archived: boolean;
   savedAt: Date;
 }

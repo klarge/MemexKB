@@ -464,8 +464,12 @@ router.get("/articles/stats", requireAuth, async (req, res) => {
 
   const [[totalArticlesRow], [totalUsersRow], [totalGroupsRow], [restrictedArticlesRow]] = await Promise.all([
     db.select({ count: count() }).from(articlesTable).where(accessibleArticles),
-    db.select({ count: sql<number>`count(DISTINCT ${articlesTable.createdById})` }).from(articlesTable).where(accessibleArticles),
-    db.select({ count: sql<number>`count(DISTINCT ${articleGroupsTable.groupId})` })
+    isAdmin(userRole)
+      ? db.select({ count: count() }).from(usersTable)
+      : db.select({ count: sql<number>`count(DISTINCT ${articlesTable.createdById})` }).from(articlesTable).where(accessibleArticles),
+    isAdmin(userRole)
+      ? db.select({ count: count() }).from(groupsTable)
+      : db.select({ count: sql<number>`count(DISTINCT ${articleGroupsTable.groupId})` })
       .from(articleGroupsTable)
       .innerJoin(articlesTable, eq(articleGroupsTable.articleId, articlesTable.id))
       .where(accessibleArticles),

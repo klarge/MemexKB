@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { setBoardArchived } from "@/lib/board-archive";
+import { FavoriteButton } from "@/components/favorite-button";
 import { RenameBoard } from "@/components/rename-board";
 import { BoardPointerSensor, BoardTouchSensor, CardDragClickGuard, isInteractiveCardTarget } from "@/lib/board-drag-interaction";
 import { Button } from "@/components/ui/button";
@@ -1079,6 +1080,7 @@ export default function BoardPage({ params }: { params: { projectId: string; boa
         </Link>
         <div className="h-4 w-px bg-border" />
         <h1 className="min-w-0 truncate font-semibold text-sm" title={boardData.name}>{boardData.name}</h1>
+        <FavoriteButton entityType="board" entityId={boardData.id} title={boardData.name} />
         <RenameBoard board={boardData} projectId={projectId} />
         {boardData.archivedAt && <span className="text-xs text-muted-foreground">Archived</span>}
         <label className="flex items-center gap-2 text-sm">

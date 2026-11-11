@@ -509,11 +509,13 @@ export const UpdateNotificationPreferencesResponse = zod.object({
  */
 export const ListFavoritesResponse = zod.object({
   "items": zod.array(zod.object({
-  "entityType": zod.enum(['article', 'project']),
+  "entityType": zod.enum(['article', 'project', 'board']),
   "entityId": zod.number().int(),
   "title": zod.string(),
   "slug": zod.string().nullable(),
-  "kind": zod.enum(['knowledge', 'policy', 'procedure', 'project']),
+  "kind": zod.enum(['knowledge', 'policy', 'procedure', 'project', 'board']),
+  "projectId": zod.number().int().nullable(),
+  "projectName": zod.string().optional(),
   "archived": zod.boolean(),
   "savedAt": zod.coerce.date()
 }))
@@ -528,7 +530,7 @@ export const updateFavoriteBodyEntityIdMax = 2147483647;
 
 
 export const UpdateFavoriteBody = zod.object({
-  "entityType": zod.enum(['article', 'project']),
+  "entityType": zod.enum(['article', 'project', 'board']),
   "entityId": zod.number().int().min(1).max(updateFavoriteBodyEntityIdMax),
   "favorite": zod.boolean()
 })

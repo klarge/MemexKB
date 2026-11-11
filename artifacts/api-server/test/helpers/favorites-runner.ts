@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import express from "express";
 import { and, eq, sql } from "drizzle-orm";
-import { db, pool, usersTable, articlesTable, projectsTable, groupsTable, groupMembersTable, projectGroupsTable, articleGroupsTable, favoritesTable, siteSettingsTable, policySubjectsTable } from "@workspace/db";
+import { db, pool, usersTable, articlesTable, projectsTable, boardsTable, groupsTable, groupMembersTable, projectGroupsTable, articleGroupsTable, favoritesTable, siteSettingsTable, policySubjectsTable } from "@workspace/db";
 import { decodeBackup, encodeBackup } from "./sso-only-backup-codec";
 
 assert.match(process.env.BACKUP_TEST_SCHEMA ?? "", /^backup_test_[a-f0-9]{32}$/);
@@ -18,6 +18,7 @@ const [group] = await db.insert(groupsTable).values({ name: "Favorite group" }).
 const [subject] = await db.insert(policySubjectsTable).values({ name: "Favorite policies" }).returning();
 await db.insert(groupMembersTable).values({ userId: member.id, groupId: group.id });
 const [project] = await db.insert(projectsTable).values({ name: "Shared project", createdById: owner.id, managerId: owner.id }).returning();
+const [board] = await db.insert(boardsTable).values({ projectId: project.id, name: "Favorite board" }).returning();
 await db.insert(projectGroupsTable).values({ projectId: project.id, groupId: group.id });
 const [knowledge, policy, procedure, personal, log, document] = await db.insert(articlesTable).values([
   { title: "Knowledge", slug: "favorite-knowledge", kind: "knowledge", visibility: "public", createdById: owner.id },
@@ -57,13 +58,22 @@ try {
   await request("/favorites", 0, undefined, "GET", 401);
   for (const article of [knowledge, policy, procedure, personal]) await star(owner.id, "article", article.id);
   await star(owner.id, "project", project.id);
+  await star(owner.id, "board", board.id);
   for (const article of [knowledge, policy, procedure]) await star(member.id, "article", article.id);
   await star(member.id, "project", project.id);
+  await star(member.id, "board", board.id);
+  await star(member.id, "board", board.id);
   await star(member.id, "article", knowledge.id);
-  assert.equal((await request("/favorites", member.id)).items.length, 4);
+  assert.equal((await request("/favorites", member.id)).items.length, 5);
+  const savedBoard = (await request("/favorites", member.id)).items.find((item: any) => item.entityType === "board");
+  assert.equal(savedBoard.entityId, board.id);
+  assert.equal(savedBoard.projectId, project.id);
+  assert.equal(savedBoard.projectName, project.name);
   assert.equal((await request("/favorites", admin.id)).items.length, 0);
   for (const article of [personal, procedure, log, document]) await star(stranger.id, "article", article.id, true, 404);
   await star(stranger.id, "project", project.id, true, 404);
+  await star(stranger.id, "board", board.id, true, 404);
+  await star(owner.id, "board", 2147483647, true, 404);
   await star(owner.id, "article", log.id, true, 404);
   await star(owner.id, "article", document.id, true, 404);
   for (const body of [{}, { entityType: "article", entityId: knowledge.id, favorite: "true" }, { entityType: "task", entityId: 1, favorite: true }, { entityType: "article", entityId: 9_000_000_000, favorite: true }]) {
@@ -75,15 +85,32 @@ try {
   const renamed = (await request("/favorites", member.id)).items.find((item: any) => item.entityId === policy.id && item.entityType === "article");
   assert.equal(renamed.title, "Renamed policy");
   assert.equal(renamed.slug, "new-policy-url");
+  await db.update(boardsTable).set({ name: "Renamed board", archivedAt: new Date() }).where(eq(boardsTable.id, board.id));
+  const renamedBoard = (await request("/favorites", member.id)).items.find((item: any) => item.entityType === "board");
+  assert.equal(renamedBoard.title, "Renamed board");
+  assert.equal(renamedBoard.archived, true);
+  await db.update(boardsTable).set({ archivedAt: null }).where(eq(boardsTable.id, board.id));
+  await star(member.id, "board", board.id, false);
+  assert.equal((await request("/favorites", member.id)).items.some((item: any) => item.entityType === "board"), false);
+  assert.equal((await request("/favorites", owner.id)).items.some((item: any) => item.entityType === "board"), true);
+  await star(member.id, "board", board.id);
   await db.update(projectsTable).set({ archivedAt: new Date() }).where(eq(projectsTable.id, project.id));
   assert.equal((await request("/favorites", member.id)).items.find((item: any) => item.entityType === "project").archived, true);
+  assert.equal((await request("/favorites", member.id)).items.find((item: any) => item.entityType === "board").archived, true);
   await db.delete(groupMembersTable).where(and(eq(groupMembersTable.userId, member.id), eq(groupMembersTable.groupId, group.id)));
   assert.equal((await request("/favorites", member.id)).items.length, 2);
+  assert.equal((await db.select().from(favoritesTable).where(and(eq(favoritesTable.userId, member.id), eq(favoritesTable.boardId, board.id)))).length, 1);
+  await db.insert(groupMembersTable).values({ userId: member.id, groupId: group.id });
+  assert.equal((await request("/favorites", member.id)).items.some((item: any) => item.entityType === "board"), true);
+  await db.delete(groupMembersTable).where(and(eq(groupMembersTable.userId, member.id), eq(groupMembersTable.groupId, group.id)));
+  await star(member.id, "board", board.id, true, 404);
   await star(member.id, "project", project.id, false);
   assert.ok((await request("/favorites", owner.id)).items.some((item: any) => item.entityType === "project"));
   await db.insert(siteSettingsTable).values({ key: "projects_enabled", value: "false" }).onConflictDoUpdate({ target: siteSettingsTable.key, set: { value: "false" } });
   assert.equal((await request("/favorites", owner.id)).items.some((item: any) => item.entityType === "project"), false);
+  assert.equal((await request("/favorites", owner.id)).items.some((item: any) => item.entityType === "board"), false);
   await star(owner.id, "project", project.id, true, 404);
+  await star(owner.id, "board", board.id, true, 404);
   await db.update(siteSettingsTable).set({ value: "true" }).where(eq(siteSettingsTable.key, "projects_enabled"));
   const count = (await db.select().from(favoritesTable)).length;
   const passphrase = "isolated-favorites-backup";
@@ -92,6 +119,7 @@ try {
   const bytes = Buffer.from(await exported.arrayBuffer());
   const archive = decodeBackup(bytes, passphrase);
   assert.equal(archive.data.favorites.length, count);
+  assert.ok(archive.data.favorites.some((item: any) => item.boardId === board.id));
   const restore = async (payload: Buffer) => {
     const form = new FormData();
     form.append("file", new Blob([payload]), "favorites.memex");
@@ -104,6 +132,10 @@ try {
   await db.delete(favoritesTable);
   await restore(bytes);
   assert.equal((await db.select().from(favoritesTable)).length, count);
+  assert.equal((await request("/favorites", owner.id)).items.find((item: any) => item.entityType === "board").projectId, project.id);
+  await assert.rejects(async () => { await db.insert(favoritesTable).values({ userId: admin.id, boardId: board.id, projectId: project.id }); });
+  await db.delete(boardsTable).where(eq(boardsTable.id, board.id));
+  assert.equal((await db.select().from(favoritesTable).where(eq(favoritesTable.boardId, board.id))).length, 0);
   await db.delete(articlesTable).where(eq(articlesTable.id, policy.id));
   assert.equal((await db.select().from(favoritesTable).where(eq(favoritesTable.articleId, policy.id))).length, 0);
   delete archive.data.favorites;

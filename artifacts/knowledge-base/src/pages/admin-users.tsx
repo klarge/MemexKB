@@ -9,6 +9,7 @@ import {
   type UserUpdate,
   type UserUpdateRole,
   getGetMeQueryKey,
+  getGetArticleStatsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,7 @@ export default function AdminUsers() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
           toast({ title: "User created" });
+          queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
           setIsDialogOpen(false);
         },
         onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -135,6 +137,7 @@ export default function AdminUsers() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         toast({ title: "User deleted" });
+        queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
       },
       onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });

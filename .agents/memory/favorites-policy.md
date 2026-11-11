@@ -3,9 +3,9 @@ name: Favorites policy
 description: Personal bookmark scope and behavior when access changes.
 ---
 
-Favorites are personal to the signed-in user, across Policies, Procedures, Knowledge articles, and Projects.
+Favorites are personal to the signed-in user, across Policies, Procedures, Knowledge articles, Projects, and project Boards.
 
-**Why:** The user requested a home-screen area showing the user's favorites, not a shared organization-wide list.
+**Why:** The user requested a home-screen area showing the user's favorites, not a shared organization-wide list, and asked to star/favorite project boards just like projects.
 
 **How to apply:** Keep favorites account-scoped on any additional client or derived surface, and apply current content permissions before returning metadata or links.
 

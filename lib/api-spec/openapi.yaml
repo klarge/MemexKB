@@ -2219,7 +2219,7 @@ components:
       properties:
         entityType:
           type: string
-          enum: [article, project]
+          enum: [article, project, board]
         entityId:
           type: integer
           minimum: 1
@@ -2228,11 +2228,11 @@ components:
           type: boolean
     FavoriteItem:
       type: object
-      required: [entityType, entityId, title, slug, kind, archived, savedAt]
+      required: [entityType, entityId, title, slug, kind, archived, savedAt, projectId]
       properties:
         entityType:
           type: string
-          enum: [article, project]
+          enum: [article, project, board]
         entityId:
           type: integer
         title:
@@ -2241,7 +2241,11 @@ components:
           type: [string, "null"]
         kind:
           type: string
-          enum: [knowledge, policy, procedure, project]
+          enum: [knowledge, policy, procedure, project, board]
+        projectId:
+          type: [integer, "null"]
+        projectName:
+          type: string
         archived:
           type: boolean
         savedAt:

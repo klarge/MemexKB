@@ -10,6 +10,7 @@ import {
   useAddGroupMember,
   useRemoveGroupMember,
   useListUsers,
+  getGetArticleStatsQueryKey,
   type Group,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -207,6 +208,7 @@ export default function AdminGroups() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
           toast({ title: "Group created" });
+          queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
           setIsDialogOpen(false);
         },
         onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -219,6 +221,7 @@ export default function AdminGroups() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
         toast({ title: "Group deleted" });
+        queryClient.invalidateQueries({ queryKey: getGetArticleStatsQueryKey() });
       },
       onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });

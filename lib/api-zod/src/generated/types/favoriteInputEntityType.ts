@@ -12,4 +12,5 @@ export type FavoriteInputEntityType = typeof FavoriteInputEntityType[keyof typeo
 export const FavoriteInputEntityType = {
   article: 'article',
   project: 'project',
+  board: 'board',
 } as const;

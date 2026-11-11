@@ -1,5 +1,6 @@
 import { articlePathFor } from "@/lib/content-paths";
-import { useGetArticleStats } from "@workspace/api-client-react";
+import { useGetArticleStats, getGetArticleStatsQueryKey } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Users, Shield, Lock, Calendar, Loader2 } from "lucide-react";
@@ -7,10 +8,19 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
 export default function AdminDashboard() {
-  const { data: stats, isLoading } = useGetArticleStats();
+  const { data: stats, isLoading, isError, refetch } = useGetArticleStats({
+    query: { queryKey: getGetArticleStatsQueryKey(), refetchInterval: 60_000 },
+  });
 
   if (isLoading) {
     return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  }
+
+  if (isError || !stats) {
+    return <div role="alert" className="space-y-3 p-6">
+      <p className="text-destructive">Could not load dashboard totals.</p>
+      <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+    </div>;
   }
 
   return (

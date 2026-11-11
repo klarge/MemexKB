@@ -538,6 +538,7 @@ function BoardCard({
 
       {/* Action buttons */}
       <div className="mt-3 pt-2 border-t flex flex-wrap items-center justify-between gap-2">
+        <FavoriteButton entityType="board" entityId={board.id} title={board.name} />
         <RenameBoard board={board} projectId={projectId} />
         {isArchived && onUnarchive ? (
           <Button

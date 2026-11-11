@@ -218,6 +218,13 @@
       "when": 1792118400000,
       "tag": "0030_mcp_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794355200000,
+      "tag": "0031_board_favorites",
+      "breakpoints": true
     }
   ]
 }

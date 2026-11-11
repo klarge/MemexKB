@@ -25,13 +25,14 @@ export function HomeFavorites() {
         <p className="text-destructive">Could not load your favorites.</p>
         <Button variant="outline" size="sm" onClick={() => favorites.refetch()}>Try again</Button>
       </div> : !window.items.length ?
-        <p className="py-8 px-4 text-center text-sm text-muted-foreground">Star articles, policies, procedures, or projects to keep them here.</p> :
+        <p className="py-8 px-4 text-center text-sm text-muted-foreground">Star articles, policies, procedures, projects, or boards to keep them here.</p> :
         <>
           {window.items.map(item => <div key={`${item.entityType}:${item.entityId}`} className="flex items-center gap-2 px-4 py-3 hover:bg-muted/40 transition-colors">
             <Link className="min-w-0 flex-1 hover:text-primary" href={item.entityType === "project"
-              ? `/projects/${item.entityId}` : articlePathFor({ kind: item.kind, slug: item.slug! })}>
+              ? `/projects/${item.entityId}` : item.entityType === "board"
+                ? `/projects/${item.projectId}/boards/${item.entityId}` : articlePathFor({ kind: item.kind, slug: item.slug! })}>
               <p className="truncate text-sm font-medium">{item.title}</p>
-              <p className="text-xs text-muted-foreground">{item.kind === "project" ? "Project" : KIND_LABEL[item.kind]}{item.archived ? " · Archived" : ""}</p>
+              <p className="text-xs text-muted-foreground">{item.kind === "project" ? "Project" : item.kind === "board" ? `Board${item.projectName ? ` · ${item.projectName}` : ""}` : KIND_LABEL[item.kind]}{item.archived ? " · Archived" : ""}</p>
             </Link>
             <FavoriteButton entityType={item.entityType} entityId={item.entityId} title={item.title} />
           </div>)}
