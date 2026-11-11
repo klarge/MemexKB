@@ -81,6 +81,49 @@ test("OAuth PKCE, live employee permissions, MCP identity and revocation", async
       return { verifier, path: `/api/oauth/authorize?${params}` };
     };
     const valid = begin();
+    // Exercise both Express query parsers: repeated keys are arrays, and the
+    // extended parser can also produce nested objects instead of strings.
+    for (const parser of ["simple", "extended"]) {
+      app.set("query parser", parser);
+      const expectInvalid = async (params: URLSearchParams) => {
+        const response = await request(`/api/oauth/authorize?${params}`);
+        assert.equal(response.status, 400, `${parser} parser must reject malformed authorization parameters`);
+        assert.equal(response.headers.get("location"), null, "Malformed input must not be redirected");
+        assert.equal((await response.json()).error, "invalid_request");
+      };
+      for (const key of ["state", "client_id", "redirect_uri", "response_type", "resource",
+        "code_challenge", "code_challenge_method", "scope", "extra"]) {
+        const params = new URL(valid.path, base).searchParams;
+        params.append(key, "first");
+        params.append(key, "second");
+        await expectInvalid(params);
+      }
+      const longState = new URL(valid.path, base).searchParams;
+      longState.set("state", "x".repeat(2049));
+      await expectInvalid(longState);
+      // Array length must not bypass the limit on a long string element.
+      longState.append("state", "short");
+      await expectInvalid(longState);
+      if (parser === "extended") {
+        for (const key of ["state[]", "state[value]", "state[length]"]) {
+          const params = new URL(valid.path, base).searchParams;
+          params.delete("state");
+          params.set(key, "x".repeat(2049));
+          await expectInvalid(params);
+        }
+      }
+      for (const state of [undefined, "", "x".repeat(2048)]) {
+        const params = new URL(valid.path, base).searchParams;
+        if (state === undefined) params.delete("state"); else params.set("state", state);
+        const response = await request(`/api/oauth/authorize?${params}`);
+        assert.equal(response.status, 302);
+        const login = new URL(response.headers.get("location")!, base);
+        assert.equal(login.pathname, "/login");
+        const returned = new URL(login.searchParams.get("returnTo")!, base);
+        assert.equal(returned.searchParams.get("state"), state ?? null, "Preserve valid state without coercion");
+      }
+    }
+    app.set("query parser", "simple");
     const unsigned = await request(valid.path);
     assert.equal(unsigned.status, 302); assert.ok(unsigned.headers.get("location")!.startsWith("/login?returnTo="));
     const badRedirect = await request(begin({ redirect_uri: "https://evil.example/callback" }).path, { headers: { Cookie: aliceCookie } });

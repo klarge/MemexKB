@@ -78,10 +78,18 @@ router.post("/register", rateLimit({ windowMs: 3_600_000, limit: 10, standardHea
 router.get("/authorize", async (req, res) => {
   protocolHeaders(res);
   // Reject parameter pollution rather than letting different components choose different values.
-  if (Object.values(req.query).some(x => typeof x !== "string")) {
-    error(res, 400, "invalid_request", "Authorization parameters must be single strings."); return;
+  // Copy only runtime-checked strings; a type assertion cannot validate HTTP input.
+  const query: Record<string, string> = Object.create(null);
+  for (const [key, input] of Object.entries(req.query)) {
+    if (typeof input !== "string") {
+      error(res, 400, "invalid_request", "Authorization parameters must be single strings."); return;
+    }
+    query[key] = input;
   }
-  const query = req.query as Record<string, string>;
+  const state = query.state;
+  if (typeof state === "string" && state.length > 2048) {
+    error(res, 400, "invalid_request", "State is too long."); return;
+  }
   const [client] = await db.select().from(clients).where(eq(clients.id, query.client_id ?? "")).limit(1);
   if (!client || !client.redirectUris.includes(query.redirect_uri)) {
     error(res, 400, "invalid_request", "Unknown client or unregistered redirect URI."); return;
@@ -91,7 +99,7 @@ router.get("/authorize", async (req, res) => {
   const reject = (code: string, description: string) => {
     const target = new URL(query.redirect_uri);
     target.searchParams.set("error", code); target.searchParams.set("error_description", description);
-    if (query.state !== undefined) target.searchParams.set("state", query.state);
+    if (state !== undefined) target.searchParams.set("state", state);
     res.redirect(302, target.href);
   };
   if (query.response_type !== "code") { reject("unsupported_response_type", "Use authorization code flow."); return; }
@@ -100,7 +108,6 @@ router.get("/authorize", async (req, res) => {
   }
   if (query.scope !== undefined && query.scope !== OAUTH_SCOPE) { reject("invalid_scope", "Only mcp:read is supported."); return; }
   if (query.resource !== resource) { reject("invalid_target", "Request the exact Memex MCP resource URL."); return; }
-  if ((query.state?.length ?? 0) > 2048) { error(res, 400, "invalid_request", "State is too long."); return; }
   if (!req.session.userId) {
     const returnTo = `/api/oauth/authorize?${new URLSearchParams(query)}`;
     res.redirect(302, `/login?returnTo=${encodeURIComponent(returnTo)}`); return;
@@ -112,7 +119,7 @@ router.get("/authorize", async (req, res) => {
   if (!user) { error(res, 401, "login_required", "Sign in again."); return; }
   const csrf = newOAuthSecret();
   req.session.oauthPending = { clientId: client.id, redirectUri: query.redirect_uri, challenge: query.code_challenge,
-    resource, state: query.state, csrf, expiresAt: Date.now() + 10 * 60_000, userId: user.id };
+    resource, state, csrf, expiresAt: Date.now() + 10 * 60_000, userId: user.id };
   await new Promise<void>((resolve, rejectSave) => req.session.save(err => err ? rejectSave(err) : resolve()));
   oauthPage(res, "Connect an app to Memex", `
     <p><strong>${esc(client.name)}</strong> is requesting read-only access as <strong>${esc(user.name)}</strong> (${esc(user.email)}).</p>

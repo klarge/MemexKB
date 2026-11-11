@@ -71,8 +71,8 @@ export const RegisterMcpOAuthClientResponse = zod.object({
 }).and(zod.object({
   "client_id": zod.string(),
   "client_secret": zod.string().optional(),
-  "client_id_issued_at": zod.number().int().optional(),
-  "client_secret_expires_at": zod.number().int().optional()
+  "client_id_issued_at": zod.int().optional(),
+  "client_secret_expires_at": zod.int().optional()
 }))
 
 
@@ -123,7 +123,7 @@ export const ExchangeMcpOAuthTokenResponse = zod.object({
   "access_token": zod.string(),
   "refresh_token": zod.string(),
   "token_type": zod.enum(['Bearer']),
-  "expires_in": zod.number().int(),
+  "expires_in": zod.int(),
   "scope": zod.enum(['mcp:read'])
 })
 
@@ -181,29 +181,29 @@ export const ListAdminMediaQueryParams = zod.object({
 
 export const ListAdminMediaResponse = zod.object({
   "images": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "filename": zod.string(),
   "mimeType": zod.string(),
-  "sizeBytes": zod.number().int().describe('Original image bytes'),
-  "storedBytes": zod.number().int().describe('Logical base64 bytes'),
+  "sizeBytes": zod.int().describe('Original image bytes'),
+  "storedBytes": zod.int().describe('Logical base64 bytes'),
   "createdAt": zod.coerce.date(),
   "uploadedByName": zod.string().nullable(),
   "articleTitle": zod.string().nullable(),
   "articleSlug": zod.string().nullable(),
   "status": zod.enum(['current', 'history', 'recent', 'unused']),
-  "currentReferences": zod.number().int(),
-  "historyReferences": zod.number().int()
+  "currentReferences": zod.int(),
+  "historyReferences": zod.int()
 })),
-  "total": zod.number().int().describe('Matching count after filters'),
+  "total": zod.int().describe('Matching count after filters'),
   "summary": zod.object({
-  "total": zod.number().int(),
-  "current": zod.number().int(),
-  "history": zod.number().int(),
-  "recent": zod.number().int(),
-  "unused": zod.number().int(),
-  "totalBytes": zod.number().int().describe('Logical stored base64 bytes'),
-  "unusedBytes": zod.number().int().describe('Logical stored base64 bytes eligible for cleanup'),
-  "gracePeriodDays": zod.number().int()
+  "total": zod.int(),
+  "current": zod.int(),
+  "history": zod.int(),
+  "recent": zod.int(),
+  "unused": zod.int(),
+  "totalBytes": zod.int().describe('Logical stored base64 bytes'),
+  "unusedBytes": zod.int().describe('Logical stored base64 bytes eligible for cleanup'),
+  "gracePeriodDays": zod.int()
 })
 })
 
@@ -213,10 +213,10 @@ export const ListAdminMediaResponse = zod.object({
  */
 export const PreviewAdminMediaCleanupResponse = zod.object({
   "previewId": zod.string(),
-  "count": zod.number().int(),
-  "reclaimableBytes": zod.number().int().describe('Logical stored bytes'),
+  "count": zod.int(),
+  "reclaimableBytes": zod.int().describe('Logical stored bytes'),
   "expiresAt": zod.coerce.date(),
-  "gracePeriodDays": zod.number().int()
+  "gracePeriodDays": zod.int()
 })
 
 
@@ -232,9 +232,9 @@ export const CleanupAdminMediaBody = zod.object({
 })
 
 export const CleanupAdminMediaResponse = zod.object({
-  "deletedCount": zod.number().int(),
-  "skippedCount": zod.number().int(),
-  "reclaimedBytes": zod.number().int().describe('Logical stored bytes deleted')
+  "deletedCount": zod.int(),
+  "skippedCount": zod.int(),
+  "reclaimedBytes": zod.int().describe('Logical stored bytes deleted')
 })
 
 
@@ -242,7 +242,7 @@ export const CleanupAdminMediaResponse = zod.object({
  * @summary List enabled sign-in providers
  */
 export const GetAuthProvidersResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "provider": zod.enum(['oidc', 'saml'])
 })
@@ -258,7 +258,7 @@ export const startMobileSsoBodyStateRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
 
 
 export const StartMobileSsoBody = zod.object({
-  "providerId": zod.number().int().min(1),
+  "providerId": zod.int().min(1),
   "challenge": zod.string().regex(startMobileSsoBodyChallengeRegExp),
   "state": zod.string().regex(startMobileSsoBodyStateRegExp)
 })
@@ -283,7 +283,7 @@ export const ExchangeMobileSsoBody = zod.object({
 })
 
 export const ExchangeMobileSsoResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.string()
@@ -310,15 +310,15 @@ export const CancelMobileSsoResponse = zod.void()
  */
 export const GetTaskListsResponse = zod.object({
   "lists": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
-  "position": zod.number().int(),
+  "position": zod.int(),
   "createdAt": zod.coerce.date(),
   "tasks": zod.array(zod.object({
-  "id": zod.number().int(),
-  "listId": zod.number().int(),
+  "id": zod.int(),
+  "listId": zod.int(),
   "title": zod.string(),
-  "position": zod.number().int(),
+  "position": zod.int(),
   "completedAt": zod.coerce.date().nullable(),
   "dueDate": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
@@ -367,10 +367,10 @@ export const UpdateTaskBody = zod.object({
 })
 
 export const UpdateTaskResponse = zod.object({
-  "id": zod.number().int(),
-  "listId": zod.number().int(),
+  "id": zod.int(),
+  "listId": zod.int(),
   "title": zod.string(),
-  "position": zod.number().int(),
+  "position": zod.int(),
   "completedAt": zod.coerce.date().nullable(),
   "dueDate": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
@@ -383,26 +383,26 @@ export const UpdateTaskResponse = zod.object({
  */
 export const GetDashboardResponse = zod.object({
   "activeTasks": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "title": zod.string(),
-  "listId": zod.number().int(),
+  "listId": zod.int(),
   "listName": zod.string(),
   "dueDate": zod.coerce.date().nullable()
 })),
   "upcomingTasks": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "title": zod.string(),
-  "listId": zod.number().int(),
+  "listId": zod.int(),
   "listName": zod.string(),
   "dueDate": zod.coerce.date().nullable()
 })),
   "upcomingCards": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "title": zod.string(),
   "dueDate": zod.coerce.date().nullable(),
-  "boardId": zod.number().int(),
+  "boardId": zod.int(),
   "boardName": zod.string(),
-  "projectId": zod.number().int(),
+  "projectId": zod.int(),
   "projectName": zod.string(),
   "columnName": zod.string()
 }))
@@ -415,7 +415,7 @@ export const GetDashboardResponse = zod.object({
 export const GetNotificationSettingsResponse = zod.object({
   "enabled": zod.boolean(),
   "host": zod.string(),
-  "port": zod.number().int(),
+  "port": zod.int(),
   "security": zod.enum(['starttls', 'tls']),
   "username": zod.string(),
   "fromEmail": zod.string(),
@@ -435,7 +435,7 @@ export const updateNotificationSettingsBodyPortMax = 65535;
 export const UpdateNotificationSettingsBody = zod.object({
   "enabled": zod.boolean(),
   "host": zod.string(),
-  "port": zod.number().int().min(1).max(updateNotificationSettingsBodyPortMax),
+  "port": zod.int().min(1).max(updateNotificationSettingsBodyPortMax),
   "security": zod.enum(['starttls', 'tls']),
   "username": zod.string(),
   "password": zod.string().optional().describe('Omit or leave empty to retain the saved password.'),
@@ -448,7 +448,7 @@ export const UpdateNotificationSettingsBody = zod.object({
 export const UpdateNotificationSettingsResponse = zod.object({
   "enabled": zod.boolean(),
   "host": zod.string(),
-  "port": zod.number().int(),
+  "port": zod.int(),
   "security": zod.enum(['starttls', 'tls']),
   "username": zod.string(),
   "fromEmail": zod.string(),
@@ -510,11 +510,11 @@ export const UpdateNotificationPreferencesResponse = zod.object({
 export const ListFavoritesResponse = zod.object({
   "items": zod.array(zod.object({
   "entityType": zod.enum(['article', 'project', 'board']),
-  "entityId": zod.number().int(),
+  "entityId": zod.int(),
   "title": zod.string(),
   "slug": zod.string().nullable(),
   "kind": zod.enum(['knowledge', 'policy', 'procedure', 'project', 'board']),
-  "projectId": zod.number().int().nullable(),
+  "projectId": zod.int().nullable(),
   "projectName": zod.string().optional(),
   "archived": zod.boolean(),
   "savedAt": zod.coerce.date()
@@ -531,7 +531,7 @@ export const updateFavoriteBodyEntityIdMax = 2147483647;
 
 export const UpdateFavoriteBody = zod.object({
   "entityType": zod.enum(['article', 'project', 'board']),
-  "entityId": zod.number().int().min(1).max(updateFavoriteBodyEntityIdMax),
+  "entityId": zod.int().min(1).max(updateFavoriteBodyEntityIdMax),
   "favorite": zod.boolean()
 })
 
@@ -551,13 +551,13 @@ export const HealthCheckResponse = zod.object({
  * @summary Log in with email and password
  */
 export const LoginBody = zod.object({
-  "email": zod.string().email(),
+  "email": zod.email(),
   "password": zod.string()
 })
 
 export const LoginResponse = zod.object({
   "ssoOnly": zod.boolean().describe('Password sign-in and password recovery are disabled when true.'),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user'])
@@ -577,7 +577,7 @@ export const LogoutResponse = zod.object({
  */
 export const GetMeResponse = zod.object({
   "ssoOnly": zod.boolean().describe('Password sign-in and password recovery are disabled when true.'),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user'])
@@ -624,7 +624,7 @@ export const ResetRecoveredPasswordResponse = zod.object({
 export const listApiTokensResponseAccessModeDefault = `full`;
 
 export const ListApiTokensResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "accessMode": zod.enum(['full', 'read_only']).default(listApiTokensResponseAccessModeDefault).describe('Whether this token can make changes or only read data'),
   "lastUsedAt": zod.coerce.date().nullish(),
@@ -647,7 +647,7 @@ export const CreateApiTokenBody = zod.object({
 })
 
 export const CreateApiTokenResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "accessMode": zod.enum(['full', 'read_only']).describe('Access mode selected for this token'),
   "token": zod.string().describe('The raw token value — save it now, it will not be shown again'),
@@ -691,14 +691,14 @@ export const ListArticlesQueryParams = zod.object({
 export const ListArticlesResponse = zod.object({
   "articles": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -706,19 +706,19 @@ export const ListArticlesResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })),
-  "total": zod.number().int()
+  "total": zod.int()
 })
 
 
@@ -732,7 +732,7 @@ export const ListArticlesResponse = zod.object({
 
 export const CreateArticleBody = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
@@ -741,8 +741,8 @@ export const CreateArticleBody = zod.object({
   "content": zod.string().describe('HTML content'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "visibility": zod.enum(['personal', 'group', 'public']).optional(),
-  "groupIds": zod.array(zod.number().int()).optional(),
-  "tagIds": zod.array(zod.number().int()).optional(),
+  "groupIds": zod.array(zod.int()).optional(),
+  "tagIds": zod.array(zod.int()).optional(),
   "isLogEntry": zod.boolean().optional().describe('Create a personal log entry instead of a shared article')
 })
 
@@ -752,17 +752,17 @@ export const CreateArticleBody = zod.object({
 
 export const CreateArticleResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -772,20 +772,20 @@ export const CreateArticleResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -793,32 +793,32 @@ export const CreateArticleResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })
 
 
 export const ListPolicySubjectsResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
-  "parentId": zod.number().int().nullable()
+  "parentId": zod.int().nullable()
 })
 export const ListPolicySubjectsResponse = zod.array(ListPolicySubjectsResponseItem)
 
@@ -828,13 +828,13 @@ export const ListPolicySubjectsResponse = zod.array(ListPolicySubjectsResponseIt
 
 export const CreatePolicySubjectBody = zod.object({
   "name": zod.string().min(1),
-  "parentId": zod.number().int().nullish()
+  "parentId": zod.int().nullish()
 })
 
 export const CreatePolicySubjectResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
-  "parentId": zod.number().int().nullable()
+  "parentId": zod.int().nullable()
 })
 
 
@@ -847,13 +847,13 @@ export const UpdatePolicySubjectParams = zod.object({
 
 export const UpdatePolicySubjectBody = zod.object({
   "name": zod.string().min(1),
-  "parentId": zod.number().int().nullish()
+  "parentId": zod.int().nullish()
 })
 
 export const UpdatePolicySubjectResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
-  "parentId": zod.number().int().nullable()
+  "parentId": zod.int().nullable()
 })
 
 
@@ -879,8 +879,8 @@ export const RunProcedureBody = zod.object({
 })
 
 export const RunProcedureResponse = zod.object({
-  "projectId": zod.number().int(),
-  "boardId": zod.number().int()
+  "projectId": zod.int(),
+  "boardId": zod.int()
 })
 
 
@@ -898,14 +898,14 @@ export const ListArticlesMaintenanceQueryParams = zod.object({
 export const ListArticlesMaintenanceResponse = zod.object({
   "articles": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -913,19 +913,19 @@ export const ListArticlesMaintenanceResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })),
-  "total": zod.number().int()
+  "total": zod.int()
 })
 
 
@@ -944,15 +944,15 @@ export const UpdateProjectBody = zod.object({
   "name": zod.string().min(1).optional(),
   "description": zod.string().optional(),
   "archived": zod.boolean().optional(),
-  "managerId": zod.number().int().min(1).optional()
+  "managerId": zod.int().min(1).optional()
 })
 
 export const UpdateProjectResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string(),
-  "createdById": zod.number().int().nullable(),
-  "managerId": zod.number().int().nullable(),
+  "createdById": zod.int().nullable(),
+  "managerId": zod.int().nullable(),
   "archivedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -967,7 +967,7 @@ export const ListProjectManagerCandidatesParams = zod.object({
 })
 
 export const ListProjectManagerCandidatesResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string()
 })
 export const ListProjectManagerCandidatesResponse = zod.array(ListProjectManagerCandidatesResponseItem)
@@ -985,14 +985,14 @@ export const ListProjectDocumentsResponse = zod.object({
   "hasMore": zod.boolean().optional().describe('Whether another page of documents exists when paging is requested'),
   "documents": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1000,19 +1000,19 @@ export const ListProjectDocumentsResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 }).and(zod.object({
-  "projectId": zod.number().int(),
+  "projectId": zod.int(),
   "canEdit": zod.boolean()
 })))
 })
@@ -1031,7 +1031,7 @@ export const CreateProjectDocumentParams = zod.object({
 export const CreateProjectDocumentBody = zod.object({
   "title": zod.string().min(1),
   "content": zod.string().optional().describe('HTML content'),
-  "tagIds": zod.array(zod.number().int()).optional()
+  "tagIds": zod.array(zod.int()).optional()
 })
 
 
@@ -1040,17 +1040,17 @@ export const CreateProjectDocumentBody = zod.object({
 
 export const CreateProjectDocumentResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullable().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullable().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1060,20 +1060,20 @@ export const CreateProjectDocumentResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1081,27 +1081,27 @@ export const CreateProjectDocumentResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 }).and(zod.object({
-  "projectId": zod.number().int(),
+  "projectId": zod.int(),
   "canEdit": zod.boolean()
 }))
 
@@ -1120,17 +1120,17 @@ export const GetProjectDocumentParams = zod.object({
 
 export const GetProjectDocumentResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullable().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullable().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1140,20 +1140,20 @@ export const GetProjectDocumentResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1161,27 +1161,27 @@ export const GetProjectDocumentResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 }).and(zod.object({
-  "projectId": zod.number().int(),
+  "projectId": zod.int(),
   "canEdit": zod.boolean()
 }))
 
@@ -1200,7 +1200,7 @@ export const UpdateProjectDocumentParams = zod.object({
 export const UpdateProjectDocumentBody = zod.object({
   "title": zod.string().min(1),
   "content": zod.string().optional().describe('HTML content'),
-  "tagIds": zod.array(zod.number().int()).optional()
+  "tagIds": zod.array(zod.int()).optional()
 })
 
 
@@ -1209,17 +1209,17 @@ export const UpdateProjectDocumentBody = zod.object({
 
 export const UpdateProjectDocumentResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullable().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullable().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1229,20 +1229,20 @@ export const UpdateProjectDocumentResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1250,27 +1250,27 @@ export const UpdateProjectDocumentResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 }).and(zod.object({
-  "projectId": zod.number().int(),
+  "projectId": zod.int(),
   "canEdit": zod.boolean()
 }))
 
@@ -1290,20 +1290,20 @@ export const DeleteProjectDocumentResponse = zod.void()
  * @summary Get aggregate stats for the knowledge base dashboard
  */
 export const GetArticleStatsResponse = zod.object({
-  "totalArticles": zod.number().int(),
-  "restrictedArticles": zod.number().int(),
-  "totalGroups": zod.number().int(),
-  "totalUsers": zod.number().int(),
+  "totalArticles": zod.int(),
+  "restrictedArticles": zod.int(),
+  "totalGroups": zod.int(),
+  "totalUsers": zod.int(),
   "recentlyUpdated": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1311,28 +1311,28 @@ export const GetArticleStatsResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })),
   "oldestUpdated": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1340,16 +1340,16 @@ export const GetArticleStatsResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional()
 })
@@ -1372,17 +1372,17 @@ export const GetLogEntryParams = zod.object({
 
 export const GetLogEntryResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1392,20 +1392,20 @@ export const GetLogEntryResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1413,24 +1413,24 @@ export const GetLogEntryResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })
 
@@ -1448,17 +1448,17 @@ export const GetArticleParams = zod.object({
 
 export const GetArticleResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1468,20 +1468,20 @@ export const GetArticleResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1489,24 +1489,24 @@ export const GetArticleResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })
 
@@ -1525,7 +1525,7 @@ export const updateArticleBodySaveModeDefault = `manual`;
 
 export const UpdateArticleBody = zod.object({
   "saveMode": zod.enum(['manual', 'autosave']).default(updateArticleBodySaveModeDefault).describe('Autosaves coalesce the same editor\'s latest autosave within a fixed five-minute window. Manual saves preserve checkpoints.'),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
@@ -1534,8 +1534,8 @@ export const UpdateArticleBody = zod.object({
   "content": zod.string().optional(),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "visibility": zod.enum(['personal', 'group', 'public']).optional(),
-  "groupIds": zod.array(zod.number().int()).optional(),
-  "tagIds": zod.array(zod.number().int()).optional()
+  "groupIds": zod.array(zod.int()).optional(),
+  "tagIds": zod.array(zod.int()).optional()
 })
 
 
@@ -1544,17 +1544,17 @@ export const UpdateArticleBody = zod.object({
 
 export const UpdateArticleResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1564,20 +1564,20 @@ export const UpdateArticleResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1585,24 +1585,24 @@ export const UpdateArticleResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })
 
@@ -1638,7 +1638,7 @@ export const UpdateArticleSlugBody = zod.object({
 
 export const UpdateArticleSlugResponse = zod.object({
   "slug": zod.string(),
-  "rewrittenArticles": zod.number().int()
+  "rewrittenArticles": zod.int()
 })
 
 
@@ -1650,9 +1650,9 @@ export const GetArticleLockParams = zod.object({
 })
 
 export const GetArticleLockResponse = zod.object({
-  "articleId": zod.number().int(),
+  "articleId": zod.int(),
   "lockedBy": zod.union([zod.null(),zod.object({
-  "userId": zod.number().int(),
+  "userId": zod.int(),
   "userName": zod.string(),
   "lockedAt": zod.coerce.date()
 })])
@@ -1667,9 +1667,9 @@ export const AcquireArticleLockParams = zod.object({
 })
 
 export const AcquireArticleLockResponse = zod.object({
-  "articleId": zod.number().int(),
+  "articleId": zod.int(),
   "lockedBy": zod.union([zod.null(),zod.object({
-  "userId": zod.number().int(),
+  "userId": zod.int(),
   "userName": zod.string(),
   "lockedAt": zod.coerce.date()
 })])
@@ -1697,14 +1697,14 @@ export const GetArticleBacklinksParams = zod.object({
 
 export const GetArticleBacklinksResponseItem = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1712,16 +1712,16 @@ export const GetArticleBacklinksResponseItem = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })
 export const GetArticleBacklinksResponse = zod.array(GetArticleBacklinksResponseItem)
@@ -1765,7 +1765,7 @@ export const SetArticleGroupsParams = zod.object({
 })
 
 export const SetArticleGroupsBody = zod.object({
-  "groupIds": zod.array(zod.number().int())
+  "groupIds": zod.array(zod.int())
 })
 
 
@@ -1774,17 +1774,17 @@ export const SetArticleGroupsBody = zod.object({
 
 export const SetArticleGroupsResponse = zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
+  "policySubjectId": zod.int().nullish(),
   "procedureSteps": zod.array(zod.object({
   "title": zod.string().min(1),
   "description": zod.string().min(1)
 })).optional(),
-  "id": zod.number().int(),
-  "projectId": zod.number().int().nullish().describe('Owning project when this article is a project document'),
+  "id": zod.int(),
+  "projectId": zod.int().nullish().describe('Owning project when this article is a project document'),
   "slug": zod.string(),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "content": zod.string().describe('HTML content of the article'),
   "isStatic": zod.boolean().optional().describe('Does not require future review'),
   "updatedAt": zod.coerce.date(),
@@ -1794,20 +1794,20 @@ export const SetArticleGroupsResponse = zod.object({
   "canAccess": zod.boolean(),
   "canEdit": zod.boolean().describe('Whether the current user can edit this article or project document'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })),
   "backlinks": zod.array(zod.object({
   "kind": zod.enum(['knowledge', 'policy', 'procedure']).optional(),
-  "policySubjectId": zod.number().int().nullish(),
-  "id": zod.number().int(),
+  "policySubjectId": zod.int().nullish(),
+  "id": zod.int(),
   "slug": zod.string(),
   "logSlug": zod.string().nullish().describe('Stable owner-scoped URL segment for personal log entries'),
-  "logOwnerId": zod.number().int().nullish().describe('Owner ID for personal log entries'),
+  "logOwnerId": zod.int().nullish().describe('Owner ID for personal log entries'),
   "title": zod.string(),
   "visibility": zod.enum(['personal', 'group', 'public']),
-  "ownerId": zod.number().int().nullable(),
+  "ownerId": zod.int().nullable(),
   "canEdit": zod.boolean(),
   "updatedAt": zod.coerce.date(),
   "createdAt": zod.coerce.date(),
@@ -1815,24 +1815,24 @@ export const SetArticleGroupsResponse = zod.object({
   "isRestricted": zod.boolean().optional().describe('True when the article has group restrictions'),
   "canAccess": zod.boolean().optional().describe('True when the current user can view the content'),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })).optional(),
   "tags": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })).optional()
 })
 
@@ -1853,11 +1853,11 @@ export const UploadArticleImageResponse = zod.object({
  * @summary List all tags (any authenticated user)
  */
 export const ListTagsResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })
 export const ListTagsResponse = zod.array(ListTagsResponseItem)
 
@@ -1874,11 +1874,11 @@ export const CreateTagBody = zod.object({
 })
 
 export const CreateTagResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })
 
 
@@ -1898,11 +1898,11 @@ export const UpdateTagBody = zod.object({
 })
 
 export const UpdateTagResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "color": zod.string(),
   "createdAt": zod.coerce.date(),
-  "articleCount": zod.number().int()
+  "articleCount": zod.int()
 })
 
 
@@ -1923,13 +1923,13 @@ export const DeleteTagResponse = zod.object({
  */
 export const ListUsersResponseItem = zod.object({
   "ssoOnly": zod.boolean(),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user']),
   "createdAt": zod.coerce.date(),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional()
@@ -1947,7 +1947,7 @@ export const createUserBodyPasswordMin = 8;
 
 export const CreateUserBody = zod.object({
   "ssoOnly": zod.boolean().default(createUserBodySsoOnlyDefault).describe('Requires an enabled SSO provider with a matching email identity; disables password sign-in.'),
-  "email": zod.string().email(),
+  "email": zod.email(),
   "name": zod.string().min(1),
   "password": zod.string().min(createUserBodyPasswordMin).optional().describe('Required unless ssoOnly is true. Must be omitted for SSO-only accounts.'),
   "role": zod.enum(['admin', 'editor', 'user'])
@@ -1955,13 +1955,13 @@ export const CreateUserBody = zod.object({
 
 export const CreateUserResponse = zod.object({
   "ssoOnly": zod.boolean(),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user']),
   "createdAt": zod.coerce.date(),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional()
@@ -1977,13 +1977,13 @@ export const GetUserParams = zod.object({
 
 export const GetUserResponse = zod.object({
   "ssoOnly": zod.boolean(),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user']),
   "createdAt": zod.coerce.date(),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional()
@@ -2004,7 +2004,7 @@ export const updateUserBodyPasswordMin = 8;
 
 export const UpdateUserBody = zod.object({
   "ssoOnly": zod.boolean().optional().describe('Disabling SSO Only requires a new password in the same request. Enabling removes password sign-in.'),
-  "email": zod.string().email().optional(),
+  "email": zod.email().optional(),
   "name": zod.string().min(1).optional(),
   "role": zod.enum(['admin', 'editor', 'user']).optional(),
   "password": zod.string().min(updateUserBodyPasswordMin).optional()
@@ -2012,13 +2012,13 @@ export const UpdateUserBody = zod.object({
 
 export const UpdateUserResponse = zod.object({
   "ssoOnly": zod.boolean(),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user']),
   "createdAt": zod.coerce.date(),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional()
@@ -2045,11 +2045,11 @@ export const GetUserGroupsParams = zod.object({
 })
 
 export const GetUserGroupsResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "memberCount": zod.number().int().optional()
+  "memberCount": zod.int().optional()
 })
 export const GetUserGroupsResponse = zod.array(GetUserGroupsResponseItem)
 
@@ -2058,11 +2058,11 @@ export const GetUserGroupsResponse = zod.array(GetUserGroupsResponseItem)
  * @summary List all groups
  */
 export const ListGroupsResponseItem = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "memberCount": zod.number().int().optional()
+  "memberCount": zod.int().optional()
 })
 export const ListGroupsResponse = zod.array(ListGroupsResponseItem)
 
@@ -2079,11 +2079,11 @@ export const CreateGroupBody = zod.object({
 })
 
 export const CreateGroupResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "memberCount": zod.number().int().optional()
+  "memberCount": zod.int().optional()
 })
 
 
@@ -2095,19 +2095,19 @@ export const GetGroupParams = zod.object({
 })
 
 export const GetGroupResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "members": zod.array(zod.object({
   "ssoOnly": zod.boolean(),
-  "id": zod.number().int(),
+  "id": zod.int(),
   "email": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'editor', 'user']),
   "createdAt": zod.coerce.date(),
   "groups": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish()
 })).optional()
@@ -2131,11 +2131,11 @@ export const UpdateGroupBody = zod.object({
 })
 
 export const UpdateGroupResponse = zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "memberCount": zod.number().int().optional()
+  "memberCount": zod.int().optional()
 })
 
 
@@ -2159,7 +2159,7 @@ export const AddGroupMemberParams = zod.object({
 })
 
 export const AddGroupMemberBody = zod.object({
-  "userId": zod.number().int()
+  "userId": zod.int()
 })
 
 export const AddGroupMemberResponse = zod.object({
@@ -2198,8 +2198,8 @@ export const AdminImportAllBody = zod.object({
 })
 
 export const AdminImportAllResponse = zod.object({
-  "imported": zod.number().int(),
-  "skipped": zod.number().int(),
+  "imported": zod.int(),
+  "skipped": zod.int(),
   "errors": zod.array(zod.string())
 })
 
@@ -2213,16 +2213,16 @@ export const PreviewAdminRestoreBody = zod.object({
 
 export const PreviewAdminRestoreResponse = zod.object({
   "kind": zod.enum(['logs', 'tasks', 'projects']),
-  "total": zod.number().int(),
+  "total": zod.int(),
   "owners": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
-  "suggestedUserId": zod.number().int().nullable()
+  "suggestedUserId": zod.int().nullable()
 })),
   "users": zod.array(zod.object({
-  "id": zod.number().int(),
+  "id": zod.int(),
   "name": zod.string(),
-  "email": zod.string().email()
+  "email": zod.email()
 })),
   "warnings": zod.array(zod.string())
 })
@@ -2239,15 +2239,15 @@ export const RestoreAdminBackupBody = zod.object({
 export const RestoreAdminBackupResponse = zod.object({
   "kind": zod.enum(['logs', 'tasks', 'projects']),
   "imported": zod.object({
-  "logs": zod.number().int(),
-  "taskLists": zod.number().int(),
-  "tasks": zod.number().int(),
-  "projects": zod.number().int(),
-  "boards": zod.number().int(),
-  "columns": zod.number().int(),
-  "cards": zod.number().int()
+  "logs": zod.int(),
+  "taskLists": zod.int(),
+  "tasks": zod.int(),
+  "projects": zod.int(),
+  "boards": zod.int(),
+  "columns": zod.int(),
+  "cards": zod.int()
 }),
-  "skipped": zod.number().int(),
+  "skipped": zod.int(),
   "warnings": zod.array(zod.string())
 })
 
@@ -2283,7 +2283,7 @@ export const PreviewFullEnvironmentRestoreBody = zod.object({
 export const PreviewFullEnvironmentRestoreResponse = zod.object({
   "exportedAt": zod.coerce.date(),
   "sections": zod.record(zod.string(), zod.object({
-  "count": zod.number().int(),
+  "count": zod.int(),
   "checksum": zod.string()
 })),
   "excluded": zod.array(zod.string()),
@@ -2307,11 +2307,11 @@ export const RestoreFullEnvironmentBackupBody = zod.object({
 })
 
 export const RestoreFullEnvironmentBackupResponse = zod.object({
-  "restored": zod.record(zod.string(), zod.number().int()),
+  "restored": zod.record(zod.string(), zod.int()),
   "recoveryLinks": zod.array(zod.object({
-  "userId": zod.number().int(),
+  "userId": zod.int(),
   "name": zod.string().optional(),
-  "email": zod.string().email().optional(),
+  "email": zod.email().optional(),
   "recoveryUrl": zod.string()
 })),
   "warning": zod.string()

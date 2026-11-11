@@ -20,3 +20,9 @@ Avoid package-manager auto-bootstrap loops when the installed pnpm differs from 
 **Why:** Automatic installation of the pinned pnpm recursively launched more installer processes, hung otherwise ordinary scripts, and exhausted process resources. An environment-only override did not stop nested pnpm calls.
 
 **How to apply:** Preserve the workspace's explicit auto-management setting and release-age protections. Diagnose bootstrap recursion before retrying a hanging pnpm command; do not change dependency versions merely to bypass it.
+
+Catalog version edits require checking the resolved lockfile version, not just the catalog's specifier.
+
+**Why:** Updating a different transitive dependency after editing catalog ranges left the old resolved Vite and Zod versions in place under the new specifiers. A subsequent frozen-lockfile install accepted that inconsistent resolution.
+
+**How to apply:** Explicitly update the affected catalog packages with a targeted recursive update, then check their actual resolved versions and rerun the dependency audit. Do not treat a successful frozen install as proof that a security upgrade took effect.
