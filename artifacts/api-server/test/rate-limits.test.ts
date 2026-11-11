@@ -3,7 +3,35 @@ import assert from "node:assert/strict";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import type { AddressInfo } from "node:net";
-import { createApiRateLimiters, ingressRateLimitOptions } from "../src/lib/rate-limits";
+import { createApiRateLimiters, ingressRateLimitOptions, oauthDiscoveryRateLimitOptions } from "../src/lib/rate-limits";
+
+test("OAuth discovery aliases share a quota without blocking session checks", async () => {
+  const app = express();
+  const limiter = rateLimit({ ...oauthDiscoveryRateLimitOptions, limit: 2 });
+  const paths = [
+    "/.well-known/oauth-authorization-server/api/oauth", "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource",
+  ];
+  let handled = 0;
+  app.get(paths, limiter, (_req, res) => { handled++; res.json({}); });
+  app.get("/api/auth/me", (_req, res) => res.sendStatus(200));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    assert.equal((await fetch(base + paths[0])).status, 200);
+    assert.equal((await fetch(base + paths[1])).status, 200);
+    for (const path of paths.slice(2)) {
+      const response = await fetch(base + path);
+      assert.equal(response.status, 429);
+      assert.ok(Number(response.headers.get("retry-after")) > 0);
+    }
+    assert.equal(handled, 2, "Reject excess traffic before the discovery handler");
+    assert.equal((await fetch(base + "/api/auth/me")).status, 200);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
 
 async function withApi(
   run: (request: (path: string, user?: number, successful?: boolean) => Promise<Response>) => Promise<void>,

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { extractWikilinks, rewriteWikilinksForSlug } from "../src/lib/slugify";
 import { frontendUrl } from "../src/lib/frontend-url";
 import { bearerToken } from "../src/lib/bearer-header";
+import { newOAuthSecret, hashOAuth, pkceChallenge } from "../src/lib/oauth";
 import { setBaseUrl, customFetch } from "../../../lib/api-client-react/src/custom-fetch";
 
 test("wikilink scanning preserves existing bracket and label semantics", () => {
@@ -34,8 +35,20 @@ test("public and client base URLs remove a long trailing slash run without chang
       return new Response('{"ok":true}', { headers: { "Content-Type": "application/json" } });
     }) as typeof fetch;
     assert.deepEqual(await customFetch("/api/test"), { ok: true });
+    assert.deepEqual(await customFetch("/api/test", { baseUrl: base }), { ok: true });
   } finally {
     globalThis.fetch = originalFetch;
     setBaseUrl(null);
   }
+});
+
+test("OAuth PKCE uses the RFC 7636 S256 vector and token digests cover 256-bit random credentials", () => {
+  assert.equal(pkceChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+    "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+  const token = newOAuthSecret();
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(Buffer.from(token, "base64url").length, 32);
+  assert.notEqual(newOAuthSecret(), token);
+  assert.match(hashOAuth(token), /^[a-f0-9]{64}$/);
+  assert.equal(hashOAuth(token), hashOAuth(token));
 });

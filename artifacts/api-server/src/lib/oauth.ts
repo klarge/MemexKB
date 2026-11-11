@@ -7,8 +7,12 @@ import { frontendUrl } from "./frontend-url";
 export const OAUTH_SCOPE = "mcp:read";
 export const ACCESS_SECONDS = 900;
 export const GRANT_SECONDS = 30 * 24 * 60 * 60;
+// These are SHA-256 lookup digests of server-generated 256-bit random tokens,
+// never human passwords. Password authentication uses bcrypt in routes/auth.ts.
 export const hashOAuth = (value: string) => createHash("sha256").update(value).digest("hex");
 export const newOAuthSecret = (prefix = "") => prefix + randomBytes(32).toString("base64url");
+// RFC 7636 S256 requires this exact SHA-256/base64url transformation; replacing
+// it with a password KDF would break PKCE interoperability.
 export const pkceChallenge = (value: string) => createHash("sha256").update(value).digest("base64url");
 export function equalSecret(a: string, b: string): boolean {
   const left = Buffer.from(a); const right = Buffer.from(b);

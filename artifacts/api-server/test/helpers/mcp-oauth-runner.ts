@@ -5,6 +5,7 @@ import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import session from "express-session";
+import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import { and, eq, sql } from "drizzle-orm";
 import { db, pool, usersTable, articlesTable, articleGroupsTable, groupsTable,
@@ -35,6 +36,8 @@ test("OAuth PKCE, live employee permissions, MCP identity and revocation", async
   ]).returning();
   await db.insert(articleGroupsTable).values([{ articleId: a.id, groupId: alpha.id }, { articleId: b.id, groupId: beta.id }]);
   const app = express();
+  // Bound the isolated HTTP fixture too, including discovery and admin stubs.
+  app.use(rateLimit({ windowMs: 60_000, limit: 1_000, legacyHeaders: false }));
   app.use("/api", csrfProtection());
   app.use(express.json()); app.use(express.urlencoded({ extended: false }));
   const store = new session.MemoryStore();
@@ -50,6 +53,9 @@ test("OAuth PKCE, live employee permissions, MCP identity and revocation", async
   const request = (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, redirect: "manual" });
   const form = (path: string, body: Record<string, string>, cookie?: string, origin = base) =>
     request(path, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...(cookie ? { Cookie: cookie, ...(origin ? { Origin: origin } : {}) } : {}) }, body: new URLSearchParams(body) });
+  const formActionSources = (response: Response) =>
+    response.headers.get("content-security-policy")!.split(";").map(directive => directive.trim().split(/\s+/))
+      .find(([name]) => name === "form-action")?.slice(1) ?? [];
   const cookieFor = async (email: string) => {
     const response = await request("/api/auth/login", {
       method: "POST", headers: { "Content-Type": "application/json", Origin: base },
@@ -125,7 +131,11 @@ test("OAuth PKCE, live employee permissions, MCP identity and revocation", async
     }
     app.set("query parser", "simple");
     const unsigned = await request(valid.path);
-    assert.equal(unsigned.status, 302); assert.ok(unsigned.headers.get("location")!.startsWith("/login?returnTo="));
+    assert.equal(unsigned.status, 302);
+    const loginRedirect = new URL(unsigned.headers.get("location")!, base);
+    assert.equal(loginRedirect.origin, base);
+    assert.equal(loginRedirect.pathname, "/login");
+    assert.ok(loginRedirect.searchParams.has("returnTo"));
     const badRedirect = await request(begin({ redirect_uri: "https://evil.example/callback" }).path, { headers: { Cookie: aliceCookie } });
     assert.equal(badRedirect.status, 400); assert.equal(badRedirect.headers.get("location"), null);
     const wrongResource = await request(begin({ resource: "https://other.example/mcp" }).path);
@@ -138,8 +148,7 @@ test("OAuth PKCE, live employee permissions, MCP identity and revocation", async
       assert.equal(page.status, 200); const html = await page.text();
       assert.ok(!html.includes("<script>Corporate"));
       assert.match(page.headers.get("content-security-policy")!, /frame-ancestors 'none'/);
-      assert.ok(page.headers.get("content-security-policy")!.includes(`form-action ${base}`));
-      assert.ok(page.headers.get("content-security-policy")!.includes("https://ai.example.test"));
+      assert.deepEqual(formActionSources(page), [base, "https://ai.example.test"]);
       const nonce = html.match(/name="csrf" value="([^"]+)"/)![1];
       // Origin/Referer alone neither grant nor deny consent; the session nonce
       // is mandatory even if a hostile caller can set their own HTTP headers.
@@ -148,7 +157,7 @@ test("OAuth PKCE, live employee permissions, MCP identity and revocation", async
       assert.equal((await form("/api/oauth/approve", { csrf: nonce, decision }, undefined, "null")).status, 400);
       const response = await form("/api/oauth/approve", { csrf: nonce, decision }, cookie, "null");
       assert.equal(response.status, 303);
-      assert.ok(response.headers.get("content-security-policy")!.includes("https://ai.example.test"));
+      assert.deepEqual(formActionSources(response), [base, "https://ai.example.test"]);
       const callback = new URL(response.headers.get("location")!);
       assert.equal(callback.origin, "https://ai.example.test"); assert.equal(callback.searchParams.get("state"), "original-state");
       return { code: callback.searchParams.get("code")!, verifier: flow.verifier, callback };

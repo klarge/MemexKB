@@ -9,6 +9,14 @@ interface RateLimitOptions {
   authAttemptLimit?: number;
 }
 
+export const oauthDiscoveryRateLimitOptions = {
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: "draft-7" as const,
+  legacyHeaders: false,
+  message: { error: "Too many OAuth discovery requests. Please wait a minute and try again." },
+};
+
 const credentialRoutes = new Set(["POST /auth/login", "POST /auth/setup", "POST /auth/mobile/start", "POST /auth/mobile/exchange"]);
 const sessionRoutes = new Set(["GET /auth/me", "POST /auth/logout"]);
 

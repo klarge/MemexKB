@@ -5,6 +5,7 @@ import { inflateRawSync } from "node:zlib";
 import express from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { DOMParser } from "@xmldom/xmldom";
 import { eq, sql } from "drizzle-orm";
 import { db, pool, ssoConfigsTable, usersTable } from "@workspace/db";
 import { csrfProtection } from "../../src/lib/csrf";
@@ -102,16 +103,20 @@ test("Real CSRF, SAML validation, provisioning and persisted sessions", async t 
           await t.test(`${proxy ? "reverse proxy" : "direct"} metadata and login use the public origin`, async () => {
             const metadata = await request(`/api/auth/saml/${provider.id}/metadata`);
             assert.equal(metadata.response.status, 200);
-            assert.ok(metadata.body.includes(`entityID="${issuer}"`));
-            assert.ok(metadata.body.includes(`Location="${callbackUrl}"`));
-            assert.ok(!metadata.body.includes("internal-service"));
+            const document = new DOMParser().parseFromString(metadata.body, "text/xml");
+            const metadataNamespace = "urn:oasis:names:tc:SAML:2.0:metadata";
+            assert.equal(document.getElementsByTagNameNS(metadataNamespace, "EntityDescriptor").item(0)?.getAttribute("entityID"), issuer);
+            assert.equal(document.getElementsByTagNameNS(metadataNamespace, "AssertionConsumerService").item(0)?.getAttribute("Location"), callbackUrl);
             const login = await request(`/api/auth/saml/${provider.id}/login`);
             assert.equal(login.response.status, 302);
             const url = new URL(login.response.headers.get("location")!);
             assert.equal(url.origin, "https://idp.example.test");
             const authn = inflateRawSync(Buffer.from(url.searchParams.get("SAMLRequest")!, "base64")).toString();
-            assert.ok(authn.includes(`AssertionConsumerServiceURL="${callbackUrl}"`));
-            assert.ok(authn.includes(issuer));
+            const requestDocument = new DOMParser().parseFromString(authn, "text/xml");
+            assert.equal(requestDocument.getElementsByTagNameNS("urn:oasis:names:tc:SAML:2.0:protocol", "AuthnRequest")
+              .item(0)?.getAttribute("AssertionConsumerServiceURL"), callbackUrl);
+            assert.equal(requestDocument.getElementsByTagNameNS("urn:oasis:names:tc:SAML:2.0:assertion", "Issuer")
+              .item(0)?.textContent, issuer);
           });
           let cookie = "";
           await t.test(`${proxy ? "reverse proxy" : "direct"} valid signed callback establishes the expected session`, async () => {

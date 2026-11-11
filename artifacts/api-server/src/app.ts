@@ -13,7 +13,7 @@ import { logger } from "./lib/logger";
 import { diagramAssetHeaders, diagramStaticAssets } from "./lib/diagram-assets";
 import { enforceApiTokenAccess } from "./lib/auth";
 import rateLimit from "express-rate-limit";
-import { createApiRateLimiters, ingressRateLimitOptions } from "./lib/rate-limits";
+import { createApiRateLimiters, ingressRateLimitOptions, oauthDiscoveryRateLimitOptions } from "./lib/rate-limits";
 import { csrfProtection } from "./lib/csrf";
 import { pool } from "@workspace/db";
 import type { Pool as PgPool } from "pg";
@@ -97,6 +97,14 @@ app.use("/api", csrfProtection({
   allowedOrigins: corsOrigins || [],
 }));
 
+// Discovery is public and does not use sessions. Limit all aliases before
+// body parsing or session-store access, with one shared per-IP budget.
+const oauthDiscoveryLimiter = rateLimit(oauthDiscoveryRateLimitOptions);
+app.get("/.well-known/oauth-authorization-server/api/oauth", oauthDiscoveryLimiter, oauthDiscovery);
+app.get("/.well-known/oauth-authorization-server", oauthDiscoveryLimiter, oauthDiscovery);
+app.get("/.well-known/oauth-protected-resource/mcp", oauthDiscoveryLimiter, oauthProtectedResource);
+app.get("/.well-known/oauth-protected-resource", oauthDiscoveryLimiter, oauthProtectedResource);
+
 // Reduced body limits — 20 MB was unnecessarily large and enabled easy DoS.
 // Images are stored via the dedicated /api/articles/images endpoint (base64, ~2 MB).
 app.use(express.json({ limit: "2mb" }));
@@ -157,10 +165,6 @@ app.use(
 // Protocol endpoints authenticate their own clients and never use cookie identity
 // to issue tokens. Mount before API bearer parsing (Basic auth is valid here).
 app.use("/api/oauth", oauthRouter);
-app.get("/.well-known/oauth-authorization-server/api/oauth", oauthDiscovery);
-app.get("/.well-known/oauth-authorization-server", oauthDiscovery);
-app.get("/.well-known/oauth-protected-resource/mcp", oauthProtectedResource);
-app.get("/.well-known/oauth-protected-resource", oauthProtectedResource);
 
 // Resolve bearer API keys before route-level auth and enforce read-only keys
 // consistently across every mutating endpoint.

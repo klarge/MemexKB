@@ -32,3 +32,15 @@ Keep request-security changes compatible with both direct browser uploads and na
 **Why:** A synchronizer-token migration would affect generated browser requests, direct multipart/form-data uploads, native clients that manually carry session cookies, and signed cross-site SAML posts. The security fix deliberately avoided that broader authentication-protocol migration.
 
 **How to apply:** When changing CSRF or ingress checks, verify a real browser mutation through the proxied preview, not only an isolated HTTP test. Include native cookie requests and signed SAML callbacks in compatibility coverage; do not weaken assertion validation or broaden callback exemptions to solve a middleware error.
+
+CodeQL's generic missing-CSRF-middleware warning does not by itself prove this
+application's origin-aware middleware is absent.
+
+**Why:** The upstream query recognizes selected library imports and session-token
+patterns, not arbitrary origin-checking middleware factories. It flagged both
+production and isolated fixtures even though they installed the tested gate.
+
+**How to apply:** Verify actual middleware order and protocol-specific protection,
+then document a targeted false-positive disposition when appropriate. Do not add
+dummy CSRF markers, change the client protocol, or disable the whole query to
+silence the warning. The repository's security review contains the evidence.

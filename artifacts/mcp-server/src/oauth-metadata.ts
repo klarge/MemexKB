@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 export function protectedResourceMetadata(req: IncomingMessage) {
-  const base = (process.env.APP_BASE_URL?.trim() || `http://${req.headers.host}`).replace(/\/+$/, "");
+  const input = process.env.APP_BASE_URL?.trim() || `http://${req.headers.host}`;
+  let end = input.length;
+  while (end > 0 && input[end - 1] === "/") end--;
+  const base = input.slice(0, end);
   const url = new URL(base);
   if (url.username || url.password || url.search || url.hash ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) {

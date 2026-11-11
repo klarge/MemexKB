@@ -22,6 +22,12 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 
+function trimBaseUrl(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") end--;
+  return url.slice(0, end);
+}
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -34,9 +40,7 @@ export function setBaseUrl(url: string | null): void {
     _baseUrl = null;
     return;
   }
-  let end = url.length;
-  while (end > 0 && url[end - 1] === "/") end--;
-  _baseUrl = url.slice(0, end);
+  _baseUrl = trimBaseUrl(url);
 }
 
 /**
@@ -338,7 +342,7 @@ export async function customFetch<T = unknown>(
 ): Promise<T> {
   const { responseType = "auto", headers: headersInit, baseUrl, onResponse, ...init } = options;
   input = baseUrl && resolveUrl(input).startsWith("/")
-    ? `${baseUrl.replace(/\/+$/, "")}${resolveUrl(input)}` : applyBaseUrl(input);
+    ? `${trimBaseUrl(baseUrl)}${resolveUrl(input)}` : applyBaseUrl(input);
 
   const method = resolveMethod(input, init.method);
 

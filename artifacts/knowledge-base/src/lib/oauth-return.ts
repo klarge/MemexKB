@@ -11,8 +11,9 @@ export function rememberOAuthReturn() {
   if (validReturn(value)) sessionStorage.setItem(STORAGE_KEY, value);
 }
 
-export function takeOAuthReturn(): string | null {
+export function takeOAuthReturn(): URLSearchParams | null {
   const value = sessionStorage.getItem(STORAGE_KEY);
   sessionStorage.removeItem(STORAGE_KEY);
-  return validReturn(value) ? value : null;
+  // Return only parsed query parameters, never a stored navigation target.
+  return validReturn(value) ? new URL(value, window.location.origin).searchParams : null;
 }

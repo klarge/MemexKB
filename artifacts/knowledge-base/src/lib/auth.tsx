@@ -29,8 +29,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (resolvedUser) {
-      const destination = takeOAuthReturn();
-      if (destination) window.location.replace(destination);
+      const parameters = takeOAuthReturn();
+      // The destination is a fixed same-origin path. Stored input can only
+      // supply encoded query values, never a scheme, hostname or pathname.
+      if (parameters) window.location.replace(`/api/oauth/authorize?${parameters.toString()}`);
     }
   }, [resolvedUser?.id]);
 
