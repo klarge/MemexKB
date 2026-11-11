@@ -22,6 +22,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check standalone MCP runtime manifest
+        run: node --test artifacts/mcp-server/test/runtime-package.test.mjs
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
