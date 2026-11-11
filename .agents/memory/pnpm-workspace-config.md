@@ -26,3 +26,9 @@ Catalog version edits require checking the resolved lockfile version, not just t
 **Why:** Updating a different transitive dependency after editing catalog ranges left the old resolved Vite and Zod versions in place under the new specifiers. A subsequent frozen-lockfile install accepted that inconsistent resolution.
 
 **How to apply:** Explicitly update the affected catalog packages with a targeted recursive update, then check their actual resolved versions and rerun the dependency audit. Do not treat a successful frozen install as proof that a security upgrade took effect.
+
+Keep standalone npm runtime manifests free of pnpm-only catalog/workspace/link specifiers.
+
+**Why:** A recursive Zod update converted MCP's concrete dependency to `catalog:`. Workspace compilation and tests passed, but Docker copies that manifest into a separate npm package root, where installation failed with `EUNSUPPORTEDPROTOCOL`.
+
+**How to apply:** After recursive package updates, check manifests consumed outside the workspace as well as the workspace configuration. Preserve concrete reviewed versions at that boundary and run the standalone manifest guard before Docker builds; validate the isolated npm production install when changing those dependencies.
