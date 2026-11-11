@@ -315,10 +315,11 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Favorites + Logs — equal width when Logs is visible */}
-      <div className={`grid gap-6 items-start ${logEnabled && !searching ? "md:grid-cols-2" : "grid-cols-1"}`}>
+      {/* Favorites + Logs belong to the dashboard, not search results. */}
+      {!searching && (
+      <div className={`grid gap-6 items-start ${logEnabled ? "md:grid-cols-2" : "grid-cols-1"}`}>
         <HomeFavorites />
-        {logEnabled && !searching && (
+        {logEnabled && (
           <SectionShell
             icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
             title="Recent Log"
@@ -359,6 +360,7 @@ export default function Home() {
           </SectionShell>
         )}
       </div>
+      )}
 
       {/* ── Search results ── */}
       {searching && (
