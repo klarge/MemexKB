@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import RenderHtml, { HTMLElementModel, HTMLContentModel } from 'react-native-render-html';
+import RenderHtml, { HTMLElementModel, HTMLContentModel, type MixedStyleDeclaration } from 'react-native-render-html';
 import { parseDocument } from 'htmlparser2';
 import serialize from 'dom-serializer';
 import { Element, type AnyNode } from 'domhandler';
@@ -52,6 +52,7 @@ function makeTable(colors: Colors, tagsStyles: Record<string, any>, renderersPro
                 <View key={j} style={{ width: cellWidth, padding: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
                   backgroundColor: cell.name === 'th' ? colors.muted : 'transparent' }}>
                   <RenderHtml contentWidth={cellWidth - 12} tagsStyles={tagsStyles} renderersProps={renderersProps}
+                    baseStyle={{ color: colors.foreground } as MixedStyleDeclaration}
                     source={{ html: `<div>${serialize(cell.children)}</div>`, baseUrl }} />
                 </View>
               ))}
@@ -106,7 +107,8 @@ export function OfflineReader({ article, server, onArticle, onFragmentMissing, s
     th: { fontWeight: '600' as const, color: colors.foreground },
     td: { color: colors.foreground },
     img: { borderRadius: 4 },
-  }), [colors]);
+  // The renderer's declarations incorrectly require unused CSS shorthand keys.
+  }) as unknown as Record<string, MixedStyleDeclaration>, [colors]);
 
   const jump = useCallback((fragment: string) => {
     let id = fragment;
@@ -143,6 +145,7 @@ export function OfflineReader({ article, server, onArticle, onFragmentMissing, s
       {blocks.map((html, i) => (
         <View key={i} onLayout={e => onLayoutBlock(i, e.nativeEvent.layout.y)}>
           <RenderHtml contentWidth={width - 32} source={{ html, baseUrl }} tagsStyles={tagsStyles} customHTMLElementModels={models}
+            baseStyle={{ color: colors.foreground } as MixedStyleDeclaration}
             renderers={renderers} renderersProps={{ a: { onPress: onLinkPress } }}
             defaultTextProps={{ selectable: true }} enableExperimentalMarginCollapsing />
         </View>
